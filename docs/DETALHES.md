@@ -146,6 +146,11 @@ Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: mod
   **Validar Fase I** (vê as notas + NF1, modal) quando em VALIDACAO_FASE_1. Testado na UI:
   formar → notas 9/8 → validar → "Aprovado (NF1 8.50), segue p/ Fase II". **Fase I fechada
   ponta a ponta.** (A aba TCCs começa a preencher a opção B; o "god mode" completo fica pra depois.)
+- ✔ **Fase II FEITA (ciclo completo do TCC):** `formarBanca`/`validar` generalizados (Fase II = 3
+  avaliadores → **NF2**; depois a **nota final NF = 0,6·NF1 + 0,4·NF2**, ≥7 → **CONCLUIDO**,
+  senão `REPROVADO_FASE_2`). A área do Avaliador e o `avaliar()` já tratavam FASE_2; a aba **TCCs**
+  do coordenador forma/valida as duas fases (modais adaptam 2/3 avaliadores e NF1/NF2+NF). Testado
+  e2e na UI: NF1 8 → NF2 9 → **NF 8.40 → Concluído/Aprovado**. **Ciclo abertura→…→conclusão completo.**
 
 ## 5. Coordenador
 
