@@ -39,6 +39,7 @@ model Usuario {
   tccsComoAluno        Tcc[] @relation("TccAluno")
   tccsComoOrientador   Tcc[] @relation("TccOrientador")
   tccsComoCoorientador Tcc[] @relation("TccCoorientador")
+  bancasComoAvaliador  MembroBanca[]
 
   @@map("usuarios")
 }
@@ -64,6 +65,12 @@ model Tcc {
   continuidadeConfirmada Boolean @default(false)
   parecerContinuidade    String? // motivo, quando o orientador rejeita a continuidade
 
+  // Notas (apuradas pela coordenação). NF = 0,6·NF1 + 0,4·NF2; resultado = APROVADO | REPROVADO.
+  nf1       Float?
+  nf2       Float?
+  nf        Float?
+  resultado String?
+
   aluno   Usuario @relation("TccAluno", fields: [alunoId], references: [id], onDelete: Cascade)
   alunoId String
 
@@ -84,6 +91,7 @@ model Tcc {
 
   solicitacoes SolicitacaoOrientacao[]
   documentos   DocumentoTcc[]
+  bancas       Banca[]
 
   @@unique([alunoId, semestre])
   @@map("tccs")
@@ -117,6 +125,34 @@ model DocumentoTcc {
   criadoEm    DateTime @default(now())
 
   @@map("documentos_tcc")
+}
+
+// Banca avaliadora de um TCC numa fase. Fase I = 2 avaliadores; Fase II = 3.
+model Banca {
+  id       String @id @default(cuid())
+  tcc      Tcc    @relation(fields: [tccId], references: [id], onDelete: Cascade)
+  tccId    String
+  fase     String // FASE_1 | FASE_2
+  criadoEm DateTime @default(now())
+
+  membros MembroBanca[]
+
+  @@unique([tccId, fase])
+  @@map("bancas")
+}
+
+model MembroBanca {
+  id          String   @id @default(cuid())
+  banca       Banca    @relation(fields: [bancaId], references: [id], onDelete: Cascade)
+  bancaId     String
+  avaliador   Usuario  @relation(fields: [avaliadorId], references: [id])
+  avaliadorId String
+  nota        Float? // 0–10, null até avaliar
+  parecer     String?
+  avaliadoEm  DateTime?
+
+  @@unique([bancaId, avaliadorId])
+  @@map("membros_banca")
 }
 
 // Calendário do semestre (datas-marco), definido pela coordenação. Um por semestre.

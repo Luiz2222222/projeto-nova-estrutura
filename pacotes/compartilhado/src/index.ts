@@ -181,6 +181,19 @@ export const esquemaContinuidade = z
   });
 export type DadosContinuidade = z.infer<typeof esquemaContinuidade>;
 
+// ---------- Banca / Fase I ----------
+
+export const esquemaFormarBanca = z.object({
+  avaliadorIds: z.array(z.string().min(1)).min(2, 'Selecione os avaliadores da banca'),
+});
+export type DadosFormarBanca = z.infer<typeof esquemaFormarBanca>;
+
+export const esquemaAvaliarBanca = z.object({
+  nota: z.coerce.number({ invalid_type_error: 'Informe a nota' }).min(0, 'Nota mínima 0').max(10, 'Nota máxima 10'),
+  parecer: z.string().trim().optional(),
+});
+export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
+
 export const DESC_MARCO: Record<MarcoCalendario, string> = {
   reuniaoAlunos: 'Orientações gerais sobre o TCC e o regulamento.',
   envioDocumentos: 'Prazo para envio do plano e do termo de aceite.',

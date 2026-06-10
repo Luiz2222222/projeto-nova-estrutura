@@ -4,6 +4,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { AutenticacaoModule } from './autenticacao/autenticacao.module';
 import { TccsModule } from './tccs/tccs.module';
 import { CoordenacaoModule } from './coordenacao/coordenacao.module';
+import { BancasModule } from './bancas/bancas.module';
 import { SaudeController } from './saude/saude.controller';
 
 @Module({
@@ -13,6 +14,7 @@ import { SaudeController } from './saude/saude.controller';
     AutenticacaoModule,
     TccsModule,
     CoordenacaoModule,
+    BancasModule,
   ],
   controllers: [SaudeController],
 })

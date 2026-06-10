@@ -123,7 +123,21 @@ Implementa a ARQUITETURA 3.2 (duas trilhas paralelas). Migration
 - **[NA TELA]** Onde fica o botão/alternar de disponibilidade (provável: dashboard/perfil do professor).
 
 ## 4. Avaliador externo
-_(a preencher)_
+
+### Fase I (banca + NF1) — backend FEITO (telas a fazer)
+Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: modelos **`Banca`**
+(`@@unique([tccId, fase])`, fase=FASE_1|FASE_2) e **`MembroBanca`** (`avaliadorId`, `nota` 0–10,
+`parecer`, `avaliadoEm`); e em `Tcc`: `nf1/nf2/nf` (Float) + `resultado`.
+- ✔ **Coordenador** `GET /tccs/:id/banca/candidatos` — professores/avaliadores, exceto aluno e orientador.
+- ✔ **Coordenador** `POST /tccs/:id/banca` `{avaliadorIds:[2]}` — forma a banca (2 distintos) →
+  `FORMACAO_BANCA_FASE_1` → `AVALIACAO_FASE_1`.
+- ✔ **Avaliador** `GET /bancas/minhas` — bancas em que é membro (com TCC + documentos).
+- ✔ **Avaliador** `POST /bancas/:bancaId/avaliar` `{nota,parecer?}` — dá a nota; quando **todos**
+  avaliam → `AVALIACAO_FASE_1` → `VALIDACAO_FASE_1` (automático).
+- ✔ **Coordenador** `POST /tccs/:id/banca/validar` — **NF1 = média**; **≥6** → `FORMACAO_BANCA_FASE_2`,
+  **<6** → `REPROVADO_FASE_1` (resultado REPROVADO). Esquemas: `esquemaFormarBanca`,`esquemaAvaliarBanca`.
+- Testado e2e: forma → 2 notas (8,7) → valida → **NF1 7.5, aprovado** → Fase II. **[A FAZER]** telas:
+  formar banca (coordenador, na aba TCCs), avaliar (área do Avaliador, hoje placeholder), validar (coordenador).
 
 ## 5. Coordenador
 
