@@ -31,9 +31,11 @@ export const AFILIACOES = ['UFPE', 'UFRPE', 'IFPE', 'Outros'] as const;
 
 // ---------- Validações ----------
 
+// Login aceita e-mail OU usuário simples (ex.: "adm"); a validação forte de e-mail/senha
+// fica no cadastro. Aqui só exigimos que os campos não estejam vazios.
 export const esquemaLogin = z.object({
-  email: z.string().email('E-mail inválido'),
-  senha: z.string().min(6, 'A senha precisa ter ao menos 6 caracteres'),
+  email: z.string().min(1, 'Informe o e-mail ou usuário'),
+  senha: z.string().min(1, 'Informe a senha'),
   manterLogin: z.boolean().optional().default(false),
 });
 export type DadosLogin = z.infer<typeof esquemaLogin>;

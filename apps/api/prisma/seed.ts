@@ -18,26 +18,35 @@ async function main() {
     });
   }
 
-  // Coordenador de teste (coordenador não se cadastra pela tela pública).
-  const email = 'coordenador@dee.br';
-  const existe = await prisma.usuario.findUnique({ where: { email } });
-  if (!existe) {
-    await prisma.usuario.create({
-      data: {
-        nomeCompleto: 'Coordenador de TCC',
-        email,
-        senhaHash: await bcrypt.hash('coordenador', 10),
-        papel: 'COORDENADOR',
-      },
-    });
-  }
+  // Usuários de teste (login simples). Coordenador não se cadastra pela tela pública.
+  await prisma.usuario.upsert({
+    where: { email: 'adm' },
+    update: { senhaHash: await bcrypt.hash('adm', 10), papel: 'COORDENADOR' },
+    create: {
+      nomeCompleto: 'Coordenador de TCC',
+      email: 'adm',
+      senhaHash: await bcrypt.hash('adm', 10),
+      papel: 'COORDENADOR',
+    },
+  });
+  await prisma.usuario.upsert({
+    where: { email: 'aluno' },
+    update: { senhaHash: await bcrypt.hash('aluno', 10), papel: 'ALUNO' },
+    create: {
+      nomeCompleto: 'Aluno de Teste',
+      email: 'aluno',
+      senhaHash: await bcrypt.hash('aluno', 10),
+      papel: 'ALUNO',
+      curso: 'ENGENHARIA_ELETRICA',
+    },
+  });
 
   // eslint-disable-next-line no-console
   console.log('Seed concluído.');
   // eslint-disable-next-line no-console
   console.log('Códigos:', codigos.map((c) => `${c.papel}=${c.codigo}`).join('  '));
   // eslint-disable-next-line no-console
-  console.log('Coordenador de teste: coordenador@dee.br / senha: coordenador');
+  console.log('Logins de teste: adm/adm (coordenador) · aluno/aluno (aluno)');
 }
 
 main()

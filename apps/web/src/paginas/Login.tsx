@@ -44,9 +44,9 @@ export function Login() {
             <path d="M3 7l9 6 9-6" />
           </svg>
           <input
-            type="email"
-            placeholder="E-mail"
-            aria-label="E-mail"
+            type="text"
+            placeholder="E-mail ou usuário"
+            aria-label="E-mail ou usuário"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
