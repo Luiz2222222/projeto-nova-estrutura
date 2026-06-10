@@ -9,7 +9,7 @@ export class BancasService {
   async candidatos(tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
-    const excluir = [tcc.alunoId, tcc.orientadorId].filter((x): x is string => !!x);
+    const excluir = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
     return this.prisma.usuario.findMany({
       where: { papel: { in: ['PROFESSOR', 'AVALIADOR'] }, id: { notIn: excluir } },
       select: { id: true, nomeCompleto: true, tratamento: true, papel: true, afiliacao: true },
@@ -28,8 +28,9 @@ export class BancasService {
     if (ids.length !== 2) {
       throw new BadRequestException({ mensagem: 'A banca da Fase I deve ter exatamente 2 avaliadores distintos.' });
     }
-    if (ids.includes(tcc.alunoId) || (tcc.orientadorId && ids.includes(tcc.orientadorId))) {
-      throw new BadRequestException({ mensagem: 'O aluno e o orientador não podem ser avaliadores.' });
+    const proibidos = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
+    if (ids.some((id) => proibidos.includes(id))) {
+      throw new BadRequestException({ mensagem: 'Aluno, orientador e coorientador não podem ser avaliadores.' });
     }
     const validos = await this.prisma.usuario.count({
       where: { id: { in: ids }, papel: { in: ['PROFESSOR', 'AVALIADOR'] } },
@@ -62,29 +63,33 @@ export class BancasService {
 
   // Avaliador dá a sua nota. Quando todos avaliarem → AVALIACAO_FASE_1 → VALIDACAO_FASE_1.
   async avaliar(avaliadorId: string, bancaId: string, nota: number, parecer?: string) {
-    const membro = await this.prisma.membroBanca.findFirst({
-      where: { bancaId, avaliadorId },
-      include: { banca: { include: { tcc: true } } },
+    // Tudo numa transação: lê o membro, valida e grava sem janela de corrida entre
+    // duas requisições simultâneas do mesmo avaliador.
+    return this.prisma.$transaction(async (tx) => {
+      const membro = await tx.membroBanca.findFirst({
+        where: { bancaId, avaliadorId },
+        include: { banca: { include: { tcc: true } } },
+      });
+      if (!membro) throw new ForbiddenException();
+      if (membro.nota !== null) {
+        throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
+      }
+      const tcc = membro.banca.tcc;
+      const faseEsperada = membro.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+      if (tcc.faseAtual !== faseEsperada) {
+        throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
+      }
+      await tx.membroBanca.update({
+        where: { id: membro.id },
+        data: { nota, parecer: parecer ?? null, avaliadoEm: new Date() },
+      });
+      const membros = await tx.membroBanca.findMany({ where: { bancaId } });
+      if (membros.every((m) => m.nota !== null)) {
+        const proxima = membro.banca.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+        await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: proxima } });
+      }
+      return { ok: true };
     });
-    if (!membro) throw new ForbiddenException();
-    if (membro.nota !== null) {
-      throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
-    }
-    const tcc = membro.banca.tcc;
-    const faseEsperada = membro.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
-    if (tcc.faseAtual !== faseEsperada) {
-      throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
-    }
-    await this.prisma.membroBanca.update({
-      where: { id: membro.id },
-      data: { nota, parecer: parecer ?? null, avaliadoEm: new Date() },
-    });
-    const membros = await this.prisma.membroBanca.findMany({ where: { bancaId } });
-    if (membros.every((m) => m.nota !== null)) {
-      const proxima = membro.banca.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
-      await this.prisma.tcc.update({ where: { id: tcc.id }, data: { faseAtual: proxima } });
-    }
-    return { ok: true };
   }
 
   // Coordenador valida a Fase I: NF1 = média das notas; ≥6 segue p/ Fase II, <6 reprovado.
