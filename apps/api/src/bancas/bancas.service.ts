@@ -17,16 +17,30 @@ export class BancasService {
     });
   }
 
-  // Coordenador forma a banca da Fase I (2 avaliadores). FORMACAO_BANCA_FASE_1 → AVALIACAO_FASE_1.
-  async formarBancaFase1(tccId: string, avaliadorIds: string[]) {
+  // Coordenador forma a banca (Fase I = 2 avaliadores; Fase II = 3). A fase é inferida do TCC.
+  async formarBanca(tccId: string, avaliadorIds: string[]) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
-    if (tcc.faseAtual !== 'FORMACAO_BANCA_FASE_1') {
-      throw new BadRequestException({ mensagem: 'O TCC não está aguardando formação de banca (Fase I).' });
+
+    let fase: 'FASE_1' | 'FASE_2';
+    let qtd: number;
+    let proxima: string;
+    if (tcc.faseAtual === 'FORMACAO_BANCA_FASE_1') {
+      fase = 'FASE_1';
+      qtd = 2;
+      proxima = 'AVALIACAO_FASE_1';
+    } else if (tcc.faseAtual === 'FORMACAO_BANCA_FASE_2') {
+      fase = 'FASE_2';
+      qtd = 3;
+      proxima = 'AVALIACAO_FASE_2';
+    } else {
+      throw new BadRequestException({ mensagem: 'O TCC não está aguardando formação de banca.' });
     }
+
     const ids = [...new Set(avaliadorIds)];
-    if (ids.length !== 2) {
-      throw new BadRequestException({ mensagem: 'A banca da Fase I deve ter exatamente 2 avaliadores distintos.' });
+    if (ids.length !== qtd) {
+      const rotulo = fase === 'FASE_1' ? 'Fase I' : 'Fase II';
+      throw new BadRequestException({ mensagem: `A banca da ${rotulo} deve ter exatamente ${qtd} avaliadores distintos.` });
     }
     const proibidos = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
     if (ids.some((id) => proibidos.includes(id))) {
@@ -35,13 +49,13 @@ export class BancasService {
     const validos = await this.prisma.usuario.count({
       where: { id: { in: ids }, papel: { in: ['PROFESSOR', 'AVALIADOR'] } },
     });
-    if (validos !== 2) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
+    if (validos !== qtd) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
 
     await this.prisma.$transaction([
       this.prisma.banca.create({
-        data: { tccId, fase: 'FASE_1', membros: { create: ids.map((id) => ({ avaliadorId: id })) } },
+        data: { tccId, fase, membros: { create: ids.map((id) => ({ avaliadorId: id })) } },
       }),
-      this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AVALIACAO_FASE_1' } }),
+      this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: proxima } }),
     ]);
     return { ok: true };
   }
@@ -97,30 +111,51 @@ export class BancasService {
     });
   }
 
-  // Coordenador valida a Fase I: NF1 = média das notas; ≥6 segue p/ Fase II, <6 reprovado.
-  async validarFase1(tccId: string) {
+  // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
+  // depois a nota final NF = 0,6·NF1 + 0,4·NF2, ≥7 → concluído.
+  async validar(tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
-    if (tcc.faseAtual !== 'VALIDACAO_FASE_1') {
-      throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação da Fase I.' });
-    }
+
+    let fase: 'FASE_1' | 'FASE_2';
+    if (tcc.faseAtual === 'VALIDACAO_FASE_1') fase = 'FASE_1';
+    else if (tcc.faseAtual === 'VALIDACAO_FASE_2') fase = 'FASE_2';
+    else throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação.' });
+
     const banca = await this.prisma.banca.findUnique({
-      where: { tccId_fase: { tccId, fase: 'FASE_1' } },
+      where: { tccId_fase: { tccId, fase } },
       include: { membros: true },
     });
     if (!banca || banca.membros.length === 0 || banca.membros.some((m) => m.nota === null)) {
       throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
     }
-    const nf1 = banca.membros.reduce((s, m) => s + (m.nota ?? 0), 0) / banca.membros.length;
-    const aprovado = nf1 >= 6;
+    const media = banca.membros.reduce((s, m) => s + (m.nota ?? 0), 0) / banca.membros.length;
+
+    if (fase === 'FASE_1') {
+      const aprovado = media >= 6;
+      await this.prisma.tcc.update({
+        where: { id: tccId },
+        data: {
+          nf1: media,
+          faseAtual: aprovado ? 'FORMACAO_BANCA_FASE_2' : 'REPROVADO_FASE_1',
+          resultado: aprovado ? null : 'REPROVADO',
+        },
+      });
+      return { ok: true, fase, nf1: media, aprovado };
+    }
+
+    const nf2 = media;
+    const nf = 0.6 * (tcc.nf1 ?? 0) + 0.4 * nf2;
+    const aprovado = nf >= 7;
     await this.prisma.tcc.update({
       where: { id: tccId },
       data: {
-        nf1,
-        faseAtual: aprovado ? 'FORMACAO_BANCA_FASE_2' : 'REPROVADO_FASE_1',
-        resultado: aprovado ? null : 'REPROVADO',
+        nf2,
+        nf,
+        faseAtual: aprovado ? 'CONCLUIDO' : 'REPROVADO_FASE_2',
+        resultado: aprovado ? 'APROVADO' : 'REPROVADO',
       },
     });
-    return { ok: true, nf1, aprovado };
+    return { ok: true, fase, nf2, nf, aprovado };
   }
 }

@@ -28,7 +28,7 @@ export class BancasController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   formar(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaFormarBanca)) dados: DadosFormarBanca) {
-    return this.bancas.formarBancaFase1(id, dados.avaliadorIds);
+    return this.bancas.formarBanca(id, dados.avaliadorIds);
   }
 
   @Get('bancas/minhas')
@@ -53,6 +53,6 @@ export class BancasController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   validar(@Param('id') id: string) {
-    return this.bancas.validarFase1(id);
+    return this.bancas.validar(id);
   }
 }
