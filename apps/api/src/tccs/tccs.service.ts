@@ -169,13 +169,14 @@ export class TccsService {
     if (!doc) return null;
     if (usuario.papel === 'COORDENADOR') return doc;
     const t = doc.tcc;
-    const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
-    const temAcesso =
+    const ehDono =
       t.alunoId === usuario.sub ||
       t.orientadorId === usuario.sub ||
-      t.coorientadorId === usuario.sub ||
-      ehMembroBanca;
-    return temAcesso ? doc : null;
+      t.coorientadorId === usuario.sub;
+    // Membro de banca só acessa a monografia/versão final (não os documentos de abertura).
+    const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
+    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL'].includes(doc.tipo);
+    return ehDono || acessoBanca ? doc : null;
   }
 
   // ---------- Fase de Desenvolvimento (monografia + continuidade) ----------

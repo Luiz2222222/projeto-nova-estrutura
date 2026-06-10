@@ -18,35 +18,39 @@ async function main() {
     });
   }
 
-  // Usuários de teste (login simples). Coordenador não se cadastra pela tela pública.
-  await prisma.usuario.upsert({
-    where: { email: 'adm' },
-    update: { senhaHash: await bcrypt.hash('adm', 10), papel: 'COORDENADOR' },
-    create: {
-      nomeCompleto: 'Coordenador de TCC',
-      email: 'adm',
-      senhaHash: await bcrypt.hash('adm', 10),
-      papel: 'COORDENADOR',
-    },
-  });
-  await prisma.usuario.upsert({
-    where: { email: 'aluno' },
-    update: { senhaHash: await bcrypt.hash('aluno', 10), papel: 'ALUNO' },
-    create: {
-      nomeCompleto: 'Aluno de Teste',
-      email: 'aluno',
-      senhaHash: await bcrypt.hash('aluno', 10),
-      papel: 'ALUNO',
-      curso: 'ENGENHARIA_ELETRICA',
-    },
-  });
+  // Usuários de teste com senha fraca (adm/adm, aluno/aluno) SÓ fora de produção.
+  // Em produção, o coordenador inicial deve ser criado por outro meio seguro.
+  const ehProducao = process.env.NODE_ENV === 'production';
+  if (!ehProducao) {
+    await prisma.usuario.upsert({
+      where: { email: 'adm' },
+      update: { senhaHash: await bcrypt.hash('adm', 10), papel: 'COORDENADOR' },
+      create: {
+        nomeCompleto: 'Coordenador de TCC',
+        email: 'adm',
+        senhaHash: await bcrypt.hash('adm', 10),
+        papel: 'COORDENADOR',
+      },
+    });
+    await prisma.usuario.upsert({
+      where: { email: 'aluno' },
+      update: { senhaHash: await bcrypt.hash('aluno', 10), papel: 'ALUNO' },
+      create: {
+        nomeCompleto: 'Aluno de Teste',
+        email: 'aluno',
+        senhaHash: await bcrypt.hash('aluno', 10),
+        papel: 'ALUNO',
+        curso: 'ENGENHARIA_ELETRICA',
+      },
+    });
+  }
 
   // eslint-disable-next-line no-console
   console.log('Seed concluído.');
   // eslint-disable-next-line no-console
   console.log('Códigos:', codigos.map((c) => `${c.papel}=${c.codigo}`).join('  '));
   // eslint-disable-next-line no-console
-  console.log('Logins de teste: adm/adm (coordenador) · aluno/aluno (aluno)');
+  console.log(ehProducao ? 'Produção: usuários de teste NÃO criados.' : 'Logins de teste: adm/adm · aluno/aluno');
 }
 
 main()

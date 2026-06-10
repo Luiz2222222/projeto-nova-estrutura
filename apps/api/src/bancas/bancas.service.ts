@@ -67,6 +67,9 @@ export class BancasService {
       include: { banca: { include: { tcc: true } } },
     });
     if (!membro) throw new ForbiddenException();
+    if (membro.nota !== null) {
+      throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
+    }
     const tcc = membro.banca.tcc;
     const faseEsperada = membro.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
     if (tcc.faseAtual !== faseEsperada) {
