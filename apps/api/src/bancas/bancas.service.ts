@@ -79,10 +79,15 @@ export class BancasService {
       if (tcc.faseAtual !== faseEsperada) {
         throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
       }
-      await tx.membroBanca.update({
-        where: { id: membro.id },
+      // Update CONDICIONAL (só se a nota ainda for null) + checagem de 1 linha: barra a corrida
+      // mesmo em bancos com isolamento mais frouxo (ex.: Postgres em produção).
+      const atualizado = await tx.membroBanca.updateMany({
+        where: { id: membro.id, nota: null },
         data: { nota, parecer: parecer ?? null, avaliadoEm: new Date() },
       });
+      if (atualizado.count !== 1) {
+        throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
+      }
       const membros = await tx.membroBanca.findMany({ where: { bancaId } });
       if (membros.every((m) => m.nota !== null)) {
         const proxima = membro.banca.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
