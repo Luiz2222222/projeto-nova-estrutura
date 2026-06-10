@@ -15,6 +15,7 @@ import { AbrirTcc } from './paginas/aluno/AbrirTcc';
 import { DashboardCoordenador } from './paginas/coordenador/DashboardCoordenador';
 import { PainelCoordenador } from './paginas/coordenador/PainelCoordenador';
 import { PlanejamentoCoordenador } from './paginas/coordenador/PlanejamentoCoordenador';
+import { TccsCoordenador } from './paginas/coordenador/TccsCoordenador';
 import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { EmConstrucao } from './paginas/EmConstrucao';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
@@ -64,10 +65,7 @@ export function App() {
             {/* Rotas do coordenador (estrutura espelha o projeto original) */}
             <Route element={<ExigePapel papeis={['COORDENADOR']} />}>
               <Route path="/coordenador" element={<DashboardCoordenador />} />
-              <Route
-                path="/coordenador/tccs"
-                element={<EmConstrucao titulo="TCCs" descricao="Todos os TCCs do período e a gestão de cada um." />}
-              />
+              <Route path="/coordenador/tccs" element={<TccsCoordenador />} />
               <Route
                 path="/coordenador/relatorios"
                 element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e exportações do período." />}

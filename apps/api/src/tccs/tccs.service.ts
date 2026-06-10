@@ -97,6 +97,18 @@ export class TccsService {
     return { ok: true };
   }
 
+  // Todos os TCCs (visão do coordenador), com dados pra gerir banca/fase.
+  todos() {
+    return this.prisma.tcc.findMany({
+      include: {
+        aluno: { select: { id: true, nomeCompleto: true, curso: true } },
+        orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
+        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
+      },
+      orderBy: { criadoEm: 'desc' },
+    });
+  }
+
   pendentes() {
     return this.prisma.tcc.findMany({
       where: { faseAtual: 'INICIALIZACAO', solicitacoes: { some: { status: 'PENDENTE' } } },

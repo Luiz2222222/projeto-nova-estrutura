@@ -142,6 +142,13 @@ export class TccsController {
     return this.tccs.avaliarContinuidade(req.usuario.sub, id, dados.decisao, dados.parecer);
   }
 
+  @Get('tccs')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  todos() {
+    return this.tccs.todos();
+  }
+
   @Get('tccs/pendentes')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')

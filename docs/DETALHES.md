@@ -141,7 +141,11 @@ Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: mod
   (home) e **Professor** (membros de banca podem ser os dois). Lista as bancas, baixa a monografia
   e **dá a nota 0–10** (modal). Autorização de download estendida a membros de banca
   (`documentoParaUsuario`). Testado na UI (nota 9 → "Sua nota: 9.0"; download 200).
-- **[A FAZER]** telas do **coordenador**: formar banca + validar Fase I (vão na aba **TCCs**).
+- ✔ **Telas do coordenador FEITAS** (aba **TCCs**, `TccsCoordenador.tsx` + `GET /tccs`): lista os
+  TCCs com a fase; **Formar banca** (escolhe 2 avaliadores, modal) quando em FORMACAO_BANCA_FASE_1;
+  **Validar Fase I** (vê as notas + NF1, modal) quando em VALIDACAO_FASE_1. Testado na UI:
+  formar → notas 9/8 → validar → "Aprovado (NF1 8.50), segue p/ Fase II". **Fase I fechada
+  ponta a ponta.** (A aba TCCs começa a preencher a opção B; o "god mode" completo fica pra depois.)
 
 ## 5. Coordenador
 
