@@ -144,8 +144,11 @@ export class BancasService {
       return { ok: true, fase, nf1: media, aprovado };
     }
 
+    if (tcc.nf1 == null) {
+      throw new BadRequestException({ mensagem: 'NF1 ausente — a Fase I precisa ter sido validada antes.' });
+    }
     const nf2 = media;
-    const nf = 0.6 * (tcc.nf1 ?? 0) + 0.4 * nf2;
+    const nf = 0.6 * tcc.nf1 + 0.4 * nf2;
     const aprovado = nf >= 7;
     await this.prisma.tcc.update({
       where: { id: tccId },
