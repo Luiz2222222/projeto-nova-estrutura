@@ -14,6 +14,8 @@ export function RedirecionarHome() {
         ? '/coordenador'
         : usuario.papel === 'PROFESSOR'
           ? '/professor'
-          : '/inicio';
+          : usuario.papel === 'AVALIADOR'
+            ? '/bancas'
+            : '/inicio';
   return <Navigate to={destino} replace />;
 }

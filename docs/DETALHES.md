@@ -136,8 +136,12 @@ Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: mod
   avaliam → `AVALIACAO_FASE_1` → `VALIDACAO_FASE_1` (automático).
 - ✔ **Coordenador** `POST /tccs/:id/banca/validar` — **NF1 = média**; **≥6** → `FORMACAO_BANCA_FASE_2`,
   **<6** → `REPROVADO_FASE_1` (resultado REPROVADO). Esquemas: `esquemaFormarBanca`,`esquemaAvaliarBanca`.
-- Testado e2e: forma → 2 notas (8,7) → valida → **NF1 7.5, aprovado** → Fase II. **[A FAZER]** telas:
-  formar banca (coordenador, na aba TCCs), avaliar (área do Avaliador, hoje placeholder), validar (coordenador).
+- Testado e2e: forma → 2 notas (8,7) → valida → **NF1 7.5, aprovado** → Fase II.
+- ✔ **Tela do Avaliador FEITA:** `/bancas` (`paginas/MinhasBancas.tsx`), no menu de **Avaliador**
+  (home) e **Professor** (membros de banca podem ser os dois). Lista as bancas, baixa a monografia
+  e **dá a nota 0–10** (modal). Autorização de download estendida a membros de banca
+  (`documentoParaUsuario`). Testado na UI (nota 9 → "Sua nota: 9.0"; download 200).
+- **[A FAZER]** telas do **coordenador**: formar banca + validar Fase I (vão na aba **TCCs**).
 
 ## 5. Coordenador
 

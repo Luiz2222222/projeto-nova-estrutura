@@ -41,6 +41,7 @@ const icoCalendario = (
 const icoRelatorio = ico('M3 3v18h18M8 17v-5M13 17V8M18 17v-9');
 const icoUsuarios = ico('M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M8.5 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8M22 21v-2a4 4 0 0 0-3-3.87');
 const icoListaPeriodo = ico('M11 6h10M11 12h10M11 18h10M3 6l1 1 2-2M3 12l1 1 2-2M3 18l1 1 2-2');
+const icoBanca = ico('M9 11l3 3 8-8M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9');
 const icoLista = ico('M8 6h12M8 12h12M8 18h12M3 6h.01M3 12h.01M3 18h.01');
 const icoEngrenagem = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18" strokeLinecap="round" strokeLinejoin="round">
@@ -74,9 +75,10 @@ const NAV: Record<Papel, ItemNav[]> = {
   PROFESSOR: [
     { to: '/professor', rotulo: 'Início', icone: icoCasa, fim: true },
     { to: '/professor/orientandos', rotulo: 'Meus orientandos', icone: icoDoc },
+    { to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca },
     itemConfig,
   ],
-  AVALIADOR: [{ to: '/inicio', rotulo: 'Início', icone: icoCasa }, itemConfig],
+  AVALIADOR: [{ to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca }, itemConfig],
 };
 
 export function LayoutApp() {

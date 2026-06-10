@@ -19,6 +19,7 @@ import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { EmConstrucao } from './paginas/EmConstrucao';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
+import { MinhasBancas } from './paginas/MinhasBancas';
 import { Configuracoes } from './paginas/Configuracoes';
 
 function Protegido({ children }: { children: JSX.Element }) {
@@ -88,6 +89,11 @@ export function App() {
             <Route element={<ExigePapel papeis={['PROFESSOR']} />}>
               <Route path="/professor" element={<DashboardProfessor />} />
               <Route path="/professor/orientandos" element={<MeusOrientandos />} />
+            </Route>
+
+            {/* Bancas — professor e avaliador são membros de banca */}
+            <Route element={<ExigePapel papeis={['PROFESSOR', 'AVALIADOR']} />}>
+              <Route path="/bancas" element={<MinhasBancas />} />
             </Route>
 
             {/* Comuns a qualquer usuário logado */}

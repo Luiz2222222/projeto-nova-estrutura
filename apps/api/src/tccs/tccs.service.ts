@@ -155,15 +155,26 @@ export class TccsService {
   async documentoParaUsuario(docId: string, usuario: { sub: string; papel: string }) {
     const doc = await this.prisma.documentoTcc.findUnique({
       where: { id: docId },
-      include: { tcc: { select: { alunoId: true, orientadorId: true, coorientadorId: true } } },
+      include: {
+        tcc: {
+          select: {
+            alunoId: true,
+            orientadorId: true,
+            coorientadorId: true,
+            bancas: { select: { membros: { select: { avaliadorId: true } } } },
+          },
+        },
+      },
     });
     if (!doc) return null;
     if (usuario.papel === 'COORDENADOR') return doc;
     const t = doc.tcc;
+    const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
     const temAcesso =
       t.alunoId === usuario.sub ||
       t.orientadorId === usuario.sub ||
-      t.coorientadorId === usuario.sub;
+      t.coorientadorId === usuario.sub ||
+      ehMembroBanca;
     return temAcesso ? doc : null;
   }
 
