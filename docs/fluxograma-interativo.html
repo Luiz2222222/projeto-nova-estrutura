@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Simulador do fluxo do TCC</title>
+<style>
+  :root{
+    --aluno:#fde68a; --aluno-b:#b45309;
+    --orient:#86efac; --orient-b:#15803d;
+    --coord:#93c5fd; --coord-b:#1d4ed8;
+    --banca:#d1d5db; --banca-b:#6b7280;
+    --nota:#fdba74; --nota-b:#c2410c;
+    --ok:#34d399; --ok-b:#047857;
+    --bad:#fca5a5; --bad-b:#b91c1c;
+    --lock:#e5e7eb; --lock-b:#cbd5e1;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;overflow:hidden;background:#f3f4f6;
+    font-family:"Segoe UI",system-ui,Arial,sans-serif}
+  .reset{position:fixed;top:14px;right:16px;z-index:50;cursor:pointer;
+    border:1px solid #111827;background:#111827;color:#fff;border-radius:9px;
+    padding:9px 16px;font-size:14px;font-weight:700}
+  .reset:hover{filter:brightness(1.15)}
+  .stage{position:relative;width:100vw;height:100vh}
+  svg{display:block;width:100%;height:100%}
+  .node .shape{stroke-width:2;fill:var(--lock);stroke:var(--lock-b)}
+  .node text{font-size:12px;font-weight:600;pointer-events:none;fill:#1f2937}
+  .node.current .shape{stroke:#111827;stroke-width:4}
+  .node.blocked .shape{animation:shake .4s;stroke:#dc2626;fill:#fee2e2!important}
+  @keyframes shake{0%,100%{transform:translateX(0)}25%{transform:translateX(-4px)}75%{transform:translateX(4px)}}
+  .edge{fill:none;stroke:#cbd5e1;stroke-width:2}
+  .edge.traversed{stroke:#111827;stroke-width:3}
+  .chip text{font-size:12px;font-weight:800;pointer-events:none}
+  .chip.inactive rect{fill:#eef1f4;stroke:#dbe0e6}
+  .chip.inactive text{fill:#6b7280}
+  .chip.trav rect{fill:#111827;stroke:#111827}.chip.trav text{fill:#fff}
+  .chip.active{cursor:pointer}
+  .chip.active rect{stroke:#fff;stroke-width:2;filter:drop-shadow(0 2px 5px #0003)}
+  .chip.active text{fill:#fff}
+  .chip.yes rect{fill:#16a34a}.chip.no rect{fill:#dc2626}.chip.neutral rect{fill:#2563eb}
+  .toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);
+    background:#7f1d1d;color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;
+    box-shadow:0 8px 30px #0003;max-width:600px;opacity:0;pointer-events:none;transition:.25s;z-index:60}
+  .toast.show{opacity:1}.toast.okmsg{background:#065f46}
+</style>
+</head>
+<body>
+<button class="reset" id="reset">↺ Reiniciar</button>
+<div class="stage">
+  <svg id="svg" viewBox="0 0 1740 1040" preserveAspectRatio="xMidYMid meet">
+    <defs>
+      <marker id="aL" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="#cbd5e1"/></marker>
+      <marker id="aD" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L7,3 L0,6 Z" fill="#111827"/></marker>
+    </defs>
+    <g id="edges"></g>
+    <g id="nodes"></g>
+    <g id="chips"></g>
+  </svg>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const A={aluno:["var(--aluno)","var(--aluno-b)"],orient:["var(--orient)","var(--orient-b)"],
+  coord:["var(--coord)","var(--coord-b)"],banca:["var(--banca)","var(--banca-b)"],
+  nota:["var(--nota)","var(--nota-b)"],ok:["var(--ok)","var(--ok-b)"],bad:["var(--bad)","var(--bad-b)"]};
+const H=60;
+const N={
+  A1:{x:180,y:320,w:210,actor:"aluno",label:"Aluno envia solicitação\n+ documentos iniciais"},
+  C1:{x:440,y:320,w:190,actor:"coord",label:"Coordenador\naprova a abertura?"},
+  MS:{x:760,y:150,w:210,actor:"aluno",label:"Aluno envia\nmonografia ao orientador"},
+  MA:{x:1060,y:150,w:200,actor:"orient",label:"Orientador aprova\na monografia?"},
+  CC:{x:760,y:320,w:205,actor:"orient",label:"Orientador confirma\na continuidade?"},
+  DESC:{x:760,y:470,w:180,actor:"bad",label:"⛔ Descontinuado"},
+  FB:{x:1320,y:320,w:190,actor:"coord",join:true,joinReq:["MA","CC"],label:"Coordenador\nforma a banca"},
+  // fase I
+  BA:{x:1320,y:620,w:210,actor:"banca",label:"Banca avalia monografia\n(duplo-cego opcional)"},
+  CV1:{x:1040,y:620,w:195,actor:"coord",label:"Coordenador valida\navaliações (Fase I)?"},
+  N1:{x:760,y:620,w:190,actor:"nota",label:"Nota Fase I:\nNF1 ≥ 6?"},
+  REPROV1:{x:480,y:620,w:200,actor:"bad",label:"❌ Reprovado\n(Fase I)"},
+  // fase II
+  AG:{x:200,y:820,w:210,actor:"orient",label:"Orientador/Coord.\nagenda a defesa"},
+  BD:{x:480,y:820,w:200,actor:"banca",label:"Banca avalia\na defesa (Fase II)"},
+  CV2:{x:760,y:820,w:195,actor:"coord",label:"Coordenador valida\navaliações (Fase II)?"},
+  NF:{x:1040,y:820,w:210,actor:"nota",label:"Nota Final ≥ 7?\nNF = 0,6·NF1 + 0,4·NF2"},
+  REPROV2:{x:1040,y:970,w:200,actor:"bad",label:"❌ Reprovado\n(Fase II)"},
+  // finalização
+  VF:{x:1340,y:820,w:200,actor:"aluno",label:"Aluno posta a\nversão final"},
+  OF:{x:1340,y:970,w:205,actor:"orient",label:"Orientador aprova\na versão final?"},
+  APROV:{x:1620,y:970,w:180,actor:"ok",label:"✅ Concluído"},
+};
+const E=[
+  {f:"A1",t:"C1",a1:"r",a2:"l",l:"sim"},
+  {k:"C1sim",f:"C1",fork:true,targets:["MS","CC"],l:"sim",lp:[486,232],
+     geoms:[[[440,290],[440,150],[655,150]],[[535,320],[658,320]]]},
+  {f:"C1",t:"A1",type:"m",pts:[[440,350],[440,400],[180,400],[180,350]],l:"não",lp:[300,414]},
+  {f:"MS",t:"MA",a1:"r",a2:"l",l:"sim"},
+  {f:"MA",t:"MS",type:"m",pts:[[1060,120],[1060,86],[760,86],[760,120]],l:"não",lp:[910,78]},
+  {f:"MA",t:"FB",type:"m",pts:[[1160,150],[1320,150],[1320,290]],l:"sim",lp:[1245,138]},
+  {f:"CC",t:"FB",a1:"r",a2:"l",l:"sim",lp:[1043,310]},
+  {f:"CC",t:"DESC",type:"m",pts:[[760,350],[760,440]],l:"não",lp:[792,396]},
+  {f:"FB",t:"BA",type:"m",pts:[[1320,350],[1320,590]],l:"sim",lp:[1352,470]},
+  // fase I
+  {f:"BA",t:"CV1",a1:"l",a2:"r",l:"sim"},
+  {f:"CV1",t:"N1",a1:"l",a2:"r",l:"sim"},
+  {f:"CV1",t:"BA",type:"m",pts:[[1040,650],[1040,700],[1320,700],[1320,650]],l:"não",lp:[1180,710]},
+  {f:"N1",t:"REPROV1",a1:"l",a2:"r",l:"não"},
+  {f:"N1",t:"AG",type:"m",pts:[[760,650],[760,760],[200,760],[200,790]],l:"sim",lp:[470,752]},
+  // fase II
+  {f:"AG",t:"BD",a1:"r",a2:"l",l:"sim"},
+  {f:"BD",t:"CV2",a1:"r",a2:"l",l:"sim"},
+  {f:"CV2",t:"NF",a1:"r",a2:"l",l:"sim"},
+  {f:"CV2",t:"BD",type:"m",pts:[[760,850],[760,900],[480,900],[480,850]],l:"não",lp:[620,910]},
+  {f:"NF",t:"REPROV2",type:"m",pts:[[1040,850],[1040,940]],l:"não",lp:[1072,896]},
+  {f:"NF",t:"VF",a1:"r",a2:"l",l:"sim"},
+  // finalização
+  {f:"VF",t:"OF",type:"m",pts:[[1340,850],[1340,940]],l:"sim",lp:[1372,896]},
+  {f:"OF",t:"APROV",a1:"r",a2:"l",l:"sim"},
+  {f:"OF",t:"VF",type:"m",pts:[[1237,970],[1190,970],[1190,820],[1240,820]],l:"não",lp:[1175,895]},
+];
+
+const SVG="http://www.w3.org/2000/svg";
+function anchor(n,s){const x=n.x,y=n.y,w=n.w;return s==="t"?[x,y-H/2]:s==="b"?[x,y+H/2]:s==="l"?[x-w/2,y]:[x+w/2,y];}
+function el(t,a){const e=document.createElementNS(SVG,t);for(const k in a)e.setAttribute(k,a[k]);return e;}
+const edgesG=document.getElementById("edges"),nodesG=document.getElementById("nodes"),chipsG=document.getElementById("chips");
+const edgeRefs={};
+E.forEach(e=>{
+  e._k=e.k||(e.f+">"+e.t);
+  let geoms=e.fork?e.geoms:e.pts?[e.pts]:[[anchor(N[e.f],e.a1),anchor(N[e.t],e.a2)]];
+  const polys=geoms.map(g=>{const pl=el("polyline",{points:g.map(p=>p.join(",")).join(" "),class:"edge"});edgesG.appendChild(pl);return pl;});
+  const g0=geoms[0],lp=e.lp||[(g0[0][0]+g0[g0.length-1][0])/2,(g0[0][1]+g0[g0.length-1][1])/2];
+  const cg=el("g",{class:"chip"}),rect=el("rect",{rx:7}),tx=el("text",{x:lp[0],y:lp[1]+4,"text-anchor":"middle"});
+  tx.textContent=e.l;cg.appendChild(rect);cg.appendChild(tx);cg.addEventListener("click",()=>onChip(e));chipsG.appendChild(cg);
+  edgeRefs[e._k]={polys,chip:cg,e};
+  setTimeout(()=>{try{const b=tx.getBBox();rect.setAttribute("x",b.x-9);rect.setAttribute("y",b.y-4);rect.setAttribute("width",b.width+18);rect.setAttribute("height",b.height+8);}catch(_){}},0);
+});
+const nodeRefs={};
+for(const id in N){
+  const n=N[id],g=el("g",{class:"node"});g.dataset.id=id;
+  const rx=(n.actor==="ok"||n.actor==="bad")?16:10;
+  const shape=el("rect",{x:n.x-n.w/2,y:n.y-H/2,width:n.w,height:H,rx:rx,class:"shape"});g.appendChild(shape);
+  n.label.split("\n").forEach((ln,k,arr)=>{const t=el("text",{x:n.x,y:n.y+5+(k-(arr.length-1)/2)*15,"text-anchor":"middle"});t.textContent=ln;g.appendChild(t);});
+  g.addEventListener("click",()=>onNode(id));nodesG.appendChild(g);nodeRefs[id]={g,shape,n};
+}
+const outs=id=>E.filter(e=>e.f===id);
+const klass=l=>/^sim/i.test(l)?"yes":/^n[ãa]o/i.test(l)?"no":"neutral";
+let state;
+function reset(){state={active:new Set(["A1"]),done:new Set(),trav:new Set(),joinSat:{}};for(const id in N)if(N[id].join)state.joinSat[id]=new Set();render();}
+function fire(e){
+  state.active.delete(e.f);state.done.add(e.f);state.trav.add(e._k);
+  const targets=e.fork?e.targets:[e.t];let term=null;
+  targets.forEach(tid=>{const tn=N[tid];
+    if(tn.join){state.joinSat[tid].add(e.f);if(tn.joinReq.every(p=>state.joinSat[tid].has(p)))state.active.add(tid);}
+    else state.active.add(tid);
+    if(outs(tid).length===0)term=tid;});
+  if(term){state.active.clear();state.done.add(term);render();toastOk("Fim do fluxo: "+plain(term)+". Use ↺ Reiniciar.");return;}
+  render();
+}
+function onChip(e){
+  if(state.active.has(e.f)){fire(e);return;}
+  toast("🚫 Agora não dá. Etapa(s) ativa(s): "+[...state.active].map(plain).join(" / ")+". Clique numa opção acesa.");flash(e.f);}
+function onNode(id){
+  const e=E.find(x=>state.active.has(x.f)&&((x.fork&&x.targets.includes(id))||x.t===id));
+  if(e){fire(e);return;}
+  if(state.active.has(id))return;
+  toast("🚫 Agora não dá. Etapa(s) ativa(s): "+[...state.active].map(plain).join(" / ")+". Avance pelas opções acesas.");flash(id);}
+function render(){
+  for(const id in nodeRefs){const{g,shape,n}=nodeRefs[id];g.classList.remove("current");
+    const[fill,stroke]=A[n.actor];
+    if(state.active.has(id)){g.classList.add("current");shape.style.fill=fill;shape.style.stroke=stroke;}
+    else if(state.done.has(id)){shape.style.fill=fill;shape.style.stroke=stroke;}
+    else{shape.style.fill="";shape.style.stroke="";}}
+  E.forEach(e=>{const ref=edgeRefs[e._k],isTrav=state.trav.has(e._k),isAct=state.active.has(e.f);
+    ref.polys.forEach(pl=>{pl.classList.toggle("traversed",isTrav);pl.setAttribute("marker-end",isTrav?"url(#aD)":"url(#aL)");});
+    ref.chip.className.baseVal="chip";
+    if(isAct)ref.chip.classList.add("active",klass(e.l));else if(isTrav)ref.chip.classList.add("trav");else ref.chip.classList.add("inactive");});
+}
+function plain(id){return N[id]?N[id].label.replace(/\n/g," "):id;}
+let tT;
+function toast(m){const e=document.getElementById("toast");e.className="toast show";e.textContent=m;clearTimeout(tT);tT=setTimeout(()=>e.className="toast",4800);}
+function toastOk(m){const e=document.getElementById("toast");e.className="toast okmsg show";e.textContent=m;clearTimeout(tT);tT=setTimeout(()=>e.className="toast",4800);}
+function flash(id){const r=nodeRefs[id];if(!r)return;r.g.classList.add("blocked");setTimeout(()=>r.g.classList.remove("blocked"),450);}
+document.getElementById("reset").addEventListener("click",reset);
+reset();
+</script>
+</body>
+</html>

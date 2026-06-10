@@ -1,0 +1,163 @@
+// Esquema do banco de dados (Prisma).
+// Dev: SQLite (arquivo local, zero instalação). Produção: troca para PostgreSQL.
+// Por isso usamos texto em vez de enum nativo aqui (portável entre os dois);
+// os valores válidos ficam no pacote compartilhado e são validados com Zod.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Usuario {
+  id           String @id @default(cuid())
+  nomeCompleto String
+  email        String @unique
+  senhaHash    String
+
+  // ALUNO | PROFESSOR | AVALIADOR | COORDENADOR
+  papel String
+
+  // Só aluno: ENGENHARIA_ELETRICA | CONTROLE_E_AUTOMACAO
+  curso String?
+
+  // Professor / avaliador (titulação). Texto livre já cobre a opção "Outros".
+  tratamento String?
+
+  // Avaliador externo (instituição de origem).
+  afiliacao String?
+
+  // Professor: se está aceitando novas orientações.
+  disponivelParaOrientar Boolean @default(true)
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  tccsComoAluno        Tcc[] @relation("TccAluno")
+  tccsComoOrientador   Tcc[] @relation("TccOrientador")
+  tccsComoCoorientador Tcc[] @relation("TccCoorientador")
+
+  @@map("usuarios")
+}
+
+// Código que controla quem pode se cadastrar, por tipo de usuário.
+model CodigoCadastro {
+  id           String   @id @default(cuid())
+  papel        String   @unique
+  codigo       String
+  atualizadoEm DateTime @updatedAt
+
+  @@map("codigos_cadastro")
+}
+
+model Tcc {
+  id        String @id @default(cuid())
+  titulo    String
+  semestre  String
+  faseAtual String @default("INICIALIZACAO")
+
+  // Trilhas paralelas da fase de Desenvolvimento (junção "E" → forma a banca).
+  monografiaAprovada     Boolean @default(false)
+  continuidadeConfirmada Boolean @default(false)
+  parecerContinuidade    String? // motivo, quando o orientador rejeita a continuidade
+
+  aluno   Usuario @relation("TccAluno", fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId String
+
+  orientador   Usuario? @relation("TccOrientador", fields: [orientadorId], references: [id])
+  orientadorId String?
+
+  // Coorientador cadastrado no sistema (interno)...
+  coorientador   Usuario? @relation("TccCoorientador", fields: [coorientadorId], references: [id])
+  coorientadorId String?
+  // ...ou externo (campos soltos)
+  coorientadorNome      String?
+  coorientadorTitulacao String?
+  coorientadorAfiliacao String?
+  coorientadorLattes    String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  solicitacoes SolicitacaoOrientacao[]
+  documentos   DocumentoTcc[]
+
+  @@unique([alunoId, semestre])
+  @@map("tccs")
+}
+
+model SolicitacaoOrientacao {
+  id       String  @id @default(cuid())
+  tcc      Tcc     @relation(fields: [tccId], references: [id], onDelete: Cascade)
+  tccId    String
+  mensagem String?
+  status   String  @default("PENDENTE") // PENDENTE | ACEITA | RECUSADA | CANCELADA
+  parecer  String? // parecer do coordenador ao recusar
+
+  criadoEm     DateTime  @default(now())
+  respondidoEm DateTime?
+
+  @@map("solicitacoes_orientacao")
+}
+
+model DocumentoTcc {
+  id          String @id @default(cuid())
+  tcc         Tcc    @relation(fields: [tccId], references: [id], onDelete: Cascade)
+  tccId       String
+  tipo        String // PLANO_DESENVOLVIMENTO | TERMO_ACEITE | MONOGRAFIA | ...
+  nomeArquivo String
+  caminho     String
+  tamanho     Int
+  versao      Int    @default(1)
+  status      String @default("PENDENTE")
+  parecer     String? // devolutiva do orientador (ex.: ao rejeitar a monografia)
+  criadoEm    DateTime @default(now())
+
+  @@map("documentos_tcc")
+}
+
+// Calendário do semestre (datas-marco), definido pela coordenação. Um por semestre.
+model Calendario {
+  id       String @id @default(cuid())
+  semestre String @unique
+
+  reuniaoAlunos         DateTime?
+  envioDocumentos       DateTime?
+  avaliacaoContinuidade DateTime?
+  submissaoMonografia   DateTime?
+  preparacaoBancasFase1 DateTime?
+  avaliacaoFase1        DateTime?
+  preparacaoBancasFase2 DateTime?
+  apresentacaoFase2     DateTime?
+  ajustesFinais         DateTime?
+
+  atualizadoEm DateTime @updatedAt
+
+  @@map("calendarios")
+}
+
+// Documentos-modelo disponibilizados pela coordenação (Orientações, Template, ABNT…).
+model DocumentoReferencia {
+  id          String   @id @default(cuid())
+  titulo      String
+  nomeArquivo String
+  caminho     String
+  tamanho     Int
+  criadoEm    DateTime @default(now())
+
+  @@map("documentos_referencia")
+}
+
+// Avisos do mural, publicados pela coordenação.
+model Aviso {
+  id        String   @id @default(cuid())
+  titulo    String
+  conteudo  String
+  autorNome String?
+  criadoEm  DateTime @default(now())
+
+  @@map("avisos")
+}

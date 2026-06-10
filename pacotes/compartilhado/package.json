@@ -1,0 +1,21 @@
+{
+  "name": "@tcc/compartilhado",
+  "version": "0.0.0",
+  "private": true,
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/cjs/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cjs/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.cjs.json && tsc -p tsconfig.esm.json"
+  },
+  "dependencies": {
+    "zod": "^3.23.8"
+  }
+}

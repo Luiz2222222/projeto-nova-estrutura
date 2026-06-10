@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+.env
+apps/api/uploads/
+*.local
+.DS_Store
+
+# Prisma — banco SQLite local de desenvolvimento (não versionar)
+apps/api/prisma/*.db
+apps/api/prisma/*.db-journal
+apps/api/prisma/*.sqlite
+
+# Vite
+**/node_modules/.vite/
