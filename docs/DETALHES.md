@@ -120,7 +120,9 @@ Implementa a ARQUITETURA 3.2 (duas trilhas paralelas). Migration
 - **[AGORA]** Professor pode marcar se está **disponível ou não para pegar atividades**
   (orientações). *Efeito:* quando indisponível, ele **não aparece** na lista de orientadores
   que o aluno escolhe ao abrir o TCC. (no antigo era o campo `disponivel_para_listas`)
-- **[NA TELA]** Onde fica o botão/alternar de disponibilidade (provável: dashboard/perfil do professor).
+- ✔ **FEITO:** toggle "Disponibilidade para orientar" no **Dashboard do professor**
+  (`PUT /autenticacao/disponibilidade`, guard PROFESSOR; atualiza o contexto de auth). Testado e2e:
+  indisponível → some de `professores-disponiveis`; disponível → reaparece.
 
 ## 4. Avaliador externo
 

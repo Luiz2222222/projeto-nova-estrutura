@@ -91,4 +91,14 @@ export class AutenticacaoService {
     const u = await this.prisma.usuario.findUnique({ where: { id } });
     return u ? this.publicar(u) : null;
   }
+
+  // Professor liga/desliga a disponibilidade para receber novas orientações.
+  // Indisponível → some da lista de orientadores que o aluno escolhe ao abrir o TCC.
+  async definirDisponibilidade(userId: string, disponivel: boolean): Promise<UsuarioPublico> {
+    const u = await this.prisma.usuario.update({
+      where: { id: userId },
+      data: { disponivelParaOrientar: disponivel },
+    });
+    return this.publicar(u);
+  }
 }

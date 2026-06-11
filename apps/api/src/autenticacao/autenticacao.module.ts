@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { AutenticacaoController } from './autenticacao.controller';
 import { AutenticacaoService } from './autenticacao.service';
 import { GuardaJwt } from './guarda-jwt';
+import { GuardaPapeis } from '../comum/guarda-papeis';
 
 @Module({
   imports: [
@@ -23,7 +24,7 @@ import { GuardaJwt } from './guarda-jwt';
     }),
   ],
   controllers: [AutenticacaoController],
-  providers: [AutenticacaoService, GuardaJwt],
+  providers: [AutenticacaoService, GuardaJwt, GuardaPapeis],
   exports: [GuardaJwt, JwtModule],
 })
 export class AutenticacaoModule {}

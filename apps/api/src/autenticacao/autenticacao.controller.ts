@@ -3,6 +3,7 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Req,
   Res,
   UnauthorizedException,
@@ -11,6 +12,8 @@ import {
 import type { Request, Response } from 'express';
 import { AutenticacaoService } from './autenticacao.service';
 import { GuardaJwt } from './guarda-jwt';
+import { GuardaPapeis } from '../comum/guarda-papeis';
+import { Papeis } from '../comum/papeis.decorator';
 import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
 import {
   esquemaCadastro,
@@ -64,5 +67,16 @@ export class AutenticacaoController {
     const u = await this.auth.buscarPorId(req.usuario!.sub);
     if (!u) throw new UnauthorizedException();
     return u;
+  }
+
+  // Professor liga/desliga a disponibilidade para orientar.
+  @Put('disponibilidade')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR')
+  disponibilidade(
+    @Req() req: Request & { usuario?: { sub: string } },
+    @Body('disponivel') disponivel: boolean,
+  ) {
+    return this.auth.definirDisponibilidade(req.usuario!.sub, !!disponivel);
   }
 }

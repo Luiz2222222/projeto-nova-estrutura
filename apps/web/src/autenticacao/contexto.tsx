@@ -8,6 +8,7 @@ interface ContextoAuth {
   login: (dados: DadosLogin) => Promise<void>;
   cadastrar: (dados: DadosCadastro) => Promise<void>;
   sair: () => Promise<void>;
+  atualizarUsuario: (u: UsuarioPublico) => void;
 }
 
 const Contexto = createContext<ContextoAuth>(null!);
@@ -42,7 +43,7 @@ export function ProvedorAuth({ children }: { children: ReactNode }) {
   }
 
   return (
-    <Contexto.Provider value={{ usuario, carregando, login, cadastrar, sair }}>
+    <Contexto.Provider value={{ usuario, carregando, login, cadastrar, sair, atualizarUsuario: setUsuario }}>
       {children}
     </Contexto.Provider>
   );
