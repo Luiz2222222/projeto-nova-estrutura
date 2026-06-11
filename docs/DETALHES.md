@@ -152,7 +152,14 @@ Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: mod
   avaliadores → **NF2**; depois a **nota final NF = 0,6·NF1 + 0,4·NF2**, ≥7 → **CONCLUIDO**,
   senão `REPROVADO_FASE_2`). A área do Avaliador e o `avaliar()` já tratavam FASE_2; a aba **TCCs**
   do coordenador forma/valida as duas fases (modais adaptam 2/3 avaliadores e NF1/NF2+NF). Testado
-  e2e na UI: NF1 8 → NF2 9 → **NF 8.40 → Concluído/Aprovado**. **Ciclo abertura→…→conclusão completo.**
+  e2e na UI: NF1 8 → NF2 9 → **NF 8.40**.
+- ✔ **Conclusão pós-defesa FEITA (fecha o fluxo):** Fase II aprovada (NF≥7) → **AGUARDANDO_AJUSTES_FINAIS**
+  (aluno sobe a **versão final**, `POST /tccs/:id/versao-final`) → **ANALISE_FINAL_COORDENADOR**
+  (coordenador `POST /tccs/:id/analise-final` {CONCLUIR|AJUSTES}: conclui → **CONCLUIDO/APROVADO**, ou
+  devolve com parecer). Fases novas no domínio; `esquemaAnaliseFinal`; doc `VERSAO_FINAL`. UI: card de
+  ação pendente do aluno + seção "Versão final" no Meu TCC + ação "Análise final" na aba TCCs do
+  coordenador (com download). `ModalEnviarPdf` genérico (monografia/versão final). **Testado e2e na UI:
+  enviar → ajustes → reenviar → concluir.** Ciclo **abertura → … → Concluído** completo.
 
 ## 5. Coordenador
 

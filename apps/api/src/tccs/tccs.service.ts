@@ -105,6 +105,7 @@ export class TccsService {
         aluno: { select: { id: true, nomeCompleto: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
+        documentos: true,
       },
       orderBy: { criadoEm: 'desc' },
     });

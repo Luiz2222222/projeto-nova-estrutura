@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPost, type ErroApi } from '../../api';
+import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ROTULO_FASE } from '../../utils/fases';
 
 const bancaDe = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase);
+const ultimaVF = (t: any) =>
+  (t.documentos ?? []).filter((d: any) => d.tipo === 'VERSAO_FINAL').sort((a: any, b: any) => b.versao - a.versao)[0] ?? null;
 const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1' || f === 'FORMACAO_BANCA_FASE_2';
 const ehValidar = (f: string) => f === 'VALIDACAO_FASE_1' || f === 'VALIDACAO_FASE_2';
 const qtdBanca = (f: string) => (f === 'FORMACAO_BANCA_FASE_2' ? 3 : 2);
@@ -19,6 +21,9 @@ export function TccsCoordenador() {
 
   const [validando, setValidando] = useState<any | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
+
+  const [analisando, setAnalisando] = useState<any | null>(null);
+  const [parecerAnalise, setParecerAnalise] = useState('');
 
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -77,6 +82,26 @@ export function TccsCoordenador() {
     }
   }
 
+  function fecharAnalise() {
+    setAnalisando(null);
+    setParecerAnalise('');
+    setErro('');
+  }
+  async function analiseFinal(decisao: 'CONCLUIR' | 'AJUSTES') {
+    setErro('');
+    if (decisao === 'AJUSTES' && parecerAnalise.trim().length < 3) return setErro('Escreva os ajustes necessários.');
+    setEnviando(true);
+    try {
+      await apiPost(`/tccs/${analisando.id}/analise-final`, { decisao, parecer: parecerAnalise || undefined });
+      fecharAnalise();
+      carregar();
+    } catch (e) {
+      setErro((e as ErroApi).mensagem || 'Não foi possível concluir.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
   return (
@@ -114,6 +139,11 @@ export function TccsCoordenador() {
                   <button className="botao" onClick={() => { setValidando(t); setResultado(null); setErro(''); }}>
                     {t.faseAtual === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
                   </button>
+                </div>
+              )}
+              {t.faseAtual === 'ANALISE_FINAL_COORDENADOR' && (
+                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                  <button className="botao" onClick={() => { setAnalisando(t); setParecerAnalise(''); setErro(''); }}>Análise final</button>
                 </div>
               )}
             </section>
@@ -204,6 +234,40 @@ export function TccsCoordenador() {
               {!resultado && (
                 <button className="botao" disabled={enviando} onClick={confirmarValidar}>{enviando ? 'Validando…' : 'Validar'}</button>
               )}
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {analisando && (() => {
+        const vf = ultimaVF(analisando);
+        return (
+          <Modal titulo="Análise final" subtitulo={analisando.titulo} aoFechar={() => !enviando && fecharAnalise()}>
+            {erro && <div className="erro-geral">{erro}</div>}
+            {vf ? (
+              <div className="item-arquivo">
+                <div className="item-arquivo-info">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                  </svg>
+                  <div>
+                    <span className="nome">Versão final</span>
+                    <span className="meta">{vf.nomeArquivo}</span>
+                  </div>
+                </div>
+                <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${vf.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
+              </div>
+            ) : (
+              <p className="nota-vazio">Versão final não encontrada.</p>
+            )}
+            <label className="campo" style={{ marginTop: 14 }}>
+              <span>Parecer (obrigatório só se pedir ajustes)</span>
+              <textarea rows={3} value={parecerAnalise} onChange={(e) => setParecerAnalise(e.target.value)} placeholder="Ajustes a corrigir…" />
+            </label>
+            <div className="acoes">
+              <button className="botao botao-secundario" disabled={enviando} onClick={() => analiseFinal('AJUSTES')}>Pedir ajustes</button>
+              <button className="botao" disabled={enviando} onClick={() => analiseFinal('CONCLUIR')}>Concluir TCC</button>
             </div>
           </Modal>
         );

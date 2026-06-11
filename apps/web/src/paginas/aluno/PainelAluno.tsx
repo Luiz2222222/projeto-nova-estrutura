@@ -2,18 +2,18 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
-import { ModalEnviarMonografia } from '../../componentes/ModalEnviarMonografia';
+import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC } from '../../utils/fases';
 
-function ultimaMonografia(docs: any[] = []) {
-  return docs.filter((d) => d.tipo === 'MONOGRAFIA').sort((a, b) => b.versao - a.versao)[0] ?? null;
-}
+const ultimoDoc = (docs: any[] = [], tipo: string) =>
+  docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
+const ultimaMonografia = (docs: any[] = []) => ultimoDoc(docs, 'MONOGRAFIA');
 
 export function PainelAluno() {
   const navegar = useNavigate();
   const [tcc, setTcc] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [enviando, setEnviando] = useState(false);
+  const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
 
   function carregar() {
     setCarregando(true);
@@ -168,7 +168,7 @@ export function PainelAluno() {
               tcc.faseAtual === 'DESENVOLVIMENTO' && !tcc.monografiaAprovada && (!mono || mono.status === 'REJEITADO');
             if (!podeEnviar) return null;
             return (
-              <button className="botao" style={{ marginTop: 14 }} onClick={() => setEnviando(true)}>
+              <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('monografia')}>
                 {mono ? 'Reenviar monografia' : 'Enviar monografia'}
               </button>
             );
@@ -176,11 +176,51 @@ export function PainelAluno() {
         </section>
       )}
 
-      {enviando && (
-        <ModalEnviarMonografia
-          tccId={tcc.id}
-          aoFechar={() => setEnviando(false)}
-          aoEnviado={() => { setEnviando(false); carregar(); }}
+      {(tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' ||
+        tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR' ||
+        ultimoDoc(tcc.documentos, 'VERSAO_FINAL')) && (
+        <section className="cartao-secao bloco">
+          <h2>Versão final</h2>
+          {(() => {
+            const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
+            if (!vf) return <p className="nota-vazio" style={{ marginTop: 0 }}>Você ainda não enviou a versão final.</p>;
+            const rotulo =
+              vf.status === 'APROVADO'
+                ? 'Aprovada — TCC concluído'
+                : vf.status === 'REJEITADO'
+                  ? 'Ajustes solicitados'
+                  : 'Aguardando análise do coordenador';
+            return (
+              <>
+                <p className="nota-vazio" style={{ marginTop: 0 }}>
+                  Versão {vf.versao} — <strong>{rotulo}</strong>.
+                </p>
+                {vf.status === 'REJEITADO' && vf.parecer && (
+                  <div className="alerta alerta-erro"><strong>Devolutiva:</strong> {vf.parecer}</div>
+                )}
+              </>
+            );
+          })()}
+          {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (
+            <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('versaoFinal')}>
+              {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
+            </button>
+          )}
+        </section>
+      )}
+
+      {modalUpload && (
+        <ModalEnviarPdf
+          endpoint={modalUpload === 'monografia' ? `/tccs/${tcc.id}/monografia` : `/tccs/${tcc.id}/versao-final`}
+          titulo={modalUpload === 'monografia' ? 'Enviar versão do TCC' : 'Enviar versão final'}
+          subtitulo={
+            modalUpload === 'monografia'
+              ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
+              : 'Envie a versão final corrigida (PDF) para análise do coordenador.'
+          }
+          rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
+          aoFechar={() => setModalUpload(null)}
+          aoEnviado={() => { setModalUpload(null); carregar(); }}
         />
       )}
     </>

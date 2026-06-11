@@ -3,19 +3,26 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
-import { ModalEnviarMonografia } from '../../componentes/ModalEnviarMonografia';
+import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC } from '../../utils/fases';
 
-function ultimaMonografia(docs: any[] = []) {
-  return docs.filter((d) => d.tipo === 'MONOGRAFIA').sort((a, b) => b.versao - a.versao)[0] ?? null;
-}
+const ultimoDoc = (docs: any[] = [], tipo: string) =>
+  docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
 
-// Estado da ação pendente do aluno na fase de desenvolvimento.
+// Ação pendente do aluno na fase de desenvolvimento (monografia).
 function acaoMonografia(tcc: any): 'ENVIAR' | 'AGUARDANDO' | null {
   if (!tcc || tcc.faseAtual !== 'DESENVOLVIMENTO' || tcc.monografiaAprovada) return null;
-  const mono = ultimaMonografia(tcc.documentos);
+  const mono = ultimoDoc(tcc.documentos, 'MONOGRAFIA');
   if (!mono || mono.status === 'REJEITADO') return 'ENVIAR';
   if (mono.status === 'PENDENTE') return 'AGUARDANDO';
+  return null;
+}
+
+// Ação pendente na conclusão (versão final).
+function acaoVersaoFinal(tcc: any): 'ENVIAR' | 'AGUARDANDO' | null {
+  if (!tcc) return null;
+  if (tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS') return 'ENVIAR';
+  if (tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR') return 'AGUARDANDO';
   return null;
 }
 
@@ -24,7 +31,7 @@ export function DashboardAluno() {
   const { usuario } = useAuth();
   const [tcc, setTcc] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [enviando, setEnviando] = useState(false);
+  const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
 
   function carregar() {
     apiGet('/tccs/meu')
@@ -48,7 +55,9 @@ export function DashboardAluno() {
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
   const acao = acaoMonografia(tcc);
-  const mono = ultimaMonografia(tcc?.documentos);
+  const mono = ultimoDoc(tcc?.documentos, 'MONOGRAFIA');
+  const acaoVF = acaoVersaoFinal(tcc);
+  const vf = ultimoDoc(tcc?.documentos, 'VERSAO_FINAL');
 
   return (
     <>
@@ -88,13 +97,38 @@ export function DashboardAluno() {
                   <span className="card-acao-parecer"><strong>Devolutiva:</strong> {mono.parecer}</span>
                 )}
               </div>
-              <button className="botao" onClick={() => setEnviando(true)}>Enviar</button>
+              <button className="botao" onClick={() => setModalUpload('monografia')}>Enviar</button>
             </section>
           )}
           {acao === 'AGUARDANDO' && (
             <section className="cartao-secao bloco">
               <p className="nota-vazio" style={{ margin: 0 }}>
                 📨 Monografia enviada — aguardando avaliação do orientador.
+              </p>
+            </section>
+          )}
+
+          {/* Conclusão: versão final */}
+          {acaoVF === 'ENVIAR' && (
+            <section className="cartao-secao bloco card-acao">
+              <div className="card-acao-info">
+                <span className="card-acao-titulo">Ação necessária: enviar a versão final</span>
+                <span className="card-acao-desc">
+                  {vf?.status === 'REJEITADO'
+                    ? 'O coordenador pediu ajustes — reenvie a versão final corrigida.'
+                    : 'Aprovado na defesa! Envie a versão final corrigida do TCC.'}
+                </span>
+                {vf?.status === 'REJEITADO' && vf.parecer && (
+                  <span className="card-acao-parecer"><strong>Devolutiva:</strong> {vf.parecer}</span>
+                )}
+              </div>
+              <button className="botao" onClick={() => setModalUpload('versaoFinal')}>Enviar</button>
+            </section>
+          )}
+          {acaoVF === 'AGUARDANDO' && (
+            <section className="cartao-secao bloco">
+              <p className="nota-vazio" style={{ margin: 0 }}>
+                📨 Versão final enviada — aguardando a análise final do coordenador.
               </p>
             </section>
           )}
@@ -139,11 +173,18 @@ export function DashboardAluno() {
         </>
       )}
 
-      {enviando && tcc && (
-        <ModalEnviarMonografia
-          tccId={tcc.id}
-          aoFechar={() => setEnviando(false)}
-          aoEnviado={() => { setEnviando(false); carregar(); }}
+      {modalUpload && tcc && (
+        <ModalEnviarPdf
+          endpoint={modalUpload === 'monografia' ? `/tccs/${tcc.id}/monografia` : `/tccs/${tcc.id}/versao-final`}
+          titulo={modalUpload === 'monografia' ? 'Enviar versão do TCC' : 'Enviar versão final'}
+          subtitulo={
+            modalUpload === 'monografia'
+              ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
+              : 'Envie a versão final corrigida (PDF) para análise do coordenador.'
+          }
+          rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
+          aoFechar={() => setModalUpload(null)}
+          aoEnviado={() => { setModalUpload(null); carregar(); }}
         />
       )}
     </>
