@@ -15,10 +15,12 @@ export function Login() {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [mostrarCadastro, setMostrarCadastro] = useState(false);
+  const [sucessoCadastro, setSucessoCadastro] = useState('');
 
   async function enviar(e: FormEvent) {
     e.preventDefault();
     setErro('');
+    setSucessoCadastro('');
     setEnviando(true);
     try {
       await login({ email, senha, manterLogin });
@@ -36,6 +38,11 @@ export function Login() {
       <h2 className="vidro-titulo">Entrar</h2>
 
       <form onSubmit={enviar}>
+        {sucessoCadastro && (
+          <div className="erro-geral" style={{ background: 'var(--aprovado-suave)', borderColor: 'rgba(21,128,61,0.25)', color: 'var(--aprovado)' }}>
+            {sucessoCadastro}
+          </div>
+        )}
         {erro && <div className="erro-geral">{erro}</div>}
 
         <div className="campo-icone">
@@ -90,7 +97,15 @@ export function Login() {
         </button>
       </p>
 
-      {mostrarCadastro && <ModalCadastro aoFechar={() => setMostrarCadastro(false)} />}
+      {mostrarCadastro && (
+        <ModalCadastro
+          aoFechar={() => setMostrarCadastro(false)}
+          aoSucesso={() => {
+            setMostrarCadastro(false);
+            setSucessoCadastro('Cadastro realizado! Faça login com seu e-mail e senha.');
+          }}
+        />
+      )}
     </LayoutAuth>
   );
 }

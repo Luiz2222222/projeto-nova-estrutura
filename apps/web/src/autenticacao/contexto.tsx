@@ -32,9 +32,8 @@ export function ProvedorAuth({ children }: { children: ReactNode }) {
   }
 
   async function cadastrar(dados: DadosCadastro) {
+    // Só cria a conta — NÃO loga automaticamente. O usuário volta pra tela de login.
     await apiPost('/autenticacao/cadastro', dados);
-    // Após cadastrar, já entra automaticamente.
-    await login({ email: dados.email, senha: dados.senha, manterLogin: false });
   }
 
   async function sair() {

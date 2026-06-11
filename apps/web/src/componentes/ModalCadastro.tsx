@@ -1,5 +1,4 @@
 import { useState, type FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../autenticacao/contexto';
 import { Modal } from './Modal';
 import {
@@ -20,9 +19,8 @@ const CATEGORIAS: { value: PapelCadastro; icone: string; descricao: string }[] =
   { value: 'AVALIADOR', icone: '🏢', descricao: 'Membro externo de banca' },
 ];
 
-export function ModalCadastro({ aoFechar }: { aoFechar: () => void }) {
+export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; aoSucesso: () => void }) {
   const { cadastrar } = useAuth();
-  const navegar = useNavigate();
 
   // '' = passo 1 (escolher categoria). Definido = passo 2 (formulário).
   const [papel, setPapel] = useState<PapelCadastro | ''>('');
@@ -74,7 +72,7 @@ export function ModalCadastro({ aoFechar }: { aoFechar: () => void }) {
     setEnviando(true);
     try {
       await cadastrar(r.data as DadosCadastro);
-      navegar('/');
+      aoSucesso();
     } catch (ex) {
       const er = ex as ErroApi;
       if (er.erros) {
