@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { mediaNotas, notaFinal, aprovadoFase1, aprovadoFinal } from '@tcc/compartilhado';
 
 @Injectable()
 export class BancasService {
@@ -129,10 +130,10 @@ export class BancasService {
     if (!banca || banca.membros.length === 0 || banca.membros.some((m) => m.nota === null)) {
       throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
     }
-    const media = banca.membros.reduce((s, m) => s + (m.nota ?? 0), 0) / banca.membros.length;
+    const media = mediaNotas(banca.membros.map((m) => m.nota ?? 0));
 
     if (fase === 'FASE_1') {
-      const aprovado = media >= 6;
+      const aprovado = aprovadoFase1(media);
       await this.prisma.tcc.update({
         where: { id: tccId },
         data: {
@@ -148,8 +149,8 @@ export class BancasService {
       throw new BadRequestException({ mensagem: 'NF1 ausente — a Fase I precisa ter sido validada antes.' });
     }
     const nf2 = media;
-    const nf = 0.6 * tcc.nf1 + 0.4 * nf2;
-    const aprovado = nf >= 7;
+    const nf = notaFinal(tcc.nf1, nf2);
+    const aprovado = aprovadoFinal(nf);
     await this.prisma.tcc.update({
       where: { id: tccId },
       data: {

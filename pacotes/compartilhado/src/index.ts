@@ -1,6 +1,9 @@
 // Tipos, listas e validações compartilhados entre a API e a tela.
 import { z } from 'zod';
 
+// Domínio do TCC (fases, rótulos, cálculo de notas) — fonte única, com testes.
+export * from './dominio';
+
 export const PAPEIS = ['ALUNO', 'PROFESSOR', 'AVALIADOR', 'COORDENADOR'] as const;
 export type Papel = (typeof PAPEIS)[number];
 
