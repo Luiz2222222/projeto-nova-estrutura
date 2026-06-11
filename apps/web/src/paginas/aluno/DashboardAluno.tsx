@@ -1,35 +1,47 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, apiDelete, type ErroApi } from '../../api';
+import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC } from '../../utils/fases';
+import { MARCOS_CALENDARIO, ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
 
-// Ação pendente do aluno na fase de desenvolvimento (monografia).
-function acaoMonografia(tcc: any): 'ENVIAR' | 'AGUARDANDO' | null {
-  if (!tcc || tcc.faseAtual !== 'DESENVOLVIMENTO' || tcc.monografiaAprovada) return null;
-  const mono = ultimoDoc(tcc.documentos, 'MONOGRAFIA');
-  if (!mono || mono.status === 'REJEITADO') return 'ENVIAR';
-  if (mono.status === 'PENDENTE') return 'AGUARDANDO';
-  return null;
+const fmtData = (iso?: string | null) =>
+  iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—';
+
+const STATUS_DOC: Record<string, { rotulo: string; classe: string }> = {
+  APROVADO: { rotulo: 'Aprovado', classe: 'pilula-ok' },
+  REJEITADO: { rotulo: 'Rejeitado', classe: 'pilula-bad' },
+  PENDENTE: { rotulo: 'Em análise', classe: 'pilula-neutra' },
+};
+
+// Próximo marco do calendário com data >= hoje.
+function proximoPrazo(cal: Record<string, string | null> | null) {
+  if (!cal) return null;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  let melhor: { marco: MarcoCalendario; data: Date; iso: string } | null = null;
+  for (const m of MARCOS_CALENDARIO) {
+    const iso = cal[m];
+    if (!iso) continue;
+    const d = new Date(iso);
+    const dLocal = new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+    if (dLocal >= hoje && (!melhor || dLocal < melhor.data)) melhor = { marco: m, data: dLocal, iso };
+  }
+  return melhor;
 }
 
-// Ação pendente na conclusão (versão final).
-function acaoVersaoFinal(tcc: any): 'ENVIAR' | 'AGUARDANDO' | null {
-  if (!tcc) return null;
-  if (tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS') return 'ENVIAR';
-  if (tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR') return 'AGUARDANDO';
-  return null;
-}
+type Acao = { titulo: string; desc: string; parecer?: string; botao?: { rotulo: string; ao: () => void } };
 
 export function DashboardAluno() {
   const navegar = useNavigate();
   const { usuario } = useAuth();
   const [tcc, setTcc] = useState<any | null>(null);
+  const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
 
@@ -40,6 +52,11 @@ export function DashboardAluno() {
       .finally(() => setCarregando(false));
   }
   useEffect(carregar, []);
+  useEffect(() => {
+    apiGet<Record<string, string | null>>('/calendario')
+      .then(setCalendario)
+      .catch(() => setCalendario(null));
+  }, []);
 
   async function corrigirEReenviar() {
     if (!window.confirm('Isso descarta esta solicitação recusada e abre uma nova. Continuar?')) return;
@@ -54,10 +71,51 @@ export function DashboardAluno() {
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
-  const acao = acaoMonografia(tcc);
-  const mono = ultimoDoc(tcc?.documentos, 'MONOGRAFIA');
-  const acaoVF = acaoVersaoFinal(tcc);
-  const vf = ultimoDoc(tcc?.documentos, 'VERSAO_FINAL');
+  const prazo = proximoPrazo(calendario);
+
+  // ---- Ação pendente (1 card, prioridade do fluxo) ----
+  function acaoPendente(): Acao {
+    const semAcao = (titulo: string, desc: string): Acao => ({ titulo, desc });
+    if (!tcc) return semAcao('—', 'Sem TCC ativo.');
+
+    if (solic?.status === 'RECUSADA')
+      return { titulo: 'Abertura recusada', desc: 'Corrija os documentos e reenvie a solicitação.', botao: { rotulo: 'Corrigir e reenviar', ao: corrigirEReenviar } };
+    if (solic?.status === 'PENDENTE')
+      return semAcao('Aguardando aprovação', 'Sua abertura está em análise pelo coordenador.');
+
+    if (tcc.faseAtual === 'DESENVOLVIMENTO' && !tcc.monografiaAprovada) {
+      const mono = ultimoDoc(tcc.documentos, 'MONOGRAFIA');
+      if (!mono || mono.status === 'REJEITADO')
+        return {
+          titulo: 'Enviar versão do TCC',
+          desc: mono?.status === 'REJEITADO' ? 'Seu orientador pediu ajustes — reenvie a monografia.' : 'Submeta a monografia para avaliação do orientador.',
+          parecer: mono?.status === 'REJEITADO' ? mono.parecer : undefined,
+          botao: { rotulo: 'Enviar', ao: () => setModalUpload('monografia') },
+        };
+      if (mono.status === 'PENDENTE') return semAcao('Aguardando avaliação', 'Monografia enviada — em análise pelo orientador.');
+    }
+
+    if (tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS') {
+      const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
+      return {
+        titulo: 'Enviar versão final',
+        desc: vf?.status === 'REJEITADO' ? 'O coordenador pediu ajustes — reenvie a versão final.' : 'Aprovado na defesa! Envie a versão final corrigida.',
+        parecer: vf?.status === 'REJEITADO' ? vf.parecer : undefined,
+        botao: { rotulo: 'Enviar', ao: () => setModalUpload('versaoFinal') },
+      };
+    }
+    if (tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR') return semAcao('Aguardando análise final', 'Versão final enviada — em análise pelo coordenador.');
+    if (tcc.faseAtual === 'CONCLUIDO') return semAcao('TCC concluído 🎉', 'Parabéns! Seu TCC foi aprovado e concluído.');
+    if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO')) return semAcao('—', 'TCC encerrado.');
+
+    return semAcao('Nenhuma ação no momento', 'Acompanhe o andamento na trilha abaixo.');
+  }
+
+  const acao = acaoPendente();
+  const recusada = solic?.status === 'RECUSADA' && solic.parecer;
+  const docs = [...(tcc?.documentos ?? [])].sort(
+    (a, b) => new Date(b.criadoEm ?? 0).getTime() - new Date(a.criadoEm ?? 0).getTime(),
+  );
 
   return (
     <>
@@ -74,65 +132,50 @@ export function DashboardAluno() {
         </section>
       ) : (
         <>
-          {solic?.status === 'RECUSADA' && (
+          {recusada && (
             <div className="alerta alerta-erro bloco">
               <strong>Abertura recusada.</strong> {solic.parecer}
-              <div className="acoes" style={{ marginTop: 12 }}>
-                <button className="botao" onClick={corrigirEReenviar}>Corrigir e reenviar</button>
-              </div>
             </div>
           )}
 
-          {/* Card de ação pendente */}
-          {acao === 'ENVIAR' && (
-            <section className="cartao-secao bloco card-acao">
-              <div className="card-acao-info">
-                <span className="card-acao-titulo">Ação necessária: enviar versão do TCC</span>
-                <span className="card-acao-desc">
-                  {mono?.status === 'REJEITADO'
-                    ? 'Seu orientador pediu ajustes — reenvie a monografia corrigida.'
-                    : 'Submeta a monografia para avaliação do seu orientador.'}
-                </span>
-                {mono?.status === 'REJEITADO' && mono.parecer && (
-                  <span className="card-acao-parecer"><strong>Devolutiva:</strong> {mono.parecer}</span>
+          {/* 3 cards de status */}
+          <div className="cards-status bloco">
+            <div className="card-status">
+              <span className="card-status-titulo">Ação pendente</span>
+              <div className="card-status-corpo">
+                <span className="forte">{acao.titulo}</span>
+                <span className="sub">{acao.desc}</span>
+                {acao.parecer && <span className="sub"><strong>Devolutiva:</strong> {acao.parecer}</span>}
+                {acao.botao && (
+                  <button className="botao" onClick={acao.botao.ao}>{acao.botao.rotulo}</button>
                 )}
               </div>
-              <button className="botao" onClick={() => setModalUpload('monografia')}>Enviar</button>
-            </section>
-          )}
-          {acao === 'AGUARDANDO' && (
-            <section className="cartao-secao bloco">
-              <p className="nota-vazio" style={{ margin: 0 }}>
-                📨 Monografia enviada — aguardando avaliação do orientador.
-              </p>
-            </section>
-          )}
+            </div>
 
-          {/* Conclusão: versão final */}
-          {acaoVF === 'ENVIAR' && (
-            <section className="cartao-secao bloco card-acao">
-              <div className="card-acao-info">
-                <span className="card-acao-titulo">Ação necessária: enviar a versão final</span>
-                <span className="card-acao-desc">
-                  {vf?.status === 'REJEITADO'
-                    ? 'O coordenador pediu ajustes — reenvie a versão final corrigida.'
-                    : 'Aprovado na defesa! Envie a versão final corrigida do TCC.'}
-                </span>
-                {vf?.status === 'REJEITADO' && vf.parecer && (
-                  <span className="card-acao-parecer"><strong>Devolutiva:</strong> {vf.parecer}</span>
+            <div className="card-status">
+              <span className="card-status-titulo">Próximo prazo</span>
+              <div className="card-status-corpo">
+                {prazo ? (
+                  <>
+                    <span className="grande">{fmtData(prazo.iso)}</span>
+                    <span className="sub">{ROTULO_MARCO[prazo.marco]}</span>
+                  </>
+                ) : (
+                  <span className="sub">Sem prazos futuros no calendário.</span>
                 )}
               </div>
-              <button className="botao" onClick={() => setModalUpload('versaoFinal')}>Enviar</button>
-            </section>
-          )}
-          {acaoVF === 'AGUARDANDO' && (
-            <section className="cartao-secao bloco">
-              <p className="nota-vazio" style={{ margin: 0 }}>
-                📨 Versão final enviada — aguardando a análise final do coordenador.
-              </p>
-            </section>
-          )}
+            </div>
 
+            <div className="card-status">
+              <span className="card-status-titulo">Fase atual</span>
+              <div className="card-status-corpo">
+                <span className="forte">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
+                <span className="sub">{tcc.semestre}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Trilha */}
           <section className="cartao-secao bloco">
             <h2>Andamento do TCC</h2>
             <p className="legenda" style={{ marginBottom: 18 }}>{tcc.titulo}</p>
@@ -141,34 +184,45 @@ export function DashboardAluno() {
             ) : (
               <TrilhaFases atual={idx} />
             )}
-            <p className="nota-vazio">
-              Etapa atual: <strong>{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</strong>
-            </p>
-            <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-              <button className="botao" onClick={() => navegar('/aluno/meu-tcc')}>Ver Meu TCC</button>
-              <button className="botao botao-secundario" onClick={() => navegar('/aluno/documentos')}>Documentos</button>
-            </div>
           </section>
 
+          {/* Documentos */}
           <section className="cartao-secao bloco">
-            <h2>Resumo</h2>
-            <dl className="dados">
-              <div>
-                <dt>Orientador</dt>
-                <dd>
-                  {tcc.orientador?.tratamento ? tcc.orientador.tratamento + ' ' : ''}
-                  {tcc.orientador?.nomeCompleto ?? '—'}
-                </dd>
-              </div>
-              <div>
-                <dt>Semestre</dt>
-                <dd>{tcc.semestre}</dd>
-              </div>
-              <div>
-                <dt>Situação</dt>
-                <dd>{ROTULO_STATUS_SOLIC[solic?.status] ?? solic?.status ?? '—'}</dd>
-              </div>
-            </dl>
+            <div className="cabecalho-secao">
+              <h2>Documentos</h2>
+              <button className="link-inline" onClick={() => navegar('/aluno/documentos')}>Ver todos os documentos →</button>
+            </div>
+            {docs.length ? (
+              <table className="tabela">
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Arquivo</th>
+                    <th>Status</th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {docs.slice(0, 5).map((d: any) => {
+                    const st = STATUS_DOC[d.status] ?? { rotulo: d.status, classe: 'pilula-neutra' };
+                    return (
+                      <tr key={d.id}>
+                        <td>{fmtData(d.criadoEm)}</td>
+                        <td>{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</td>
+                        <td>{d.nomeArquivo}</td>
+                        <td><span className={`pilula ${st.classe}`}>{st.rotulo}</span></td>
+                        <td>
+                          <a className="link-inline" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            ) : (
+              <p className="nota-vazio">Nenhum documento enviado ainda.</p>
+            )}
           </section>
         </>
       )}

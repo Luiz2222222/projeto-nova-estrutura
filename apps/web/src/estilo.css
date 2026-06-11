@@ -388,6 +388,33 @@ select {
 .resumo-numero { font-family: var(--serif); font-size: 30px; font-weight: 600; color: var(--azul-forte); line-height: 1; }
 .resumo-rotulo { font-size: 13px; color: var(--tinta-3); }
 
+/* 3 cards de status (Dashboard do aluno — espelha o original) */
+.cards-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.card-status {
+  background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-2);
+  box-shadow: var(--sombra-1); padding: 18px 20px; min-height: 158px;
+  display: flex; flex-direction: column;
+}
+.card-status-titulo { font-size: 11px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; color: var(--tinta-3); }
+.card-status-corpo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 6px; padding-top: 8px; }
+.card-status-corpo .forte { font-size: 17px; font-weight: 700; color: var(--tinta-1); }
+.card-status-corpo .grande { font-size: 22px; font-weight: 700; color: var(--azul-forte); line-height: 1.1; }
+.card-status-corpo .sub { font-size: 13px; color: var(--tinta-3); }
+.card-status-corpo .botao { width: 100%; margin-top: auto; }
+
+/* Tabela simples (documentos no dashboard) */
+.tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
+.tabela th { text-align: left; padding: 8px 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; color: var(--tinta-3); border-bottom: 1px solid var(--borda); }
+.tabela td { padding: 10px; border-bottom: 1px solid var(--borda-suave); color: var(--tinta-2); }
+.tabela tr:last-child td { border-bottom: none; }
+.pilula { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+.pilula-ok { background: var(--aprovado-suave); color: var(--aprovado); }
+.pilula-bad { background: var(--reprovado-suave); color: var(--reprovado); }
+.pilula-neutra { background: var(--inset); color: var(--tinta-3); border: 1px solid var(--borda); }
+
+.cabecalho-secao { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+.cabecalho-secao h2 { margin: 0; }
+
 /* Calendário (formulário) */
 .calendario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
 .calendario-grid .campo small { font-weight: 400; }
