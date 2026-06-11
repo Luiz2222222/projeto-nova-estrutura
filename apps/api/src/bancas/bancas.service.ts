@@ -151,13 +151,14 @@ export class BancasService {
     const nf2 = media;
     const nf = notaFinal(tcc.nf1, nf2);
     const aprovado = aprovadoFinal(nf);
+    // Aprovado na defesa ainda NÃO conclui: vai pra ajustes finais (aluno sobe a versão final).
     await this.prisma.tcc.update({
       where: { id: tccId },
       data: {
         nf2,
         nf,
-        faseAtual: aprovado ? 'CONCLUIDO' : 'REPROVADO_FASE_2',
-        resultado: aprovado ? 'APROVADO' : 'REPROVADO',
+        faseAtual: aprovado ? 'AGUARDANDO_AJUSTES_FINAIS' : 'REPROVADO_FASE_2',
+        resultado: aprovado ? null : 'REPROVADO',
       },
     });
     return { ok: true, fase, nf2, nf, aprovado };

@@ -197,6 +197,20 @@ export const esquemaAvaliarBanca = z.object({
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
 
+// ---------- Conclusão (análise final do coordenador) ----------
+
+export const esquemaAnaliseFinal = z
+  .object({
+    decisao: z.enum(['CONCLUIR', 'AJUSTES']),
+    parecer: z.string().trim().optional(),
+  })
+  .superRefine((d, ctx) => {
+    if (d.decisao === 'AJUSTES' && (!d.parecer || d.parecer.length < 3)) {
+      ctx.addIssue({ code: 'custom', path: ['parecer'], message: 'Explique os ajustes necessários' });
+    }
+  });
+export type DadosAnaliseFinal = z.infer<typeof esquemaAnaliseFinal>;
+
 export const DESC_MARCO: Record<MarcoCalendario, string> = {
   reuniaoAlunos: 'Orientações gerais sobre o TCC e o regulamento.',
   envioDocumentos: 'Prazo para envio do plano e do termo de aceite.',

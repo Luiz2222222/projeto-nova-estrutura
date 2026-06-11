@@ -26,10 +26,12 @@ import {
   esquemaRecusarAbertura,
   esquemaAvaliarMonografia,
   esquemaContinuidade,
+  esquemaAnaliseFinal,
   type DadosAbrirTcc,
   type DadosRecusarAbertura,
   type DadosAvaliarMonografia,
   type DadosContinuidade,
+  type DadosAnaliseFinal,
 } from '@tcc/compartilhado';
 
 // Aceita só PDF nos uploads de documentos do TCC.
@@ -140,6 +142,24 @@ export class TccsController {
     @Body(new ZodValidacaoPipe(esquemaContinuidade)) dados: DadosContinuidade,
   ) {
     return this.tccs.avaliarContinuidade(req.usuario.sub, id, dados.decisao, dados.parecer);
+  }
+
+  // ---------- Conclusão ----------
+
+  @Post('tccs/:id/versao-final')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('ALUNO')
+  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  enviarVersaoFinal(@Req() req: Req, @Param('id') id: string, @UploadedFile() arquivo: any) {
+    if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
+    return this.tccs.enviarVersaoFinal(req.usuario.sub, id, arquivo);
+  }
+
+  @Post('tccs/:id/analise-final')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  analiseFinal(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaAnaliseFinal)) dados: DadosAnaliseFinal) {
+    return this.tccs.analiseFinal(id, dados.decisao, dados.parecer);
   }
 
   @Get('tccs')

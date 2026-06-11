@@ -306,6 +306,65 @@ export class TccsService {
     return { ok: true };
   }
 
+  // ---------- Conclusão (versão final + análise do coordenador) ----------
+
+  // Aluno envia a versão final corrigida (após aprovado na defesa). → ANALISE_FINAL_COORDENADOR.
+  async enviarVersaoFinal(alunoId: string, tccId: string, arquivo: any) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException();
+    if (tcc.alunoId !== alunoId) throw new ForbiddenException();
+    if (tcc.faseAtual !== 'AGUARDANDO_AJUSTES_FINAIS') {
+      throw new BadRequestException({ mensagem: 'O TCC não está aguardando a versão final.' });
+    }
+    const arq = await this.gravarArquivo(arquivo);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.documentoTcc.updateMany({
+          where: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE' },
+          data: { status: 'SUBSTITUIDA' },
+        });
+        const versoes = await tx.documentoTcc.count({ where: { tccId, tipo: 'VERSAO_FINAL' } });
+        const doc = await tx.documentoTcc.create({
+          data: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE', versao: versoes + 1, ...arq },
+        });
+        await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: 'ANALISE_FINAL_COORDENADOR' } });
+        return doc;
+      });
+    } catch (e) {
+      await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
+      throw e;
+    }
+  }
+
+  // Coordenador analisa a versão final: conclui (→ CONCLUIDO/APROVADO) ou pede ajustes (volta).
+  async analiseFinal(tccId: string, decisao: 'CONCLUIR' | 'AJUSTES', parecer?: string) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException();
+    if (tcc.faseAtual !== 'ANALISE_FINAL_COORDENADOR') {
+      throw new BadRequestException({ mensagem: 'O TCC não está em análise final.' });
+    }
+    const versao = await this.prisma.documentoTcc.findFirst({
+      where: { tccId, tipo: 'VERSAO_FINAL' },
+      orderBy: { versao: 'desc' },
+    });
+    if (decisao === 'CONCLUIR') {
+      await this.prisma.$transaction([
+        ...(versao
+          ? [this.prisma.documentoTcc.update({ where: { id: versao.id }, data: { status: 'APROVADO', parecer: null } })]
+          : []),
+        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO' } }),
+      ]);
+    } else {
+      await this.prisma.$transaction([
+        ...(versao
+          ? [this.prisma.documentoTcc.update({ where: { id: versao.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } })]
+          : []),
+        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' } }),
+      ]);
+    }
+    return { ok: true };
+  }
+
   // Documentos da ABERTURA (plano + termo). Só na fase de solicitação e só esses dois tipos.
   async adicionarDocumento(alunoId: string, tccId: string, tipo: string, arquivo: any) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
