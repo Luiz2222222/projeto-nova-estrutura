@@ -11,9 +11,14 @@
     "api": "npm run dev --workspace apps/api",
     "web": "npm run dev --workspace apps/web",
     "build": "npm run build --workspaces --if-present",
-    "test": "npm run test --workspaces --if-present"
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint ."
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.4.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript-eslint": "^8.61.0",
     "vitest": "^4.1.8"
   }
 }

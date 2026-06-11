@@ -262,8 +262,10 @@ Quarta rodada de revisão (FEITO):
   usada por **back** (`bancas.service`) e **front** (`utils/fases.ts` re-exporta). `dominio.test.ts`
   cobre o cálculo de notas e a completude das fases (pega o bug de "fase nova sem rótulo"). Rodar:
   `npm test` na raiz (ou `npm run test` no pacote). 7 testes passando.
-- **[A FAZER]** **ESLint** ainda não montado; expandir testes (integração dos fluxos) antes do
-  **upgrade de deps** (npm audit) — ver seção 7 e a tarefa registrada.
+- ✔ **ESLint** montado (`eslint.config.mjs`, flat config pragmática: TS + regras de hooks no front,
+  sem ruído de `any`). `npm run lint` na raiz — **0 problemas**.
+- **[A FAZER]** expandir testes (integração dos fluxos) antes do **upgrade de deps** (npm audit)
+  — ver seção 7 e a tarefa registrada.
 
 ### Menu lateral (app shell) — em progresso
 - **[NA TELA]** ✔ **Menu lateral por papel** no `LayoutApp` (NAV: Record<Papel, ItemNav[]>).

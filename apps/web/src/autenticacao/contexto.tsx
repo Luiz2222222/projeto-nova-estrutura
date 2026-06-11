@@ -11,7 +11,6 @@ interface ContextoAuth {
 }
 
 const Contexto = createContext<ContextoAuth>(null!);
-// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => useContext(Contexto);
 
 export function ProvedorAuth({ children }: { children: ReactNode }) {

@@ -16,7 +16,6 @@ async function iniciar() {
 
   const porta = process.env.PORT ?? 3000;
   await app.listen(porta);
-  // eslint-disable-next-line no-console
   console.log(`API do TCC no ar em http://localhost:${porta}`);
 }
 

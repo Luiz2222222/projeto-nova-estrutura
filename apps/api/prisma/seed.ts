@@ -45,17 +45,13 @@ async function main() {
     });
   }
 
-  // eslint-disable-next-line no-console
   console.log('Seed concluído.');
-  // eslint-disable-next-line no-console
   console.log('Códigos:', codigos.map((c) => `${c.papel}=${c.codigo}`).join('  '));
-  // eslint-disable-next-line no-console
   console.log(ehProducao ? 'Produção: usuários de teste NÃO criados.' : 'Logins de teste: adm/adm · aluno/aluno');
 }
 
 main()
   .catch((e) => {
-    // eslint-disable-next-line no-console
     console.error(e);
     process.exit(1);
   })
