@@ -225,7 +225,7 @@ export function TccsCoordenador() {
                       ? `Aprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}). Segue para a Fase II.`
                       : `Reprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}).`)
                   : (resultado.aprovado
-                      ? `Concluído! Nota final NF ${Number(resultado.nf).toFixed(2)} (aprovado).`
+                      ? `Aprovado na Fase II — NF ${Number(resultado.nf).toFixed(2)}. Agora o aluno deve enviar a versão final.`
                       : `Reprovado na Fase II. Nota final NF ${Number(resultado.nf).toFixed(2)}.`)}
               </div>
             )}
