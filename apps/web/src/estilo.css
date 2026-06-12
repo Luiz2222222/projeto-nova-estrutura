@@ -384,6 +384,7 @@ select {
 /* Perfil — grade de dados (2 colunas) + aviso */
 .grade-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
 .grade-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.pesos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
 @media (max-width: 700px) { .grade-3 { grid-template-columns: 1fr; } }
 .alerta-aviso { background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.35); color: var(--tinta-2); border-radius: var(--raio-1); padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
 .alerta-aviso strong { color: var(--tinta-1); }

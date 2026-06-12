@@ -1,5 +1,6 @@
 import { SecaoCalendario } from './SecaoCalendario';
 import { SecaoCodigos } from './SecaoCodigos';
+import { SecaoPesos } from './SecaoPesos';
 import { SecaoModelos } from './SecaoModelos';
 import { SecaoDados } from './SecaoDados';
 
@@ -12,6 +13,7 @@ export function PlanejamentoCoordenador() {
       <p className="legenda">Datas do semestre e documentos de referência.</p>
       <SecaoCalendario />
       <SecaoCodigos />
+      <SecaoPesos />
       <SecaoModelos />
       <SecaoDados />
     </>

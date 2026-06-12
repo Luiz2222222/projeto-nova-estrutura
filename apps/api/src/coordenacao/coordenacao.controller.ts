@@ -50,6 +50,13 @@ export class CoordenacaoController {
     return this.coord.salvarCalendario(dados);
   }
 
+  @Put('calendario/pesos')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  salvarPesos(@Body() dados: Record<string, unknown>) {
+    return this.coord.salvarPesos(dados);
+  }
+
   // ---------- Códigos de cadastro (só coordenador: são segredos) ----------
 
   @Get('codigos-cadastro')

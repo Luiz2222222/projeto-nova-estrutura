@@ -9,7 +9,16 @@ import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { MARCOS_CALENDARIO, DESTINATARIOS_AVISO, CORES_AVISO, type DadosAviso } from '@tcc/compartilhado';
+import {
+  MARCOS_CALENDARIO,
+  DESTINATARIOS_AVISO,
+  CORES_AVISO,
+  CRITERIOS_FASE1,
+  CRITERIOS_FASE2,
+  colunaPeso,
+  pesosSomam10,
+  type DadosAviso,
+} from '@tcc/compartilhado';
 
 function semestreAtual(): string {
   const d = new Date();
@@ -42,6 +51,32 @@ export class CoordenacaoService {
       }
       data[marco] = d;
     }
+    return this.prisma.calendario.upsert({
+      where: { semestre },
+      update: data,
+      create: { semestre, ...data },
+    });
+  }
+
+  // Salva os pesos por critério (Fase I e II). Cada conjunto deve somar 10.
+  async salvarPesos(dados: Record<string, unknown>) {
+    const semestre = semestreAtual();
+    const ler = (criterios: typeof CRITERIOS_FASE1) =>
+      criterios.map((c) => {
+        const v = Number(dados[colunaPeso(c.chave)]);
+        if (!Number.isFinite(v) || v < 0) {
+          throw new BadRequestException({ mensagem: `Peso inválido em "${c.rotulo}".` });
+        }
+        return v;
+      });
+    const p1 = ler(CRITERIOS_FASE1);
+    const p2 = ler(CRITERIOS_FASE2);
+    if (!pesosSomam10(p1)) throw new BadRequestException({ mensagem: 'Os pesos da Fase I devem somar 10.' });
+    if (!pesosSomam10(p2)) throw new BadRequestException({ mensagem: 'Os pesos da Fase II devem somar 10.' });
+
+    const data: Record<string, number> = {};
+    CRITERIOS_FASE1.forEach((c, i) => (data[colunaPeso(c.chave)] = p1[i]));
+    CRITERIOS_FASE2.forEach((c, i) => (data[colunaPeso(c.chave)] = p2[i]));
     return this.prisma.calendario.upsert({
       where: { semestre },
       update: data,
