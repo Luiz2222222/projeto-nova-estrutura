@@ -122,13 +122,17 @@ export class CoordenacaoController {
     @Param('id') id: string,
     @Body(new ZodValidacaoPipe(esquemaComentario)) dados: DadosComentario,
   ) {
-    return this.coord.comentar(id, req.usuario.sub, dados.texto);
+    return this.coord.comentar(id, req.usuario, dados.texto);
   }
 
   @Delete('avisos/:avisoId/comentarios/:comentarioId')
   @UseGuards(GuardaJwt)
-  removerComentario(@Req() req: Req, @Param('comentarioId') comentarioId: string) {
-    return this.coord.removerComentario(comentarioId, req.usuario);
+  removerComentario(
+    @Req() req: Req,
+    @Param('avisoId') avisoId: string,
+    @Param('comentarioId') comentarioId: string,
+  ) {
+    return this.coord.removerComentario(avisoId, comentarioId, req.usuario);
   }
 
   // ---------- Documentos de referência ----------
