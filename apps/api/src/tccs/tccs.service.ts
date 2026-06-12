@@ -206,7 +206,10 @@ export class TccsService {
     const ext = extname(arquivo.originalname || '').replace(/[^.a-zA-Z0-9]/g, '').slice(0, 10);
     const nome = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
     await fs.writeFile(join(dir, nome), arquivo.buffer);
-    return { nomeArquivo: arquivo.originalname, caminho: join('uploads', nome), tamanho: arquivo.size };
+    // O multer entrega o originalname interpretado como latin1; reinterpreta como UTF-8
+    // para preservar acentos (ex.: "Orientações" em vez de "OrientaÃ§oes").
+    const nomeArquivo = Buffer.from(arquivo.originalname || '', 'latin1').toString('utf8');
+    return { nomeArquivo, caminho: join('uploads', nome), tamanho: arquivo.size };
   }
 
   // Aluno envia (ou reenvia) a monografia. Substitui versões pendentes antigas e cria a nova

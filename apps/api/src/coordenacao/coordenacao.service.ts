@@ -83,9 +83,12 @@ export class CoordenacaoService {
     const caminho = join('uploads', 'referencia', nome);
     await fs.writeFile(join(dir, nome), arquivo.buffer);
 
+    // O multer entrega o originalname interpretado como latin1; reinterpreta como UTF-8
+    // para preservar acentos (ex.: "Orientações" em vez de "OrientaÃ§oes").
+    const nomeArquivo = Buffer.from(arquivo.originalname || '', 'latin1').toString('utf8');
     try {
       return await this.prisma.documentoReferencia.create({
-        data: { titulo, nomeArquivo: arquivo.originalname, caminho, tamanho: arquivo.size },
+        data: { titulo, nomeArquivo, caminho, tamanho: arquivo.size },
       });
     } catch (e) {
       // Se o registro falhar, remove o arquivo recém-gravado (sem órfão).
