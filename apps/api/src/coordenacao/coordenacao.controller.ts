@@ -119,4 +119,14 @@ export class CoordenacaoController {
     if (!doc) throw new NotFoundException('Documento não encontrado');
     res.download(join(process.cwd(), doc.caminho), doc.nomeArquivo);
   }
+
+  // Abre o documento-modelo inline no navegador (botão de "olho"), sem forçar download.
+  @Get('documentos-referencia/:id/visualizar')
+  @UseGuards(GuardaJwt)
+  async visualizarReferencia(@Param('id') id: string, @Res() res: Response) {
+    const doc = await this.coord.referencia(id);
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.nomeArquivo)}"`);
+    res.sendFile(join(process.cwd(), doc.caminho));
+  }
 }
