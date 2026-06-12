@@ -373,26 +373,35 @@ select {
 .estado-vazio svg { width: 40px; height: 40px; color: var(--tinta-4); margin: 0 auto 6px; }
 .estado-vazio h2 { margin-bottom: 6px; }
 
-/* Datas importantes (Informações) */
-.marcos-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
-.marco-card {
-  display: flex; align-items: center; gap: 12px;
-  padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2);
-}
-.marco-icone {
-  flex-shrink: 0; width: 38px; height: 38px; border-radius: 10px;
-  display: grid; place-items: center; color: var(--azul-forte); background: var(--azul-suave);
-}
-.marco-icone svg { width: 20px; height: 20px; }
+/* Título de seção com ícone (como no original) */
+.h2-icone { display: flex; align-items: center; gap: 8px; }
+.h2-icone .h2-ico { display: inline-flex; }
+.h2-icone .h2-ico svg { width: 20px; height: 20px; color: var(--tinta-3); }
+
+/* Datas do período (Informações) — lista de 1 coluna, ícone colorido por etapa */
+.marcos-lista { display: flex; flex-direction: column; gap: 16px; }
+.marco-linha { display: flex; align-items: flex-start; gap: 12px; }
+.marco-icone { flex-shrink: 0; width: 36px; height: 36px; border-radius: var(--raio-1); display: grid; place-items: center; }
+.marco-icone svg { width: 18px; height: 18px; }
 .marco-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.marco-titulo { font-weight: 600; font-size: 14px; color: var(--tinta-1); }
+.marco-titulo { font-weight: 500; font-size: 14px; color: var(--tinta-1); }
 .marco-desc { font-size: 12px; color: var(--tinta-3); line-height: 1.35; }
-.marco-data {
-  flex-shrink: 0; align-self: flex-start; font-size: 11px; font-weight: 600;
-  color: var(--tinta-3); background: var(--inset); border: 1px solid var(--borda);
-  padding: 3px 9px; border-radius: 999px;
+.marco-data { flex-shrink: 0; align-self: center; font-size: 14px; color: var(--tinta-4); }
+.marco-data.definida { color: var(--tinta-2); font-weight: 500; }
+
+/* Documentos de referência — grid de 2 colunas */
+.ref-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.ref-card {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px; border: 1px solid var(--borda); border-radius: var(--raio-1);
+  transition: background 0.12s;
 }
-.marco-data.definida { color: var(--azul-forte); background: var(--azul-suave); border-color: var(--azul-anel); }
+.ref-card:hover { background: var(--canvas); }
+.ref-icone { flex-shrink: 0; width: 38px; height: 38px; border-radius: var(--raio-1); display: grid; place-items: center; color: var(--azul-forte); background: var(--azul-suave); }
+.ref-icone svg { width: 20px; height: 20px; }
+.ref-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ref-texto .nome { font-weight: 500; font-size: 14px; color: var(--tinta-1); }
+.ref-texto .meta { font-size: 12px; color: var(--tinta-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Cartões-resumo (Dashboard do coordenador) */
 .cartoes-resumo { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 14px; }

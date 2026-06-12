@@ -9,8 +9,12 @@ import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
 
-const fmtData = (iso?: string | null) =>
-  iso ? new Date(iso).toLocaleDateString('pt-BR', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—';
+// dd/MM/yyyy (formato do projeto antigo). O split da string ISO evita "voltar" um dia por fuso.
+const fmtData = (iso?: string | null) => {
+  if (!iso) return '—';
+  const [ano, mes, dia] = iso.split('T')[0].split('-');
+  return `${dia}/${mes}/${ano}`;
+};
 
 const STATUS_DOC: Record<string, { rotulo: string; classe: string }> = {
   APROVADO: { rotulo: 'Aprovado', classe: 'pilula-ok' },
