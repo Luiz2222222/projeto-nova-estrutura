@@ -209,9 +209,25 @@ a:hover { color: var(--azul-escuro); }
 .marca-mini { display: flex; align-items: center; gap: 10px; font-family: var(--serif); font-weight: 600; font-size: 17px; color: var(--azul-escuro); }
 .logo-no { width: 12px; height: 12px; border-radius: 50%; background: var(--azul); box-shadow: 0 0 0 3px var(--azul-suave); }
 
-.usuario { display: flex; align-items: center; gap: 12px; }
+.usuario { position: relative; display: flex; align-items: center; gap: 12px; }
+.usuario-gatilho { display: flex; align-items: center; gap: 10px; background: none; border: none; padding: 4px 6px; border-radius: var(--raio-1); cursor: pointer; color: inherit; font: inherit; }
+.usuario-gatilho:hover { background: var(--inset); }
+.usuario-seta { color: var(--tinta-3); transition: transform 0.15s; }
+.usuario-gatilho[aria-expanded="true"] .usuario-seta { transform: rotate(180deg); }
+.usuario-menu {
+  position: absolute; top: calc(100% + 8px); right: 0; min-width: 190px; z-index: 30;
+  background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-2);
+  box-shadow: var(--sombra-2, 0 8px 24px rgba(17,24,39,0.12)); padding: 6px; display: flex; flex-direction: column;
+}
+.usuario-menu button {
+  display: flex; align-items: center; gap: 10px; width: 100%; text-align: left;
+  background: none; border: none; padding: 9px 12px; border-radius: var(--raio-1); cursor: pointer;
+  font: inherit; font-size: 14px; color: var(--tinta-1);
+}
+.usuario-menu button:hover { background: var(--inset); }
+.usuario-menu svg { color: var(--tinta-3); flex-shrink: 0; }
 .avatar { width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center; background: var(--azul); color: #fff; font-family: var(--mono); font-size: 13px; }
-.usuario-info { display: flex; flex-direction: column; line-height: 1.25; }
+.usuario-info { display: flex; flex-direction: column; line-height: 1.25; text-align: left; }
 .usuario-nome { font-weight: 600; font-size: 14px; }
 .usuario-papel { font-size: 12px; color: var(--tinta-3); }
 .badge-papel { font-family: var(--mono); font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--azul-forte); background: var(--azul-suave); border: 1px solid var(--azul-anel); padding: 4px 10px; border-radius: 999px; }
@@ -414,6 +430,10 @@ select {
 
 .cabecalho-secao { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .cabecalho-secao h2 { margin: 0; }
+
+.acoes-doc { display: inline-flex; gap: 6px; }
+.botao-icone { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--borda); border-radius: var(--raio-1); color: var(--tinta-2); background: var(--papel-1); cursor: pointer; }
+.botao-icone:hover { background: var(--inset); color: var(--azul-forte); }
 
 /* Calendário (formulário) */
 .calendario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }

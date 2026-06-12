@@ -30,9 +30,9 @@ export function Documentos() {
 
       {!tcc ? (
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
-          <p className="nota-vazio">Você ainda não abriu seu TCC, então não há documentos.</p>
+          <p className="nota-vazio">Você ainda não iniciou seu TCC, então não há documentos.</p>
           <button className="botao" style={{ marginTop: 16 }} onClick={() => navegar('/aluno/abrir')}>
-            Abrir meu TCC
+            Iniciar meu TCC
           </button>
         </section>
       ) : (
@@ -55,9 +55,14 @@ export function Documentos() {
                       </span>
                     </div>
                   </div>
-                  <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">
-                    Baixar
-                  </a>
+                  <div className="acoes-doc">
+                    <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">
+                      Visualizar
+                    </a>
+                    <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">
+                      Baixar
+                    </a>
+                  </div>
                 </li>
               ))}
             </ul>

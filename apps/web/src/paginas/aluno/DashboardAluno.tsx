@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
-import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC } from '../../utils/fases';
@@ -18,6 +17,22 @@ const STATUS_DOC: Record<string, { rotulo: string; classe: string }> = {
   REJEITADO: { rotulo: 'Rejeitado', classe: 'pilula-bad' },
   PENDENTE: { rotulo: 'Em análise', classe: 'pilula-neutra' },
 };
+
+// Documentos que o aluno percorre ao longo do TCC — aparecem desde o início,
+// mesmo antes de enviados (como "Aguardando envio"), espelhando o projeto antigo.
+const DOCS_ESPERADOS = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL'] as const;
+
+const icoOlho = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" />
+    <circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const icoBaixar = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="16" height="16" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" />
+  </svg>
+);
 
 // Próximo marco do calendário com data >= hoje.
 function proximoPrazo(cal: Record<string, string | null> | null) {
@@ -39,7 +54,6 @@ type Acao = { titulo: string; desc: string; parecer?: string; botao?: { rotulo: 
 
 export function DashboardAluno() {
   const navegar = useNavigate();
-  const { usuario } = useAuth();
   const [tcc, setTcc] = useState<any | null>(null);
   const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
   const [carregando, setCarregando] = useState(true);
@@ -68,7 +82,6 @@ export function DashboardAluno() {
     }
   }
 
-  const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
   const prazo = proximoPrazo(calendario);
@@ -113,22 +126,17 @@ export function DashboardAluno() {
 
   const acao = acaoPendente();
   const recusada = solic?.status === 'RECUSADA' && solic.parecer;
-  const docs = [...(tcc?.documentos ?? [])].sort(
-    (a, b) => new Date(b.criadoEm ?? 0).getTime() - new Date(a.criadoEm ?? 0).getTime(),
-  );
+  const docsEsperados = DOCS_ESPERADOS.map((tipo) => ({ tipo, doc: ultimoDoc(tcc?.documentos, tipo) }));
 
   return (
     <>
-      <h1>Olá, {primeiroNome} 👋</h1>
-      <p className="legenda">Bem-vindo(a) ao seu painel de TCC.</p>
-
       {carregando ? (
         <p className="nota-vazio">Carregando…</p>
       ) : !tcc ? (
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
-          <h2>Você ainda não abriu seu TCC</h2>
+          <h2>Você ainda não iniciou seu TCC</h2>
           <p className="nota-vazio">Comece enviando a solicitação de orientação com os documentos iniciais.</p>
-          <button className="botao" style={{ marginTop: 16 }} onClick={() => navegar('/aluno/abrir')}>Abrir meu TCC</button>
+          <button className="botao" style={{ marginTop: 16 }} onClick={() => navegar('/aluno/abrir')}>Iniciar meu TCC</button>
         </section>
       ) : (
         <>
@@ -192,37 +200,40 @@ export function DashboardAluno() {
               <h2>Documentos</h2>
               <button className="link-inline" onClick={() => navegar('/aluno/documentos')}>Ver todos os documentos →</button>
             </div>
-            {docs.length ? (
-              <table className="tabela">
-                <thead>
-                  <tr>
-                    <th>Data</th>
-                    <th>Tipo</th>
-                    <th>Arquivo</th>
-                    <th>Status</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {docs.slice(0, 5).map((d: any) => {
-                    const st = STATUS_DOC[d.status] ?? { rotulo: d.status, classe: 'pilula-neutra' };
-                    return (
-                      <tr key={d.id}>
-                        <td>{fmtData(d.criadoEm)}</td>
-                        <td>{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</td>
-                        <td>{d.nomeArquivo}</td>
-                        <td><span className={`pilula ${st.classe}`}>{st.rotulo}</span></td>
-                        <td>
-                          <a className="link-inline" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            ) : (
-              <p className="nota-vazio">Nenhum documento enviado ainda.</p>
-            )}
+            <table className="tabela">
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Documento</th>
+                  <th>Arquivo</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {docsEsperados.map(({ tipo, doc }) => {
+                  const st = doc
+                    ? STATUS_DOC[doc.status] ?? { rotulo: doc.status, classe: 'pilula-neutra' }
+                    : { rotulo: 'Aguardando envio', classe: 'pilula-neutra' };
+                  return (
+                    <tr key={tipo}>
+                      <td>{doc ? fmtData(doc.criadoEm) : '—'}</td>
+                      <td>{ROTULO_TIPO_DOC[tipo] ?? tipo}</td>
+                      <td>{doc ? doc.nomeArquivo : <span className="nota-vazio" style={{ margin: 0 }}>—</span>}</td>
+                      <td><span className={`pilula ${st.classe}`}>{st.rotulo}</span></td>
+                      <td>
+                        {doc && (
+                          <span className="acoes-doc">
+                            <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${doc.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                            <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${doc.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </section>
         </>
       )}

@@ -1,5 +1,5 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import type { ReactNode } from 'react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../autenticacao/contexto';
 import { ROTULO_PAPEL, type Papel } from '@tcc/compartilhado';
 
@@ -50,6 +50,9 @@ const icoEngrenagem = (
   </svg>
 );
 
+const icoPerfil = ico('M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
+const icoSair = ico('M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9');
+
 const itemConfig: ItemNav = { to: '/configuracoes', rotulo: 'Configurações', icone: icoEngrenagem };
 
 const NAV: Record<Papel, ItemNav[]> = {
@@ -83,6 +86,19 @@ const NAV: Record<Papel, ItemNav[]> = {
 
 export function LayoutApp() {
   const { usuario, sair } = useAuth();
+  const navegar = useNavigate();
+  const [menuAberto, setMenuAberto] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuAberto) return;
+    function aoClicarFora(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuAberto(false);
+    }
+    document.addEventListener('mousedown', aoClicarFora);
+    return () => document.removeEventListener('mousedown', aoClicarFora);
+  }, [menuAberto]);
+
   if (!usuario) return null;
 
   const itens = NAV[usuario.papel] ?? NAV.PROFESSOR;
@@ -98,18 +114,31 @@ export function LayoutApp() {
       <header className="barra-topo">
         <div className="barra-marca">
           <img className="topo-logo" src="/Logo.png" alt="DEE" />
-          <span>Sistema de TCC</span>
         </div>
-        <div className="usuario">
+        <div className="usuario" ref={menuRef}>
           <span className="badge-papel">{ROTULO_PAPEL[usuario.papel]}</span>
-          <div className="avatar">{iniciais}</div>
-          <div className="usuario-info">
-            <span className="usuario-nome">{usuario.nomeCompleto}</span>
-            <span className="usuario-papel">{usuario.email}</span>
-          </div>
-          <button className="botao botao-secundario" onClick={sair}>
-            Sair
+          <button className="usuario-gatilho" onClick={() => setMenuAberto((v) => !v)} aria-haspopup="menu" aria-expanded={menuAberto}>
+            <div className="avatar">{iniciais}</div>
+            <div className="usuario-info">
+              <span className="usuario-nome">{usuario.nomeCompleto}</span>
+              <span className="usuario-papel">{usuario.email}</span>
+            </div>
+            <svg className="usuario-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M6 9l6 6 6-6" />
+            </svg>
           </button>
+          {menuAberto && (
+            <div className="usuario-menu" role="menu">
+              <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/configuracoes'); }}>
+                {icoPerfil}
+                <span>Meu perfil</span>
+              </button>
+              <button role="menuitem" onClick={() => { setMenuAberto(false); sair(); }}>
+                {icoSair}
+                <span>Sair</span>
+              </button>
+            </div>
+          )}
         </div>
       </header>
 

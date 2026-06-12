@@ -51,12 +51,12 @@ export function PainelAluno() {
       <>
         <h1>Meu TCC</h1>
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
-          <h2>Você ainda não abriu seu TCC</h2>
+          <h2>Você ainda não iniciou seu TCC</h2>
           <p className="nota-vazio">
             Comece enviando a solicitação de orientação com os documentos iniciais.
           </p>
           <button className="botao" style={{ marginTop: 16 }} onClick={() => navegar('/aluno/abrir')}>
-            Abrir meu TCC
+            Iniciar meu TCC
           </button>
         </section>
       </>

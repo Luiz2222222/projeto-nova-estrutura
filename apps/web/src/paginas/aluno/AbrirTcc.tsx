@@ -59,6 +59,8 @@ export function AbrirTcc() {
     const r = esquemaAbrirTcc.safeParse(montarDados());
     const m: Record<string, string> = {};
     if (!r.success) for (const i of r.error.issues) m[i.path.join('.')] = i.message;
+    if (temCo && coCadastrado && coorientadorId && coorientadorId === orientadorId)
+      m.coorientadorId = 'O coorientador deve ser diferente do orientador.';
     if (!plano) m.plano = 'Anexe o Plano de Desenvolvimento (PDF).';
     if (!termo) m.termo = 'Anexe o Termo de Aceite (PDF).';
     if (plano && plano.size > 10 * 1024 * 1024) m.plano = 'Máximo 10MB.';
@@ -121,7 +123,7 @@ export function AbrirTcc() {
 
   return (
     <>
-      <h1>Abrir meu TCC</h1>
+      <h1>Iniciar meu TCC</h1>
       <p className="legenda">Solicite a orientação e envie os documentos iniciais.</p>
 
       <section className="cartao-secao bloco">
@@ -150,7 +152,15 @@ export function AbrirTcc() {
 
           <label className="campo">
             <span>Orientador</span>
-            <select value={orientadorId} onChange={(e) => setOrientadorId(e.target.value)}>
+            <select
+              value={orientadorId}
+              onChange={(e) => {
+                const novo = e.target.value;
+                setOrientadorId(novo);
+                // Evita orientador == coorientador: se a pessoa escolhida já estava como coorientador, limpa.
+                if (novo && coorientadorId === novo) setCoorientadorId('');
+              }}
+            >
               <option value="">Selecione…</option>
               {professores.map((p) => (
                 <option key={p.id} value={p.id}>
