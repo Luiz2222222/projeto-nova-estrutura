@@ -71,6 +71,20 @@ export const esquemaCadastro = z
   });
 export type DadosCadastro = z.infer<typeof esquemaCadastro>;
 
+// Troca de senha (na tela "Meu perfil"): exige a senha atual e confirma a nova.
+export const esquemaTrocarSenha = z
+  .object({
+    senhaAtual: z.string().min(1, 'Informe a senha atual'),
+    novaSenha: z.string().min(6, 'A nova senha precisa ter ao menos 6 caracteres'),
+    confirmarNovaSenha: z.string().min(1, 'Confirme a nova senha'),
+  })
+  .superRefine((d, ctx) => {
+    if (d.novaSenha !== d.confirmarNovaSenha) {
+      ctx.addIssue({ code: 'custom', path: ['confirmarNovaSenha'], message: 'As senhas não coincidem' });
+    }
+  });
+export type DadosTrocarSenha = z.infer<typeof esquemaTrocarSenha>;
+
 // Usuário "público" (sem senha) devolvido pela API.
 export interface UsuarioPublico {
   id: string;

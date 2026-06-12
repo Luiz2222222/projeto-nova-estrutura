@@ -92,6 +92,21 @@ export class AutenticacaoService {
     return u ? this.publicar(u) : null;
   }
 
+  // Troca de senha: confere a senha atual antes de gravar a nova (com hash).
+  async trocarSenha(userId: string, senhaAtual: string, novaSenha: string): Promise<void> {
+    const u = await this.prisma.usuario.findUnique({ where: { id: userId } });
+    if (!u) throw new UnauthorizedException();
+    const ok = await bcrypt.compare(senhaAtual, u.senhaHash);
+    if (!ok) {
+      throw new BadRequestException({
+        mensagem: 'Senha atual incorreta',
+        erros: [{ campo: 'senhaAtual', mensagem: 'Senha atual incorreta' }],
+      });
+    }
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await this.prisma.usuario.update({ where: { id: userId }, data: { senhaHash } });
+  }
+
   // Professor liga/desliga a disponibilidade para receber novas orientações.
   // Indisponível → some da lista de orientadores que o aluno escolhe ao abrir o TCC.
   async definirDisponibilidade(userId: string, disponivel: boolean): Promise<UsuarioPublico> {

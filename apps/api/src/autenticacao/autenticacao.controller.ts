@@ -18,8 +18,10 @@ import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
 import {
   esquemaCadastro,
   esquemaLogin,
+  esquemaTrocarSenha,
   type DadosCadastro,
   type DadosLogin,
+  type DadosTrocarSenha,
 } from '@tcc/compartilhado';
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -67,6 +69,17 @@ export class AutenticacaoController {
     const u = await this.auth.buscarPorId(req.usuario!.sub);
     if (!u) throw new UnauthorizedException();
     return u;
+  }
+
+  // Troca a própria senha (valida a senha atual no backend).
+  @Put('senha')
+  @UseGuards(GuardaJwt)
+  async trocarSenha(
+    @Req() req: Request & { usuario?: { sub: string } },
+    @Body(new ZodValidacaoPipe(esquemaTrocarSenha)) dados: DadosTrocarSenha,
+  ) {
+    await this.auth.trocarSenha(req.usuario!.sub, dados.senhaAtual, dados.novaSenha);
+    return { ok: true };
   }
 
   // Professor liga/desliga a disponibilidade para orientar.
