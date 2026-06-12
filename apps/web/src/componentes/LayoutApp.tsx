@@ -132,7 +132,7 @@ export function LayoutApp() {
                 <span className="usuario-nome">{usuario.nomeCompleto}</span>
                 <span className="usuario-papel">{usuario.email}</span>
               </div>
-              <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/configuracoes'); }}>
+              <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/perfil'); }}>
                 {icoPerfil}
                 <span>Meu perfil</span>
               </button>

@@ -378,6 +378,12 @@ select {
 .h2-icone .h2-ico { display: inline-flex; }
 .h2-icone .h2-ico svg { width: 20px; height: 20px; color: var(--tinta-3); }
 
+/* Perfil — grade de dados (2 colunas) + aviso */
+.grade-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.alerta-aviso { background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.35); color: var(--tinta-2); border-radius: var(--raio-1); padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
+.alerta-aviso strong { color: var(--tinta-1); }
+@media (max-width: 640px) { .grade-2 { grid-template-columns: 1fr; } }
+
 /* Datas do período (Informações) — lista de 1 coluna, ícone colorido por etapa */
 .marcos-lista { display: flex; flex-direction: column; gap: 16px; }
 .marco-linha { display: flex; align-items: flex-start; gap: 12px; }

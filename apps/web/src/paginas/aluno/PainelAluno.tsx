@@ -176,38 +176,39 @@ export function PainelAluno() {
         </section>
       )}
 
-      {(tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' ||
-        tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR' ||
-        ultimoDoc(tcc.documentos, 'VERSAO_FINAL')) && (
-        <section className="cartao-secao bloco">
-          <h2>Versão final</h2>
-          {(() => {
-            const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
-            if (!vf) return <p className="nota-vazio" style={{ marginTop: 0 }}>Você ainda não enviou a versão final.</p>;
-            const rotulo =
-              vf.status === 'APROVADO'
-                ? 'Aprovada — TCC concluído'
-                : vf.status === 'REJEITADO'
-                  ? 'Ajustes solicitados'
-                  : 'Aguardando análise do coordenador';
+      <section className="cartao-secao bloco">
+        <h2>Versão final</h2>
+        {(() => {
+          const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
+          if (!vf)
             return (
-              <>
-                <p className="nota-vazio" style={{ marginTop: 0 }}>
-                  Versão {vf.versao} — <strong>{rotulo}</strong>.
-                </p>
-                {vf.status === 'REJEITADO' && vf.parecer && (
-                  <div className="alerta alerta-erro"><strong>Devolutiva:</strong> {vf.parecer}</div>
-                )}
-              </>
+              <p className="nota-vazio" style={{ marginTop: 0 }}>
+                <span className="pilula pilula-neutra">Aguardando envio</span> — a versão final é enviada após a aprovação na banca final.
+              </p>
             );
-          })()}
-          {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (
-            <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('versaoFinal')}>
-              {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
-            </button>
-          )}
-        </section>
-      )}
+          const rotulo =
+            vf.status === 'APROVADO'
+              ? 'Aprovada — TCC concluído'
+              : vf.status === 'REJEITADO'
+                ? 'Ajustes solicitados'
+                : 'Aguardando análise do coordenador';
+          return (
+            <>
+              <p className="nota-vazio" style={{ marginTop: 0 }}>
+                Versão {vf.versao} — <strong>{rotulo}</strong>.
+              </p>
+              {vf.status === 'REJEITADO' && vf.parecer && (
+                <div className="alerta alerta-erro"><strong>Devolutiva:</strong> {vf.parecer}</div>
+              )}
+            </>
+          );
+        })()}
+        {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (
+          <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('versaoFinal')}>
+            {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
+          </button>
+        )}
+      </section>
 
       {modalUpload && (
         <ModalEnviarPdf

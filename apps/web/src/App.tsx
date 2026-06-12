@@ -22,6 +22,7 @@ import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
 import { MinhasBancas } from './paginas/MinhasBancas';
 import { Configuracoes } from './paginas/Configuracoes';
+import { Perfil } from './paginas/Perfil';
 
 function Protegido({ children }: { children: JSX.Element }) {
   const { usuario, carregando } = useAuth();
@@ -96,6 +97,7 @@ export function App() {
 
             {/* Comuns a qualquer usuário logado */}
             <Route path="/inicio" element={<PlaceholderPapel />} />
+            <Route path="/perfil" element={<Perfil />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>
 
