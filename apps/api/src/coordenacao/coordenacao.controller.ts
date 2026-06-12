@@ -106,8 +106,8 @@ export class CoordenacaoController {
 
   @Get('documentos-referencia')
   @UseGuards(GuardaJwt)
-  referencias() {
-    return this.coord.listarReferencias();
+  referencias(@Req() req: Req) {
+    return this.coord.listarReferencias(req.usuario.papel);
   }
 
   @Post('documentos-referencia')
@@ -134,10 +134,22 @@ export class CoordenacaoController {
       },
     }),
   )
-  adicionarReferencia(@Body('titulo') titulo: string, @UploadedFile() arquivo: any) {
+  adicionarReferencia(
+    @Body('titulo') titulo: string,
+    @Body('visivelPara') visivelPara: string,
+    @UploadedFile() arquivo: any,
+  ) {
     if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
     if (!titulo?.trim()) throw new BadRequestException({ mensagem: 'Informe um título.' });
-    return this.coord.adicionarReferencia(titulo.trim(), arquivo);
+    return this.coord.adicionarReferencia(titulo.trim(), visivelPara, arquivo);
+  }
+
+  // Edita quais perfis podem ver o documento de referência.
+  @Put('documentos-referencia/:id/visibilidade')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editarVisibilidade(@Param('id') id: string, @Body('visivelPara') visivelPara: string) {
+    return this.coord.editarVisibilidade(id, visivelPara);
   }
 
   @Delete('documentos-referencia/:id')

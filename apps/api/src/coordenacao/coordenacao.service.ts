@@ -91,15 +91,41 @@ export class CoordenacaoService {
 
   // ---------- Documentos de referência (modelos) ----------
 
-  listarReferencias() {
-    return this.prisma.documentoReferencia.findMany({ orderBy: { criadoEm: 'asc' } });
+  private readonly PAPEIS_VISIVEIS = ['ALUNO', 'PROFESSOR', 'AVALIADOR'];
+
+  // Normaliza a lista de perfis (CSV) que podem ver um documento de referência.
+  private normalizarVisibilidade(v?: string): string {
+    const sel = (v ?? '')
+      .split(',')
+      .map((s) => s.trim())
+      .filter((p) => this.PAPEIS_VISIVEIS.includes(p));
+    const unicos = [...new Set(sel)];
+    if (!unicos.length) {
+      throw new BadRequestException({ mensagem: 'Selecione ao menos um perfil que pode ver o documento.' });
+    }
+    return unicos.join(',');
+  }
+
+  // Coordenador vê todos; demais perfis só veem os documentos liberados para o seu papel.
+  async listarReferencias(papel?: string) {
+    const docs = await this.prisma.documentoReferencia.findMany({ orderBy: { criadoEm: 'asc' } });
+    if (!papel || papel === 'COORDENADOR') return docs;
+    return docs.filter((d) => d.visivelPara.split(',').includes(papel));
   }
 
   referencia(id: string) {
     return this.prisma.documentoReferencia.findUnique({ where: { id } });
   }
 
-  async adicionarReferencia(titulo: string, arquivo: any) {
+  async editarVisibilidade(id: string, visivelPara?: string) {
+    const visivel = this.normalizarVisibilidade(visivelPara);
+    const doc = await this.prisma.documentoReferencia.findUnique({ where: { id } });
+    if (!doc) throw new NotFoundException();
+    return this.prisma.documentoReferencia.update({ where: { id }, data: { visivelPara: visivel } });
+  }
+
+  async adicionarReferencia(titulo: string, visivelPara: string | undefined, arquivo: any) {
+    const visivel = this.normalizarVisibilidade(visivelPara);
     const dir = join(process.cwd(), 'uploads', 'referencia');
     await fs.mkdir(dir, { recursive: true });
     const ext = extname(arquivo.originalname || '').replace(/[^.a-zA-Z0-9]/g, '').slice(0, 10);
@@ -112,7 +138,7 @@ export class CoordenacaoService {
     const nomeArquivo = Buffer.from(arquivo.originalname || '', 'latin1').toString('utf8');
     try {
       return await this.prisma.documentoReferencia.create({
-        data: { titulo, nomeArquivo, caminho, tamanho: arquivo.size },
+        data: { titulo, nomeArquivo, caminho, tamanho: arquivo.size, visivelPara: visivel },
       });
     } catch (e) {
       // Se o registro falhar, remove o arquivo recém-gravado (sem órfão).
