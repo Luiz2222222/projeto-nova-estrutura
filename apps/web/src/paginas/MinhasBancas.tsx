@@ -2,16 +2,19 @@ import { useEffect, useState } from 'react';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../api';
 import { Modal } from '../componentes/Modal';
 import { ROTULO_FASE } from '../utils/fases';
+import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaPeso, soma, type Criterio } from '@tcc/compartilhado';
 
 function ultimaMonografia(docs: any[] = []) {
   return docs.filter((d) => d.tipo === 'MONOGRAFIA').sort((a, b) => b.versao - a.versao)[0] ?? null;
 }
+const fmt = (n: number) => n.toString().replace('.', ',');
 
 export function MinhasBancas() {
   const [itens, setItens] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [calendario, setCalendario] = useState<any | null>(null);
   const [avaliando, setAvaliando] = useState<any | null>(null);
-  const [nota, setNota] = useState('');
+  const [notas, setNotas] = useState<Record<string, string>>({});
   const [parecer, setParecer] = useState('');
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -21,17 +24,43 @@ export function MinhasBancas() {
     apiGet('/bancas/minhas').then(setItens).catch(() => setItens([])).finally(() => setCarregando(false));
   }
   useEffect(carregar, []);
+  useEffect(() => {
+    apiGet('/calendario').then(setCalendario).catch(() => setCalendario(null));
+  }, []);
+
+  const criteriosDe = (fase: string): Criterio[] => (fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2);
+  const peso = (c: Criterio) => Number(calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao);
+  const numNota = (chave: string) => {
+    const n = parseFloat((notas[chave] ?? '').replace(',', '.'));
+    return Number.isFinite(n) ? n : NaN;
+  };
+
+  function abrir(m: any) {
+    setAvaliando(m);
+    setNotas({});
+    setParecer('');
+    setErro('');
+  }
+
+  const criteriosAtual = avaliando ? criteriosDe(avaliando.banca.fase) : [];
+  const totalPreview = soma(criteriosAtual.map((c) => { const n = numNota(c.chave); return Number.isFinite(n) ? n : 0; }));
 
   async function confirmar() {
     setErro('');
-    const n = Number(nota);
-    if (nota === '' || Number.isNaN(n) || n < 0 || n > 10) return setErro('Informe uma nota de 0 a 10.');
+    const corpo: Record<string, number> = {};
+    for (const c of criteriosAtual) {
+      const n = numNota(c.chave);
+      const p = peso(c);
+      if (Number.isNaN(n) || n < 0 || n > p) {
+        setErro(`Nota de "${c.rotulo}" deve estar entre 0 e ${fmt(p)}.`);
+        return;
+      }
+      corpo[c.chave] = n;
+    }
     setEnviando(true);
     try {
-      await apiPost(`/bancas/${avaliando.bancaId}/avaliar`, { nota: n, parecer: parecer || undefined });
+      await apiPost(`/bancas/${avaliando.bancaId}/avaliar`, { notas: corpo, parecer: parecer || undefined });
       setAvaliando(null);
-      setNota('');
-      setParecer('');
       carregar();
     } catch (e) {
       setErro((e as ErroApi).mensagem || 'Não foi possível enviar.');
@@ -90,9 +119,7 @@ export function MinhasBancas() {
                   {m.nota !== null ? (
                     <span className="selo selo-ok">Sua nota: {Number(m.nota).toFixed(1)}</span>
                   ) : podeAvaliar ? (
-                    <button className="botao" onClick={() => { setAvaliando(m); setNota(''); setParecer(''); setErro(''); }}>
-                      Avaliar
-                    </button>
+                    <button className="botao" onClick={() => abrir(m)}>Avaliar</button>
                   ) : (
                     <span className="nota-vazio" style={{ margin: 0 }}>Aguardando o momento de avaliação.</span>
                   )}
@@ -106,17 +133,32 @@ export function MinhasBancas() {
       {avaliando && (
         <Modal titulo="Avaliar TCC" subtitulo={avaliando.banca.tcc.titulo} aoFechar={() => !enviando && setAvaliando(null)}>
           {erro && <div className="erro-geral">{erro}</div>}
-          <label className="campo">
-            <span>Nota (0–10)</span>
-            <input type="number" min="0" max="10" step="0.1" value={nota} onChange={(e) => setNota(e.target.value)} />
-          </label>
+          <p className="legenda" style={{ marginTop: 0 }}>
+            Pontue cada critério de 0 até o peso indicado. A nota total é a soma dos critérios.
+          </p>
+          {criteriosAtual.map((c) => (
+            <label key={c.chave} className="campo">
+              <span>
+                {c.rotulo} <small className="muted">(0 – {fmt(peso(c))})</small>
+              </span>
+              <input
+                inputMode="decimal"
+                value={notas[c.chave] ?? ''}
+                onChange={(e) => setNotas((v) => ({ ...v, [c.chave]: e.target.value }))}
+                placeholder={`máx. ${fmt(peso(c))}`}
+              />
+            </label>
+          ))}
+          <div className="total-aval">
+            Nota total: <strong>{totalPreview.toFixed(1).replace('.', ',')}</strong> / 10
+          </div>
           <label className="campo">
             <span>Parecer (opcional)</span>
-            <textarea rows={4} value={parecer} onChange={(e) => setParecer(e.target.value)} placeholder="Comentários para o aluno e a coordenação…" />
+            <textarea rows={3} value={parecer} onChange={(e) => setParecer(e.target.value)} placeholder="Comentários para o aluno e a coordenação…" />
           </label>
           <div className="acoes">
             <button className="botao botao-secundario" disabled={enviando} onClick={() => setAvaliando(null)}>Voltar</button>
-            <button className="botao" disabled={enviando} onClick={confirmar}>{enviando ? 'Enviando…' : 'Enviar nota'}</button>
+            <button className="botao" disabled={enviando} onClick={confirmar}>{enviando ? 'Enviando…' : 'Enviar avaliação'}</button>
           </div>
         </Modal>
       )}

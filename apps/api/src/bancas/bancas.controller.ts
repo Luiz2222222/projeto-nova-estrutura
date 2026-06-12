@@ -46,7 +46,7 @@ export class BancasController {
     @Param('bancaId') bancaId: string,
     @Body(new ZodValidacaoPipe(esquemaAvaliarBanca)) dados: DadosAvaliarBanca,
   ) {
-    return this.bancas.avaliar(req.usuario.sub, bancaId, dados.nota, dados.parecer);
+    return this.bancas.avaliar(req.usuario.sub, bancaId, dados.notas, dados.parecer);
   }
 
   @Post('tccs/:id/banca/validar')

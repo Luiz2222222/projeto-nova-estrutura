@@ -1,6 +1,16 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { mediaNotas, notaFinal, aprovadoFase1, aprovadoFinal } from '@tcc/compartilhado';
+import {
+  mediaNotas,
+  notaFinal,
+  aprovadoFase1,
+  aprovadoFinal,
+  CRITERIOS_FASE1,
+  CRITERIOS_FASE2,
+  colunaPeso,
+  colunaNota,
+  soma,
+} from '@tcc/compartilhado';
 
 @Injectable()
 export class BancasService {
@@ -76,8 +86,9 @@ export class BancasService {
     });
   }
 
-  // Avaliador dá a sua nota. Quando todos avaliarem → AVALIACAO_FASE_1 → VALIDACAO_FASE_1.
-  async avaliar(avaliadorId: string, bancaId: string, nota: number, parecer?: string) {
+  // Avaliador pontua os 5 critérios da fase (cada nota capada no peso do critério).
+  // A nota total do membro = soma dos critérios. Quando todos avaliarem → VALIDACAO.
+  async avaliar(avaliadorId: string, bancaId: string, notas: Record<string, number>, parecer?: string) {
     // Tudo numa transação: lê o membro, valida e grava sem janela de corrida entre
     // duas requisições simultâneas do mesmo avaliador.
     return this.prisma.$transaction(async (tx) => {
@@ -94,11 +105,32 @@ export class BancasService {
       if (tcc.faseAtual !== faseEsperada) {
         throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
       }
+
+      // Pesos: do Calendário do semestre; se não houver, usa os defaults dos critérios.
+      const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
+      const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
+      const data: Record<string, number | string | Date | null> = {};
+      const valores: number[] = [];
+      for (const c of criterios) {
+        const peso = calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao;
+        const nota = Number(notas?.[c.chave]);
+        if (!Number.isFinite(nota) || nota < 0 || nota > peso) {
+          throw new BadRequestException({
+            mensagem: `Nota de "${c.rotulo}" deve estar entre 0 e ${peso}.`,
+          });
+        }
+        data[colunaNota(c.chave)] = nota;
+        valores.push(nota);
+      }
+      data.nota = soma(valores); // total do membro (0–10)
+      data.parecer = parecer ?? null;
+      data.avaliadoEm = new Date();
+
       // Update CONDICIONAL (só se a nota ainda for null) + checagem de 1 linha: barra a corrida
       // mesmo em bancos com isolamento mais frouxo (ex.: Postgres em produção).
       const atualizado = await tx.membroBanca.updateMany({
         where: { id: membro.id, nota: null },
-        data: { nota, parecer: parecer ?? null, avaliadoEm: new Date() },
+        data,
       });
       if (atualizado.count !== 1) {
         throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });

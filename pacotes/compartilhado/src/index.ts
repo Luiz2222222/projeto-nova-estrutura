@@ -217,8 +217,9 @@ export const esquemaFormarBanca = z.object({
 });
 export type DadosFormarBanca = z.infer<typeof esquemaFormarBanca>;
 
+// Avaliação por critério: notas[chaveDoCriterio] = nota (cada uma capada no peso do critério).
 export const esquemaAvaliarBanca = z.object({
-  nota: z.coerce.number({ invalid_type_error: 'Informe a nota' }).min(0, 'Nota mínima 0').max(10, 'Nota máxima 10'),
+  notas: z.record(z.coerce.number()),
   parecer: z.string().trim().optional(),
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
