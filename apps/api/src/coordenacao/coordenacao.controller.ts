@@ -45,6 +45,22 @@ export class CoordenacaoController {
     return this.coord.salvarCalendario(dados);
   }
 
+  // ---------- Códigos de cadastro (só coordenador: são segredos) ----------
+
+  @Get('codigos-cadastro')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  codigos() {
+    return this.coord.listarCodigos();
+  }
+
+  @Put('codigos-cadastro')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  salvarCodigos(@Body() dados: Record<string, string>) {
+    return this.coord.salvarCodigos(dados);
+  }
+
   // ---------- Avisos ----------
 
   @Get('avisos')

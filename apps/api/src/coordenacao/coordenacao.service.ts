@@ -42,6 +42,29 @@ export class CoordenacaoService {
     });
   }
 
+  // ---------- Códigos de cadastro ----------
+
+  // Senhas que cada perfil usa para se cadastrar (lidas/definidas só pelo coordenador).
+  private readonly PAPEIS_CODIGO = ['ALUNO', 'PROFESSOR', 'AVALIADOR'] as const;
+
+  listarCodigos() {
+    return this.prisma.codigoCadastro.findMany({ orderBy: { papel: 'asc' } });
+  }
+
+  async salvarCodigos(dados: Record<string, string>) {
+    const ops = this.PAPEIS_CODIGO.map((papel) => {
+      const codigo = (dados[papel] ?? '').trim();
+      if (!codigo) throw new BadRequestException({ mensagem: `Informe o código de cadastro de ${papel}.` });
+      return this.prisma.codigoCadastro.upsert({
+        where: { papel },
+        update: { codigo },
+        create: { papel, codigo },
+      });
+    });
+    await this.prisma.$transaction(ops);
+    return this.listarCodigos();
+  }
+
   // ---------- Avisos ----------
 
   listarAvisos() {
