@@ -165,11 +165,15 @@ export class TccsController {
     return this.tccs.enviarVersaoFinal(req.usuario.sub, id, arquivo);
   }
 
-  @Post('tccs/:id/analise-final')
+  @Post('tccs/:id/validar-versao-final')
   @UseGuards(GuardaJwt, GuardaPapeis)
-  @Papeis('COORDENADOR')
-  analiseFinal(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaAnaliseFinal)) dados: DadosAnaliseFinal) {
-    return this.tccs.analiseFinal(id, dados.decisao, dados.parecer);
+  @Papeis('PROFESSOR')
+  validarVersaoFinal(
+    @Req() req: Req,
+    @Param('id') id: string,
+    @Body(new ZodValidacaoPipe(esquemaAnaliseFinal)) dados: DadosAnaliseFinal,
+  ) {
+    return this.tccs.validarVersaoFinal(req.usuario.sub, id, dados.decisao, dados.parecer);
   }
 
   @Get('tccs')

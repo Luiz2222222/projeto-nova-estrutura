@@ -139,7 +139,7 @@ export function DashboardAluno() {
         botao: { rotulo: 'Enviar', ao: () => setModalUpload('versaoFinal') },
       };
     }
-    if (tcc.faseAtual === 'ANALISE_FINAL_COORDENADOR') return semAcao('Aguardando análise final', 'Versão final enviada — em análise pelo coordenador.');
+    if (tcc.faseAtual === 'VALIDACAO_VERSAO_FINAL') return semAcao('Aguardando validação', 'Versão final enviada — aguardando a validação do orientador.');
     if (tcc.faseAtual === 'CONCLUIDO') return semAcao('TCC concluído 🎉', 'Parabéns! Seu TCC foi aprovado e concluído.');
     if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO')) return semAcao('—', 'TCC encerrado.');
 

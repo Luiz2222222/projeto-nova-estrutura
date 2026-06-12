@@ -313,9 +313,9 @@ export class TccsService {
     return { ok: true };
   }
 
-  // ---------- Conclusão (versão final + análise do coordenador) ----------
+  // ---------- Conclusão (versão final + validação do orientador) ----------
 
-  // Aluno envia a versão final corrigida (após aprovado na defesa). → ANALISE_FINAL_COORDENADOR.
+  // Aluno envia a versão final corrigida (após aprovado na defesa). → VALIDACAO_VERSAO_FINAL.
   async enviarVersaoFinal(alunoId: string, tccId: string, arquivo: any) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
@@ -334,7 +334,7 @@ export class TccsService {
         const doc = await tx.documentoTcc.create({
           data: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE', versao: versoes + 1, ...arq },
         });
-        await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: 'ANALISE_FINAL_COORDENADOR' } });
+        await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: 'VALIDACAO_VERSAO_FINAL' } });
         return doc;
       });
     } catch (e) {
@@ -343,12 +343,13 @@ export class TccsService {
     }
   }
 
-  // Coordenador analisa a versão final: conclui (→ CONCLUIDO/APROVADO) ou pede ajustes (volta).
-  async analiseFinal(tccId: string, decisao: 'CONCLUIR' | 'AJUSTES', parecer?: string) {
+  // Orientador valida a versão final: conclui (→ CONCLUIDO/APROVADO) ou pede ajustes (volta).
+  async validarVersaoFinal(profId: string, tccId: string, decisao: 'CONCLUIR' | 'AJUSTES', parecer?: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
-    if (tcc.faseAtual !== 'ANALISE_FINAL_COORDENADOR') {
-      throw new BadRequestException({ mensagem: 'O TCC não está em análise final.' });
+    if (tcc.orientadorId !== profId) throw new ForbiddenException();
+    if (tcc.faseAtual !== 'VALIDACAO_VERSAO_FINAL') {
+      throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação da versão final.' });
     }
     const versao = await this.prisma.documentoTcc.findFirst({
       where: { tccId, tipo: 'VERSAO_FINAL' },

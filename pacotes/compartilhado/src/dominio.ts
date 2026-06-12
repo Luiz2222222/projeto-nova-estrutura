@@ -12,7 +12,7 @@ export const FASES = [
   'AVALIACAO_FASE_2',
   'VALIDACAO_FASE_2',
   'AGUARDANDO_AJUSTES_FINAIS',
-  'ANALISE_FINAL_COORDENADOR',
+  'VALIDACAO_VERSAO_FINAL',
   'CONCLUIDO',
   'DESCONTINUADO',
   'REPROVADO_FASE_1',
@@ -35,7 +35,7 @@ export const INDICE_FASE: Record<string, number> = {
   AVALIACAO_FASE_2: 3,
   VALIDACAO_FASE_2: 3,
   AGUARDANDO_AJUSTES_FINAIS: 4,
-  ANALISE_FINAL_COORDENADOR: 4,
+  VALIDACAO_VERSAO_FINAL: 4,
   CONCLUIDO: 4,
 };
 
@@ -49,7 +49,7 @@ export const ROTULO_FASE: Record<string, string> = {
   AVALIACAO_FASE_2: 'Avaliação — Fase II',
   VALIDACAO_FASE_2: 'Validação — Fase II',
   AGUARDANDO_AJUSTES_FINAIS: 'Ajustes finais — versão final',
-  ANALISE_FINAL_COORDENADOR: 'Análise final do coordenador',
+  VALIDACAO_VERSAO_FINAL: 'Versão final — validação do orientador',
   CONCLUIDO: 'Concluído',
   DESCONTINUADO: 'Descontinuado',
   REPROVADO_FASE_1: 'Reprovado (Fase I)',

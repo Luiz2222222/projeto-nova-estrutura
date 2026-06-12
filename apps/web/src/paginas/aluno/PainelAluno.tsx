@@ -201,7 +201,7 @@ export function PainelAluno() {
               ? 'Aprovada — TCC concluído'
               : vf.status === 'REJEITADO'
                 ? 'Ajustes solicitados'
-                : 'Aguardando análise do coordenador';
+                : 'Aguardando validação do orientador';
           return (
             <>
               <p className="nota-vazio" style={{ marginTop: 0 }}>
@@ -227,7 +227,7 @@ export function PainelAluno() {
           subtitulo={
             modalUpload === 'monografia'
               ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
-              : 'Envie a versão final corrigida (PDF) para análise do coordenador.'
+              : 'Envie a versão final corrigida (PDF) para validação do seu orientador.'
           }
           rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
           aoFechar={() => setModalUpload(null)}
