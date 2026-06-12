@@ -34,6 +34,13 @@ const icoBaixar = (
   </svg>
 );
 
+const ic = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{d.split('|').map((p, i) => <path key={i} d={p} />)}</svg>
+);
+const icoRelogio = ic('M12 7v5l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0');
+const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
+const icoAtividade = ic('M22 12h-4l-3 9L9 3l-3 9H2');
+
 // Marcos que são prazos do ALUNO (exclui Reunião e Preparação das bancas,
 // que são atividades da coordenação) — espelha o "próximo prazo" do projeto antigo.
 const PRAZOS_ALUNO: MarcoCalendario[] = [
@@ -160,7 +167,10 @@ export function DashboardAluno() {
           {/* 3 cards de status */}
           <div className="cards-status bloco">
             <div className="card-status">
-              <span className="card-status-titulo">Ação pendente</span>
+              <div className="card-status-topo">
+                <span className="card-status-titulo">Ação pendente</span>
+                {icoRelogio}
+              </div>
               <div className="card-status-corpo">
                 <span className="forte">{acao.titulo}</span>
                 <span className="sub">{acao.desc}</span>
@@ -172,12 +182,15 @@ export function DashboardAluno() {
             </div>
 
             <div className="card-status">
-              <span className="card-status-titulo">Próximo prazo</span>
+              <div className="card-status-topo">
+                <span className="card-status-titulo">Próximo prazo</span>
+                {icoCalendario}
+              </div>
               <div className="card-status-corpo">
                 {prazo ? (
                   <>
-                    <span className="grande">{fmtData(prazo.iso)}</span>
-                    <span className="sub">{ROTULO_MARCO[prazo.marco]}</span>
+                    <span className="forte">{ROTULO_MARCO[prazo.marco]}</span>
+                    <span className="sub">{fmtData(prazo.iso)}</span>
                   </>
                 ) : (
                   <span className="sub">Sem prazos futuros no calendário.</span>
@@ -186,7 +199,10 @@ export function DashboardAluno() {
             </div>
 
             <div className="card-status">
-              <span className="card-status-titulo">Fase atual</span>
+              <div className="card-status-topo">
+                <span className="card-status-titulo">Fase atual</span>
+                {icoAtividade}
+              </div>
               <div className="card-status-corpo">
                 <span className="forte">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
                 <span className="sub">{tcc.semestre}</span>
