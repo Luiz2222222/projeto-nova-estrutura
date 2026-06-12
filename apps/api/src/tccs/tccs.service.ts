@@ -48,6 +48,9 @@ export class TccsService {
       throw new BadRequestException({ mensagem: 'Orientador inválido.' });
     }
     if (dados.coorientadorId) {
+      if (dados.coorientadorId === dados.orientadorId) {
+        throw new BadRequestException({ mensagem: 'O coorientador deve ser diferente do orientador.' });
+      }
       const co = await this.prisma.usuario.findUnique({ where: { id: dados.coorientadorId } });
       // Coorientador precisa ser um docente/avaliador — não pode ser um aluno.
       if (!co || !['PROFESSOR', 'AVALIADOR', 'COORDENADOR'].includes(co.papel)) {

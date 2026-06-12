@@ -104,6 +104,16 @@ export class TccsController {
     res.download(join(process.cwd(), doc.caminho), doc.nomeArquivo);
   }
 
+  // Abre o PDF inline no navegador (botão de "olho"), sem forçar download.
+  @Get('tccs/documentos/:docId/visualizar')
+  @UseGuards(GuardaJwt)
+  async visualizar(@Req() req: Req, @Param('docId') docId: string, @Res() res: Response) {
+    const doc = await this.tccs.documentoParaUsuario(docId, req.usuario);
+    if (!doc) throw new NotFoundException('Documento não encontrado');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.nomeArquivo)}"`);
+    res.sendFile(join(process.cwd(), doc.caminho));
+  }
+
   // ---------- Fase de Desenvolvimento ----------
 
   @Post('tccs/:id/monografia')
