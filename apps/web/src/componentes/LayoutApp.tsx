@@ -116,24 +116,27 @@ export function LayoutApp() {
           <img className="topo-logo" src="/Logo.png" alt="DEE" />
         </div>
         <div className="usuario" ref={menuRef}>
-          <span className="badge-papel">{ROTULO_PAPEL[usuario.papel]}</span>
           <button className="usuario-gatilho" onClick={() => setMenuAberto((v) => !v)} aria-haspopup="menu" aria-expanded={menuAberto}>
-            <div className="avatar">{iniciais}</div>
             <div className="usuario-info">
               <span className="usuario-nome">{usuario.nomeCompleto}</span>
-              <span className="usuario-papel">{usuario.email}</span>
+              <span className="usuario-papel">{ROTULO_PAPEL[usuario.papel]}</span>
             </div>
+            <div className="avatar">{iniciais}</div>
             <svg className="usuario-seta" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="16" height="16" strokeLinecap="round" strokeLinejoin="round">
               <path d="M6 9l6 6 6-6" />
             </svg>
           </button>
           {menuAberto && (
             <div className="usuario-menu" role="menu">
+              <div className="usuario-menu-cabecalho">
+                <span className="usuario-nome">{usuario.nomeCompleto}</span>
+                <span className="usuario-papel">{usuario.email}</span>
+              </div>
               <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/configuracoes'); }}>
                 {icoPerfil}
                 <span>Meu perfil</span>
               </button>
-              <button role="menuitem" onClick={() => { setMenuAberto(false); sair(); }}>
+              <button role="menuitem" className="item-sair" onClick={() => { setMenuAberto(false); sair(); }}>
                 {icoSair}
                 <span>Sair</span>
               </button>
