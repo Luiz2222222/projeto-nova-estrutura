@@ -9,6 +9,12 @@ import {
   notaFinal,
   aprovadoFase1,
   aprovadoFinal,
+  CRITERIOS_FASE1,
+  CRITERIOS_FASE2,
+  colunaPeso,
+  colunaNota,
+  soma,
+  pesosSomam10,
 } from './dominio';
 
 describe('fases', () => {
@@ -58,5 +64,27 @@ describe('notas', () => {
     expect(aprovadoFase1(5.9)).toBe(false);
     expect(aprovadoFinal(7)).toBe(true);
     expect(aprovadoFinal(6.99)).toBe(false);
+  });
+});
+
+describe('critérios e pesos', () => {
+  it('cada fase tem 5 critérios e os pesos padrão somam 10', () => {
+    expect(CRITERIOS_FASE1).toHaveLength(5);
+    expect(CRITERIOS_FASE2).toHaveLength(5);
+    expect(pesosSomam10(CRITERIOS_FASE1.map((c) => c.pesoPadrao))).toBe(true);
+    expect(pesosSomam10(CRITERIOS_FASE2.map((c) => c.pesoPadrao))).toBe(true);
+  });
+
+  it('colunaPeso/colunaNota derivam o nome da coluna da chave', () => {
+    expect(colunaPeso('resumo')).toBe('pesoResumo');
+    expect(colunaNota('resumo')).toBe('notaResumo');
+    expect(colunaPeso('observancia')).toBe('pesoObservancia');
+    expect(colunaNota('clareza')).toBe('notaClareza');
+  });
+
+  it('pesosSomam10 tolera ponto flutuante e rejeita somas erradas', () => {
+    expect(soma([1, 2, 2, 3.5, 1.5])).toBeCloseTo(10, 10);
+    expect(pesosSomam10([2, 2, 2, 2, 2])).toBe(true);
+    expect(pesosSomam10([2, 2, 2, 2, 3])).toBe(false);
   });
 });

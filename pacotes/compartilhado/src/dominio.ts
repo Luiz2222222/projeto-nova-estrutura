@@ -74,3 +74,46 @@ export function notaFinal(nf1: number, nf2: number): number {
 
 export const aprovadoFase1 = (nf1: number): boolean => nf1 >= 6;
 export const aprovadoFinal = (nf: number): boolean => nf >= 7;
+
+// ---------- Critérios de avaliação (pesos por critério, somando 10) ----------
+// Cada critério é pontuado de 0 até o seu peso; a nota do avaliador = soma dos 5 critérios
+// (0–10). O NF da fase = média das notas dos avaliadores. Pesos definidos no Planejamento.
+
+export interface Criterio {
+  chave: string; // sufixo das colunas: 'resumo' → pesoResumo (Calendario) e notaResumo (MembroBanca)
+  rotulo: string;
+  descricao: string;
+  pesoPadrao: number;
+}
+
+export const CRITERIOS_FASE1: Criterio[] = [
+  { chave: 'resumo', rotulo: 'Resumo', descricao: 'Apresentação concisa dos pontos relevantes do trabalho.', pesoPadrao: 1.0 },
+  { chave: 'introducao', rotulo: 'Introdução/Relevância', descricao: 'Contextualização, justificativa, objetivos e estrutura do TCC.', pesoPadrao: 2.0 },
+  { chave: 'revisao', rotulo: 'Revisão Bibliográfica', descricao: 'Fontes relacionadas ao tema, sintetizadas de forma lógica.', pesoPadrao: 2.0 },
+  { chave: 'desenvolvimento', rotulo: 'Desenvolvimento', descricao: 'Apresentação lógica e coesa, com aprofundamento condizente com os objetivos.', pesoPadrao: 3.5 },
+  { chave: 'conclusoes', rotulo: 'Conclusões', descricao: 'Implicações, limitações, contribuições e sugestões para continuidade.', pesoPadrao: 1.5 },
+];
+
+export const CRITERIOS_FASE2: Criterio[] = [
+  { chave: 'coerencia', rotulo: 'Coerência do conteúdo', descricao: 'Coerência e consistência do conteúdo apresentado.', pesoPadrao: 2.0 },
+  { chave: 'qualidade', rotulo: 'Qualidade e estrutura da apresentação', descricao: 'Organização e qualidade da apresentação.', pesoPadrao: 2.0 },
+  { chave: 'dominio', rotulo: 'Domínio do tema', descricao: 'Domínio e conhecimento demonstrado sobre o tema.', pesoPadrao: 2.5 },
+  { chave: 'clareza', rotulo: 'Clareza e fluência verbal', descricao: 'Clareza, fluência e comunicação durante a apresentação.', pesoPadrao: 2.5 },
+  { chave: 'observancia', rotulo: 'Observância do tempo', descricao: 'Cumprimento do tempo previsto para a apresentação.', pesoPadrao: 1.0 },
+];
+
+// Nome das colunas (Calendario.pesoX / MembroBanca.notaX) a partir da chave do critério.
+export const colunaPeso = (chave: string): string => 'peso' + chave.charAt(0).toUpperCase() + chave.slice(1);
+export const colunaNota = (chave: string): string => 'nota' + chave.charAt(0).toUpperCase() + chave.slice(1);
+
+export const PESOS_PADRAO_FASE1: Record<string, number> = Object.fromEntries(CRITERIOS_FASE1.map((c) => [c.chave, c.pesoPadrao]));
+export const PESOS_PADRAO_FASE2: Record<string, number> = Object.fromEntries(CRITERIOS_FASE2.map((c) => [c.chave, c.pesoPadrao]));
+
+export function soma(valores: number[]): number {
+  return valores.reduce((s, n) => s + n, 0);
+}
+
+// Cada conjunto de pesos (Fase I e Fase II) deve somar 10 (tolerância para ponto flutuante).
+export function pesosSomam10(valores: number[]): boolean {
+  return Math.abs(soma(valores) - 10) < 0.01;
+}

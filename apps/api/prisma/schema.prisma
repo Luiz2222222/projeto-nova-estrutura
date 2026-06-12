@@ -147,7 +147,20 @@ model MembroBanca {
   bancaId     String
   avaliador   Usuario  @relation(fields: [avaliadorId], references: [id])
   avaliadorId String
-  nota        Float? // 0–10, null até avaliar
+  nota        Float? // total (soma dos critérios), 0–10, null até avaliar
+
+  // Notas por critério (Fase I usa os 5 primeiros; Fase II usa os 5 últimos).
+  notaResumo          Float?
+  notaIntroducao      Float?
+  notaRevisao         Float?
+  notaDesenvolvimento Float?
+  notaConclusoes      Float?
+  notaCoerencia       Float?
+  notaQualidade       Float?
+  notaDominio         Float?
+  notaClareza         Float?
+  notaObservancia     Float?
+
   parecer     String?
   avaliadoEm  DateTime?
 
@@ -169,6 +182,18 @@ model Calendario {
   preparacaoBancasFase2 DateTime?
   apresentacaoFase2     DateTime?
   ajustesFinais         DateTime?
+
+  // Pesos por critério das avaliações (cada fase soma 10). Defaults do regulamento.
+  pesoResumo          Float @default(1.0)
+  pesoIntroducao      Float @default(2.0)
+  pesoRevisao         Float @default(2.0)
+  pesoDesenvolvimento Float @default(3.5)
+  pesoConclusoes      Float @default(1.5)
+  pesoCoerencia       Float @default(2.0)
+  pesoQualidade       Float @default(2.0)
+  pesoDominio         Float @default(2.5)
+  pesoClareza         Float @default(2.5)
+  pesoObservancia     Float @default(1.0)
 
   atualizadoEm DateTime @updatedAt
 
