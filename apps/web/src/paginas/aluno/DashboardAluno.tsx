@@ -194,7 +194,7 @@ export function DashboardAluno() {
                 {prazo ? (
                   <>
                     <span className="grande">{ROTULO_MARCO[prazo.marco]}</span>
-                    <span className="forte">{fmtData(prazo.iso)}</span>
+                    <span className="num">{fmtData(prazo.iso)}</span>
                   </>
                 ) : (
                   <span className="grande">Sem prazos futuros</span>
@@ -202,14 +202,13 @@ export function DashboardAluno() {
               </div>
             </div>
 
-            <div className="card-status">
+            <div className="card-status card-roxo">
               <div className="card-status-topo">
                 <span className="card-status-titulo">Fase atual</span>
                 {icoAtividade}
               </div>
               <div className="card-status-corpo">
-                <span className="forte">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
-                <span className="sub">{tcc.semestre}</span>
+                <span className="fase">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
               </div>
             </div>
           </div>

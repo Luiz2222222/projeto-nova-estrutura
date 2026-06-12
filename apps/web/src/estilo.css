@@ -426,17 +426,20 @@ select {
 .cards-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .card-status {
   background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-2);
-  box-shadow: var(--sombra-1); padding: 20px 22px; min-height: 150px;
+  box-shadow: var(--sombra-1); padding: 24px; min-height: 180px;
   display: flex; flex-direction: column;
 }
-.card-status-topo { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.card-status-topo { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 12px; }
 .card-status-topo svg { color: var(--azul); width: 20px; height: 20px; position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
 .card-status-titulo { font-size: 14px; font-weight: 500; color: var(--tinta-3); }
-.card-status-corpo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; padding-top: 8px; }
-.card-status-corpo .forte { font-size: 18px; font-weight: 700; color: var(--tinta-1); }
+.card-status-corpo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; }
+.card-status-corpo .forte { font-size: 18px; font-weight: 600; color: var(--tinta-1); }
 .card-status-corpo .grande { font-size: 22px; font-weight: 700; color: var(--azul-forte); line-height: 1.15; }
+.card-status-corpo .num { font-size: 20px; font-weight: 700; color: var(--tinta-1); }
+.card-status-corpo .fase { font-size: 22px; font-weight: 700; color: #9333ea; line-height: 1.15; }
 .card-status-corpo .sub { font-size: 13px; color: var(--tinta-3); }
-.card-status-corpo .botao { width: 100%; margin-top: 14px; }
+.card-status-corpo .botao { width: 100%; margin-top: auto; }
+.card-roxo .card-status-topo svg { color: #9333ea; }
 
 /* Tabela simples (documentos no dashboard) */
 .tabela { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -454,6 +457,10 @@ select {
 .acoes-doc { display: inline-flex; gap: 6px; }
 .botao-icone { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--borda); border-radius: var(--raio-1); color: var(--tinta-2); background: var(--papel-1); cursor: pointer; }
 .botao-icone:hover { background: var(--inset); color: var(--azul-forte); }
+
+/* Barra de filtros (Documentos do aluno) */
+.filtros { display: flex; gap: 16px; flex-wrap: wrap; }
+.filtros .campo { flex: 1; min-width: 200px; }
 
 /* Calendário (formulário) */
 .calendario-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
@@ -519,6 +526,14 @@ textarea { resize: vertical; min-height: 72px; }
 .alerta-erro { background: var(--reprovado-suave); border: 1px solid rgba(185, 28, 28, 0.25); color: var(--reprovado); }
 .badge-status { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .status-bad { background: var(--reprovado-suave); color: var(--reprovado); }
+
+/* Card de recusa (Meu TCC) — destacado em vermelho, como no original */
+.card-recusa { position: relative; background: var(--reprovado-suave); border: 2px solid rgba(185, 28, 28, 0.4); border-radius: var(--raio-2); padding: 20px 22px; box-shadow: var(--sombra-1); }
+.card-recusa-cabecalho { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.card-recusa-cabecalho svg { width: 22px; height: 22px; color: var(--reprovado); flex-shrink: 0; }
+.card-recusa-cabecalho h3 { font-size: 18px; font-weight: 600; color: var(--tinta-1); margin: 0; }
+.card-recusa-texto { font-size: 13px; color: var(--tinta-2); margin: 0 0 12px; }
+.card-recusa-parecer { background: var(--papel-1); border: 1px solid rgba(185, 28, 28, 0.3); border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; color: var(--tinta-2); }
 
 /* ============================================================
    Casca do app: menu lateral

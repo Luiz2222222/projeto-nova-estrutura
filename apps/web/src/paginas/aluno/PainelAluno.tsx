@@ -72,9 +72,19 @@ export function PainelAluno() {
       <p className="legenda">{tcc.titulo}</p>
 
       {solic?.status === 'RECUSADA' && (
-        <div className="alerta alerta-erro bloco">
-          <strong>Abertura recusada.</strong> {solic.parecer}
-          <div className="acoes" style={{ marginTop: 12 }}>
+        <div className="card-recusa bloco">
+          <div className="card-recusa-cabecalho">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 8v4M12 16h.01" />
+            </svg>
+            <h3>Solicitação recusada</h3>
+          </div>
+          <p className="card-recusa-texto">
+            Sua solicitação de orientação foi recusada pela coordenação. Corrija os documentos e reenvie.
+          </p>
+          {solic.parecer && <div className="card-recusa-parecer">{solic.parecer}</div>}
+          <div className="acoes" style={{ marginTop: 14, justifyContent: 'flex-start' }}>
             <button className="botao" onClick={corrigirEReenviar}>Corrigir e reenviar</button>
           </div>
         </div>
