@@ -6,9 +6,9 @@ import { ROTULO_FASE } from '../../utils/fases';
 const bancaDe = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase);
 const ultimaVF = (t: any) =>
   (t.documentos ?? []).filter((d: any) => d.tipo === 'VERSAO_FINAL').sort((a: any, b: any) => b.versao - a.versao)[0] ?? null;
-const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1' || f === 'FORMACAO_BANCA_FASE_2';
+const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1';
 const ehValidar = (f: string) => f === 'VALIDACAO_FASE_1' || f === 'VALIDACAO_FASE_2';
-const qtdBanca = (f: string) => (f === 'FORMACAO_BANCA_FASE_2' ? 3 : 2);
+const qtdBanca = (_f: string) => 2; // só a Fase I é formada manualmente (2 avaliadores)
 const faseValidando = (f: string) => (f === 'VALIDACAO_FASE_2' ? 'FASE_2' : 'FASE_1');
 
 export function TccsCoordenador() {
@@ -129,9 +129,7 @@ export function TccsCoordenador() {
               </p>
               {ehFormar(t.faseAtual) && (
                 <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                  <button className="botao" onClick={() => abrirFormar(t)}>
-                    {t.faseAtual === 'FORMACAO_BANCA_FASE_2' ? 'Formar banca (Fase II)' : 'Formar banca'}
-                  </button>
+                  <button className="botao" onClick={() => abrirFormar(t)}>Formar banca (Fase I)</button>
                 </div>
               )}
               {ehValidar(t.faseAtual) && (
@@ -153,7 +151,7 @@ export function TccsCoordenador() {
 
       {formando && (() => {
         const qtd = qtdBanca(formando.faseAtual);
-        const rotulo = formando.faseAtual === 'FORMACAO_BANCA_FASE_2' ? 'Fase II' : 'Fase I';
+        const rotulo = 'Fase I';
         return (
           <Modal titulo={`Formar banca (${rotulo})`} subtitulo={`Escolha ${qtd} avaliadores · ${formando.titulo}`} aoFechar={() => !enviando && setFormando(null)}>
             {erro && <div className="erro-geral">{erro}</div>}
