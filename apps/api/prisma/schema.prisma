@@ -194,8 +194,29 @@ model Aviso {
   id        String   @id @default(cuid())
   titulo    String
   conteudo  String
+  // Cor do card: '' | azul | verde | amarelo | vermelho | roxo | laranja
+  cor       String   @default("")
+  // Perfis que veem o aviso (CSV). Coordenador sempre vê.
+  destinatarios String @default("ALUNO,PROFESSOR,AVALIADOR,COORDENADOR")
+  fixado    Boolean  @default(false)
+  autorId   String?
   autorNome String?
   criadoEm  DateTime @default(now())
 
+  comentarios ComentarioAviso[]
+
   @@map("avisos")
+}
+
+// Comentários nos avisos (qualquer usuário logado; apaga o autor ou o coordenador).
+model ComentarioAviso {
+  id        String   @id @default(cuid())
+  aviso     Aviso    @relation(fields: [avisoId], references: [id], onDelete: Cascade)
+  avisoId   String
+  autorId   String
+  autorNome String
+  texto     String
+  criadoEm  DateTime @default(now())
+
+  @@map("comentarios_aviso")
 }

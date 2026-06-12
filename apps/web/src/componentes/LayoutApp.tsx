@@ -79,9 +79,14 @@ const NAV: Record<Papel, ItemNav[]> = {
     { to: '/professor', rotulo: 'Início', icone: icoCasa, fim: true },
     { to: '/professor/orientandos', rotulo: 'Meus orientandos', icone: icoDoc },
     { to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca },
+    { to: '/avisos', rotulo: 'Mural de avisos', icone: icoMegafone },
     itemConfig,
   ],
-  AVALIADOR: [{ to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca }, itemConfig],
+  AVALIADOR: [
+    { to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca },
+    { to: '/avisos', rotulo: 'Mural de avisos', icone: icoMegafone },
+    itemConfig,
+  ],
 };
 
 export function LayoutApp() {

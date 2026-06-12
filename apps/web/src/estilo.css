@@ -494,6 +494,56 @@ select {
 .aviso-cabecalho h3 { font-size: 16px; }
 .aviso-conteudo { margin: 0; color: var(--tinta-2); font-size: 14px; line-height: 1.55; white-space: pre-wrap; }
 .aviso-meta { margin: 0; font-size: 12px; color: var(--tinta-4); }
+
+/* ============================================================
+   Mural de avisos (compartilhado — espelha o original)
+   ============================================================ */
+.mural-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.mural-titulo { display: flex; align-items: center; gap: 12px; }
+.mural-titulo .ico { width: 42px; height: 42px; border-radius: var(--raio-1); display: grid; place-items: center; background: var(--azul-suave); color: var(--azul-forte); flex-shrink: 0; }
+.mural-titulo .ico svg { width: 22px; height: 22px; }
+.mural-titulo h1 { font-size: 24px; }
+.mural-titulo .legenda { margin: 2px 0 0; }
+
+.mural-lista { display: flex; flex-direction: column; gap: 16px; }
+.aviso-card { background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-2); box-shadow: var(--sombra-1); padding: 20px 22px; }
+.aviso-card.fixado { border-left: 4px solid var(--azul); }
+.aviso-card.cor-azul { border-left: 4px solid #3b82f6; background: rgba(59, 130, 246, 0.05); }
+.aviso-card.cor-verde { border-left: 4px solid #22c55e; background: rgba(34, 197, 94, 0.06); }
+.aviso-card.cor-amarelo { border-left: 4px solid #eab308; background: rgba(234, 179, 8, 0.08); }
+.aviso-card.cor-vermelho { border-left: 4px solid #ef4444; background: rgba(239, 68, 68, 0.05); }
+.aviso-card.cor-roxo { border-left: 4px solid #a855f7; background: rgba(168, 85, 247, 0.06); }
+.aviso-card.cor-laranja { border-left: 4px solid #f97316; background: rgba(249, 115, 22, 0.06); }
+
+.aviso-cabecalho-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.aviso-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.aviso-meta-linha { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 12px; color: var(--tinta-4); }
+.aviso-acoes { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.pilula-azul { background: var(--azul-suave); color: var(--azul-forte); display: inline-flex; align-items: center; gap: 4px; }
+.pilula-azul svg { width: 12px; height: 12px; }
+
+.aviso-rodape { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--borda-suave); }
+.coment-toggle { display: inline-flex; align-items: center; gap: 6px; background: none; border: none; color: var(--tinta-3); font: inherit; font-size: 13px; cursor: pointer; padding: 0; }
+.coment-toggle svg { width: 15px; height: 15px; }
+.coment-toggle:hover { color: var(--tinta-1); }
+.coment-lista { display: flex; flex-direction: column; gap: 12px; margin-top: 12px; }
+.coment-item { display: flex; gap: 10px; }
+.coment-avatar { width: 28px; height: 28px; border-radius: 50%; background: var(--azul-suave); color: var(--azul-forte); display: grid; place-items: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+.coment-corpo { flex: 1; min-width: 0; }
+.coment-meta { display: flex; align-items: center; gap: 8px; }
+.coment-nome { font-size: 13px; font-weight: 600; color: var(--tinta-1); }
+.coment-data { font-size: 11px; color: var(--tinta-4); }
+.coment-apagar { background: none; border: none; color: var(--reprovado); cursor: pointer; padding: 0; display: inline-flex; }
+.coment-apagar svg { width: 13px; height: 13px; }
+.coment-texto { font-size: 14px; color: var(--tinta-2); margin: 2px 0 0; white-space: pre-wrap; }
+.coment-form { display: flex; gap: 8px; margin-top: 12px; }
+.coment-form input { flex: 1; }
+.coment-form .botao { flex-shrink: 0; padding: 9px 12px; display: inline-grid; place-items: center; }
+.coment-form .botao svg { width: 16px; height: 16px; }
+
+.cor-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+.cor-swatch { width: 30px; height: 30px; border-radius: var(--raio-1); border: 2px solid var(--borda-forte); cursor: pointer; }
+.cor-swatch.sel { box-shadow: 0 0 0 2px var(--azul); }
 .muted { color: var(--tinta-3); font-size: 12px; }
 .acoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .radios { display: flex; gap: 20px; font-size: 14px; }

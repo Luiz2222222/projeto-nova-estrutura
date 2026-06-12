@@ -140,11 +140,23 @@ export type DadosRecusarAbertura = z.infer<typeof esquemaRecusarAbertura>;
 
 // ---------- Coordenação ----------
 
+// Cores possíveis do card de aviso e perfis destinatários (mural, espelha o original).
+export const CORES_AVISO = ['', 'azul', 'verde', 'amarelo', 'vermelho', 'roxo', 'laranja'] as const;
+export const DESTINATARIOS_AVISO = ['ALUNO', 'PROFESSOR', 'AVALIADOR', 'COORDENADOR'] as const;
+
 export const esquemaAviso = z.object({
   titulo: z.string().trim().min(3, 'Informe um título'),
   conteudo: z.string().trim().min(3, 'Escreva o conteúdo do aviso'),
+  destinatarios: z.array(z.string()).min(1, 'Selecione ao menos um perfil destinatário'),
+  cor: z.string().optional().default(''),
+  fixado: z.boolean().optional().default(false),
 });
 export type DadosAviso = z.infer<typeof esquemaAviso>;
+
+export const esquemaComentario = z.object({
+  texto: z.string().trim().min(1, 'Escreva um comentário'),
+});
+export type DadosComentario = z.infer<typeof esquemaComentario>;
 
 // Marcos do calendário do semestre (todos opcionais; data ISO ou null).
 export const MARCOS_CALENDARIO = [

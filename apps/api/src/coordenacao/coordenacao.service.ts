@@ -1,9 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
-import { MARCOS_CALENDARIO } from '@tcc/compartilhado';
+import { MARCOS_CALENDARIO, DESTINATARIOS_AVISO, type DadosAviso } from '@tcc/compartilhado';
 
 function semestreAtual(): string {
   const d = new Date();
@@ -68,24 +74,85 @@ export class CoordenacaoService {
 
   // ---------- Avisos ----------
 
-  listarAvisos() {
-    return this.prisma.aviso.findMany({ orderBy: { criadoEm: 'desc' } });
+  private normalizarDestinatarios(lista?: string[]): string {
+    const sel = (lista ?? []).filter((p) => (DESTINATARIOS_AVISO as readonly string[]).includes(p));
+    const unicos = [...new Set(sel)];
+    if (!unicos.length) {
+      throw new BadRequestException({ mensagem: 'Selecione ao menos um perfil destinatário.' });
+    }
+    return unicos.join(',');
   }
 
-  async criarAviso(usuarioId: string, titulo: string, conteudo: string) {
+  // Coordenador vê todos; demais perfis só veem avisos destinados ao seu papel. Fixados primeiro.
+  async listarAvisos(papel?: string) {
+    const avisos = await this.prisma.aviso.findMany({
+      orderBy: [{ fixado: 'desc' }, { criadoEm: 'desc' }],
+      include: { comentarios: { orderBy: { criadoEm: 'asc' } } },
+    });
+    if (!papel || papel === 'COORDENADOR') return avisos;
+    return avisos.filter((a) => a.destinatarios.split(',').includes(papel));
+  }
+
+  async criarAviso(usuarioId: string, dados: DadosAviso) {
     const autor = await this.prisma.usuario.findUnique({
       where: { id: usuarioId },
       select: { nomeCompleto: true },
     });
     return this.prisma.aviso.create({
-      data: { titulo, conteudo, autorNome: autor?.nomeCompleto ?? null },
+      data: {
+        titulo: dados.titulo,
+        conteudo: dados.conteudo,
+        cor: dados.cor ?? '',
+        fixado: dados.fixado ?? false,
+        destinatarios: this.normalizarDestinatarios(dados.destinatarios),
+        autorId: usuarioId,
+        autorNome: autor?.nomeCompleto ?? null,
+      },
+    });
+  }
+
+  async editarAviso(id: string, dados: DadosAviso) {
+    const aviso = await this.prisma.aviso.findUnique({ where: { id } });
+    if (!aviso) throw new NotFoundException('Aviso não encontrado');
+    return this.prisma.aviso.update({
+      where: { id },
+      data: {
+        titulo: dados.titulo,
+        conteudo: dados.conteudo,
+        cor: dados.cor ?? '',
+        fixado: dados.fixado ?? false,
+        destinatarios: this.normalizarDestinatarios(dados.destinatarios),
+      },
     });
   }
 
   async removerAviso(id: string) {
     const aviso = await this.prisma.aviso.findUnique({ where: { id } });
     if (!aviso) throw new NotFoundException('Aviso não encontrado');
-    await this.prisma.aviso.delete({ where: { id } });
+    await this.prisma.aviso.delete({ where: { id } }); // cascata remove os comentários
+    return { ok: true };
+  }
+
+  // ----- Comentários (qualquer usuário logado) -----
+
+  async comentar(avisoId: string, usuarioId: string, texto: string) {
+    const aviso = await this.prisma.aviso.findUnique({ where: { id: avisoId } });
+    if (!aviso) throw new NotFoundException('Aviso não encontrado');
+    const autor = await this.prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: { nomeCompleto: true },
+    });
+    return this.prisma.comentarioAviso.create({
+      data: { avisoId, autorId: usuarioId, autorNome: autor?.nomeCompleto ?? 'Usuário', texto: texto.trim() },
+    });
+  }
+
+  // Apaga o comentário: só o autor ou o coordenador.
+  async removerComentario(comentarioId: string, usuario: { sub: string; papel: string }) {
+    const c = await this.prisma.comentarioAviso.findUnique({ where: { id: comentarioId } });
+    if (!c) throw new NotFoundException('Comentário não encontrado');
+    if (c.autorId !== usuario.sub && usuario.papel !== 'COORDENADOR') throw new ForbiddenException();
+    await this.prisma.comentarioAviso.delete({ where: { id: comentarioId } });
     return { ok: true };
   }
 

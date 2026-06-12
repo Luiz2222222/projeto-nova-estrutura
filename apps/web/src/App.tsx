@@ -97,6 +97,8 @@ export function App() {
 
             {/* Comuns a qualquer usuário logado */}
             <Route path="/inicio" element={<PlaceholderPapel />} />
+            {/* Mural comum (professor/avaliador); aluno e coordenador têm rota própria */}
+            <Route path="/avisos" element={<MuralAvisos />} />
             <Route path="/perfil" element={<Perfil />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
           </Route>

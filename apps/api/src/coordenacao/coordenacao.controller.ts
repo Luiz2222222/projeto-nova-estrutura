@@ -22,7 +22,12 @@ import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
 import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
-import { esquemaAviso, type DadosAviso } from '@tcc/compartilhado';
+import {
+  esquemaAviso,
+  esquemaComentario,
+  type DadosAviso,
+  type DadosComentario,
+} from '@tcc/compartilhado';
 
 type Req = { usuario: { sub: string; papel: string; nomeCompleto?: string } };
 
@@ -84,15 +89,22 @@ export class CoordenacaoController {
 
   @Get('avisos')
   @UseGuards(GuardaJwt)
-  avisos() {
-    return this.coord.listarAvisos();
+  avisos(@Req() req: Req) {
+    return this.coord.listarAvisos(req.usuario.papel);
   }
 
   @Post('avisos')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   criarAviso(@Req() req: Req, @Body(new ZodValidacaoPipe(esquemaAviso)) dados: DadosAviso) {
-    return this.coord.criarAviso(req.usuario.sub, dados.titulo, dados.conteudo);
+    return this.coord.criarAviso(req.usuario.sub, dados);
+  }
+
+  @Put('avisos/:id')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editarAviso(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaAviso)) dados: DadosAviso) {
+    return this.coord.editarAviso(id, dados);
   }
 
   @Delete('avisos/:id')
@@ -100,6 +112,23 @@ export class CoordenacaoController {
   @Papeis('COORDENADOR')
   removerAviso(@Param('id') id: string) {
     return this.coord.removerAviso(id);
+  }
+
+  // Comentários: qualquer usuário logado comenta; apaga o autor ou o coordenador.
+  @Post('avisos/:id/comentarios')
+  @UseGuards(GuardaJwt)
+  comentar(
+    @Req() req: Req,
+    @Param('id') id: string,
+    @Body(new ZodValidacaoPipe(esquemaComentario)) dados: DadosComentario,
+  ) {
+    return this.coord.comentar(id, req.usuario.sub, dados.texto);
+  }
+
+  @Delete('avisos/:avisoId/comentarios/:comentarioId')
+  @UseGuards(GuardaJwt)
+  removerComentario(@Req() req: Req, @Param('comentarioId') comentarioId: string) {
+    return this.coord.removerComentario(comentarioId, req.usuario);
   }
 
   // ---------- Documentos de referência ----------
