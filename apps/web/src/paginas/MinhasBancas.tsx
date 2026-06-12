@@ -12,7 +12,6 @@ const fmt = (n: number) => n.toString().replace('.', ',');
 export function MinhasBancas() {
   const [itens, setItens] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [calendario, setCalendario] = useState<any | null>(null);
   const [avaliando, setAvaliando] = useState<any | null>(null);
   const [notas, setNotas] = useState<Record<string, string>>({});
   const [parecer, setParecer] = useState('');
@@ -24,12 +23,10 @@ export function MinhasBancas() {
     apiGet('/bancas/minhas').then(setItens).catch(() => setItens([])).finally(() => setCarregando(false));
   }
   useEffect(carregar, []);
-  useEffect(() => {
-    apiGet('/calendario').then(setCalendario).catch(() => setCalendario(null));
-  }, []);
 
   const criteriosDe = (fase: string): Criterio[] => (fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2);
-  const peso = (c: Criterio) => Number(calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao);
+  // Pesos do semestre do próprio TCC (vêm anexados em cada banca pelo backend).
+  const peso = (c: Criterio) => Number(avaliando?.pesos?.[colunaPeso(c.chave)] ?? c.pesoPadrao);
   const numNota = (chave: string) => {
     const n = parseFloat((notas[chave] ?? '').replace(',', '.'));
     return Number.isFinite(n) ? n : NaN;

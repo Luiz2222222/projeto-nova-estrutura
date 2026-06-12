@@ -245,7 +245,7 @@ export const DESC_MARCO: Record<MarcoCalendario, string> = {
   submissaoMonografia: 'Entrega da versão final com o termo.',
   preparacaoBancasFase1: 'Período de formação das bancas avaliadoras.',
   avaliacaoFase1: 'Prazo final para avaliação pela banca.',
-  preparacaoBancasFase2: 'Formação das bancas para a apresentação.',
+  preparacaoBancasFase2: 'Janela da Fase II — a banca é o orientador + os 2 avaliadores da Fase I.',
   apresentacaoFase2: 'Prazo final para as apresentações orais.',
   ajustesFinais: 'Prazo para correções após a defesa.',
 };

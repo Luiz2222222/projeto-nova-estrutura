@@ -63,9 +63,9 @@ export class BancasService {
     return { ok: true };
   }
 
-  // Bancas em que o usuário é avaliador (com o TCC e a própria nota).
-  minhasBancas(avaliadorId: string) {
-    return this.prisma.membroBanca.findMany({
+  // Bancas em que o usuário é avaliador (com o TCC, a própria nota e os pesos do semestre do TCC).
+  async minhasBancas(avaliadorId: string) {
+    const membros = await this.prisma.membroBanca.findMany({
       where: { avaliadorId },
       include: {
         banca: {
@@ -76,6 +76,12 @@ export class BancasService {
       },
       orderBy: { banca: { criadoEm: 'desc' } },
     });
+    // Anexa os pesos do calendário do SEMESTRE de cada TCC (e não do semestre atual),
+    // para o formulário de avaliação bater com o que o backend usa ao validar.
+    const semestres = [...new Set(membros.map((m) => m.banca.tcc.semestre))];
+    const cals = await this.prisma.calendario.findMany({ where: { semestre: { in: semestres } } });
+    const porSemestre = new Map(cals.map((c) => [c.semestre, c]));
+    return membros.map((m) => ({ ...m, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null }));
   }
 
   // Avaliador pontua os 5 critérios da fase (cada nota capada no peso do critério).
