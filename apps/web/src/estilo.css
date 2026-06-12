@@ -423,14 +423,14 @@ select {
   box-shadow: var(--sombra-1); padding: 20px 22px; min-height: 150px;
   display: flex; flex-direction: column;
 }
-.card-status-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.card-status-topo svg { color: var(--azul); width: 20px; height: 20px; flex-shrink: 0; }
+.card-status-topo { position: relative; display: flex; align-items: center; justify-content: center; margin-bottom: 4px; }
+.card-status-topo svg { color: var(--azul); width: 20px; height: 20px; position: absolute; right: 0; top: 50%; transform: translateY(-50%); }
 .card-status-titulo { font-size: 14px; font-weight: 500; color: var(--tinta-3); }
-.card-status-corpo { flex: 1; display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; text-align: left; gap: 4px; padding-top: 12px; }
-.card-status-corpo .forte { font-size: 18px; font-weight: 600; color: var(--tinta-1); }
-.card-status-corpo .grande { font-size: 20px; font-weight: 700; color: var(--azul-forte); line-height: 1.15; }
+.card-status-corpo { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; gap: 4px; padding-top: 8px; }
+.card-status-corpo .forte { font-size: 18px; font-weight: 700; color: var(--tinta-1); }
+.card-status-corpo .grande { font-size: 22px; font-weight: 700; color: var(--azul-forte); line-height: 1.15; }
 .card-status-corpo .sub { font-size: 13px; color: var(--tinta-3); }
-.card-status-corpo .botao { width: 100%; margin-top: auto; }
+.card-status-corpo .botao { width: 100%; margin-top: 14px; }
 
 /* Tabela simples (documentos no dashboard) */
 .tabela { width: 100%; border-collapse: collapse; font-size: 13px; }

@@ -193,11 +193,11 @@ export function DashboardAluno() {
               <div className="card-status-corpo">
                 {prazo ? (
                   <>
-                    <span className="forte">{ROTULO_MARCO[prazo.marco]}</span>
-                    <span className="sub">{fmtData(prazo.iso)}</span>
+                    <span className="grande">{ROTULO_MARCO[prazo.marco]}</span>
+                    <span className="forte">{fmtData(prazo.iso)}</span>
                   </>
                 ) : (
-                  <span className="sub">Sem prazos futuros no calendário.</span>
+                  <span className="grande">Sem prazos futuros</span>
                 )}
               </div>
             </div>

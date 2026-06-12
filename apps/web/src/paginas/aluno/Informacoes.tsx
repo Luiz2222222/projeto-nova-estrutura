@@ -6,7 +6,7 @@ import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO, type MarcoCalendario } fro
 
 // dd/MM/yyyy (formato do projeto antigo). Datas do calendário são UTC; o split evita "voltar" um dia.
 function formatarData(valor?: string | null): string {
-  if (!valor) return 'A definir';
+  if (!valor) return '--';
   const [ano, mes, dia] = valor.split('T')[0].split('-');
   return `${dia}/${mes}/${ano}`;
 }
@@ -29,6 +29,7 @@ const icoLivro = ic('M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z|M22 3h-6a4 4 0 0 0
 const icoCheck = ic('M22 11.08V12a10 10 0 1 1-5.93-9.14|M22 4 12 14.01l-3-3');
 const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
 const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
+const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
 
 // Ícone + cor por etapa, espelhando o painel de datas do projeto antigo.
 const MARCO_INFO: Record<MarcoCalendario, { icone: ReactNode; cor: string }> = {
@@ -60,7 +61,7 @@ export function Informacoes() {
       <section className="cartao-secao bloco">
         <h2 className="h2-icone">
           <span className="h2-ico">{icoCalendario}</span>
-          Datas do período{calendario?.semestre ? ` — ${calendario.semestre}` : ''}
+          Datas do período{calendario?.semestre ? ` - ${calendario.semestre}` : ''}
         </h2>
         <p className="legenda" style={{ marginBottom: 18 }}>
           As datas de cada etapa são definidas pela coordenação a cada semestre.
@@ -103,9 +104,14 @@ export function Informacoes() {
                     {d.tamanho ? ` · ${formatarTamanho(d.tamanho)}` : ''}
                   </span>
                 </div>
-                <a className="botao-icone" title="Baixar" href={`${URL_API}/documentos-referencia/${d.id}/baixar`} target="_blank" rel="noreferrer">
-                  {icoBaixar}
-                </a>
+                <span className="acoes-doc">
+                  <a className="botao-icone" title="Visualizar" href={`${URL_API}/documentos-referencia/${d.id}/visualizar`} target="_blank" rel="noreferrer">
+                    {icoOlho}
+                  </a>
+                  <a className="botao-icone" title="Baixar" href={`${URL_API}/documentos-referencia/${d.id}/baixar`} target="_blank" rel="noreferrer">
+                    {icoBaixar}
+                  </a>
+                </span>
               </div>
             ))}
           </div>
