@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
+import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { MARCOS_CALENDARIO } from '@tcc/compartilhado';
 
@@ -126,5 +127,49 @@ export class CoordenacaoService {
     await fs.rm(join(process.cwd(), doc.caminho), { force: true }).catch(() => {});
     await this.prisma.documentoReferencia.delete({ where: { id } });
     return { ok: true };
+  }
+
+  // ---------- Exportar / Resetar dados (coordenador) ----------
+
+  // Dump completo dos TCCs (com aluno/orientador/notas/documentos/bancas) para backup.
+  async exportarDados() {
+    const tccs = await this.prisma.tcc.findMany({
+      orderBy: { criadoEm: 'asc' },
+      include: {
+        aluno: { select: { nomeCompleto: true, email: true, curso: true } },
+        orientador: { select: { nomeCompleto: true, tratamento: true } },
+        coorientador: { select: { nomeCompleto: true } },
+        solicitacoes: true,
+        documentos: true,
+        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
+      },
+    });
+    return { geradoEm: new Date().toISOString(), semestre: semestreAtual(), total: tccs.length, tccs };
+  }
+
+  // Reseta o período: apaga os TCCs do semestre atual (cascade) e seus arquivos.
+  // Segurança: exige a senha do coordenador e o texto de confirmação "APAGAR".
+  async resetarPeriodo(usuarioId: string, senha: string, confirmacao: string) {
+    if (confirmacao !== 'APAGAR') {
+      throw new BadRequestException({ mensagem: 'Confirmação inválida. Digite APAGAR para confirmar.' });
+    }
+    const u = await this.prisma.usuario.findUnique({ where: { id: usuarioId } });
+    if (!u) throw new UnauthorizedException();
+    const ok = await bcrypt.compare(senha || '', u.senhaHash);
+    if (!ok) {
+      throw new BadRequestException({ mensagem: 'Senha incorreta.', erros: [{ campo: 'senha', mensagem: 'Senha incorreta' }] });
+    }
+
+    const semestre = semestreAtual();
+    const backup = await this.exportarDados(); // backup antes de apagar
+    const docs = await this.prisma.documentoTcc.findMany({
+      where: { tcc: { semestre } },
+      select: { caminho: true },
+    });
+    const { count } = await this.prisma.tcc.deleteMany({ where: { semestre } });
+    for (const d of docs) {
+      await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
+    }
+    return { apagados: count, backup };
   }
 }

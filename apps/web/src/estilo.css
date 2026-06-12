@@ -247,6 +247,9 @@ a:hover { color: var(--azul-escuro); }
 .botao:hover { background: var(--azul-forte); }
 .botao-secundario { background: transparent; color: var(--tinta-2); border-color: var(--borda-forte); }
 .botao-secundario:hover { background: var(--papel-2); color: var(--tinta-1); }
+.botao-perigo { background: var(--reprovado); border-color: var(--reprovado); color: #fff; }
+.botao-perigo:hover { background: var(--reprovado); filter: brightness(0.92); }
+.botao-perigo:disabled { opacity: 0.55; cursor: default; filter: none; }
 .selo { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .selo-ok { background: var(--aprovado-suave); color: var(--aprovado); }
 

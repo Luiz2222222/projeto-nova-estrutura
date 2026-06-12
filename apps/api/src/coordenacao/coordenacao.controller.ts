@@ -61,6 +61,25 @@ export class CoordenacaoController {
     return this.coord.salvarCodigos(dados);
   }
 
+  // ---------- Exportar / Resetar dados (só coordenador) ----------
+
+  @Get('exportar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  async exportar(@Res() res: Response) {
+    const dados = await this.coord.exportarDados();
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="dados_tcc_${dados.semestre}.json"`);
+    res.send(JSON.stringify(dados, null, 2));
+  }
+
+  @Post('resetar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  resetar(@Req() req: Req, @Body() body: { senha?: string; confirmacao?: string }) {
+    return this.coord.resetarPeriodo(req.usuario.sub, body.senha ?? '', body.confirmacao ?? '');
+  }
+
   // ---------- Avisos ----------
 
   @Get('avisos')
