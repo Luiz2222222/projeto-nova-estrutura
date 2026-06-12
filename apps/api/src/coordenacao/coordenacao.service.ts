@@ -197,6 +197,15 @@ export class CoordenacaoService {
     return this.prisma.documentoReferencia.findUnique({ where: { id } });
   }
 
+  // Devolve o documento só se o usuário puder vê-lo (coordenador sempre; demais pelo papel).
+  // Senão devolve null — tratado como 404, evitando acesso por link/ID direto.
+  async referenciaParaUsuario(id: string, papel: string) {
+    const doc = await this.prisma.documentoReferencia.findUnique({ where: { id } });
+    if (!doc) return null;
+    if (papel === 'COORDENADOR' || doc.visivelPara.split(',').includes(papel)) return doc;
+    return null;
+  }
+
   async editarVisibilidade(id: string, visivelPara?: string) {
     const visivel = this.normalizarVisibilidade(visivelPara);
     const doc = await this.prisma.documentoReferencia.findUnique({ where: { id } });
