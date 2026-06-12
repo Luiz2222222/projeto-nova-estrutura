@@ -4,7 +4,7 @@ import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC } from '../../utils/fases';
-import { MARCOS_CALENDARIO, ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
+import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
@@ -34,13 +34,24 @@ const icoBaixar = (
   </svg>
 );
 
-// Próximo marco do calendário com data >= hoje.
+// Marcos que são prazos do ALUNO (exclui Reunião e Preparação das bancas,
+// que são atividades da coordenação) — espelha o "próximo prazo" do projeto antigo.
+const PRAZOS_ALUNO: MarcoCalendario[] = [
+  'envioDocumentos',
+  'avaliacaoContinuidade',
+  'submissaoMonografia',
+  'avaliacaoFase1',
+  'apresentacaoFase2',
+  'ajustesFinais',
+];
+
+// Próximo prazo do aluno com data >= hoje.
 function proximoPrazo(cal: Record<string, string | null> | null) {
   if (!cal) return null;
   const hoje = new Date();
   hoje.setHours(0, 0, 0, 0);
   let melhor: { marco: MarcoCalendario; data: Date; iso: string } | null = null;
-  for (const m of MARCOS_CALENDARIO) {
+  for (const m of PRAZOS_ALUNO) {
     const iso = cal[m];
     if (!iso) continue;
     const d = new Date(iso);
