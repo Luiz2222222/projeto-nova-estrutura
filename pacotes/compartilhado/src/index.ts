@@ -179,7 +179,7 @@ export const ROTULO_MARCO: Record<MarcoCalendario, string> = {
   submissaoMonografia: 'Submissão da monografia + termo',
   preparacaoBancasFase1: 'Preparação das bancas (Fase I)',
   avaliacaoFase1: 'Avaliação — Fase I',
-  preparacaoBancasFase2: 'Preparação das bancas (Fase II)',
+  preparacaoBancasFase2: 'Preparação para apresentação (Fase II)',
   apresentacaoFase2: 'Apresentação dos trabalhos (Fase II)',
   ajustesFinais: 'Ajustes finais',
 };

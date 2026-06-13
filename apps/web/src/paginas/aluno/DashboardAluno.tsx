@@ -134,7 +134,7 @@ export function DashboardAluno() {
       const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
       return {
         titulo: 'Enviar versão final',
-        desc: vf?.status === 'REJEITADO' ? 'O coordenador pediu ajustes — reenvie a versão final.' : 'Aprovado na defesa! Envie a versão final corrigida.',
+        desc: vf?.status === 'REJEITADO' ? 'O orientador pediu ajustes — reenvie a versão final.' : 'Aprovado na defesa! Envie a versão final corrigida.',
         parecer: vf?.status === 'REJEITADO' ? vf.parecer : undefined,
         botao: { rotulo: 'Enviar', ao: () => setModalUpload('versaoFinal') },
       };
@@ -275,7 +275,7 @@ export function DashboardAluno() {
           subtitulo={
             modalUpload === 'monografia'
               ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
-              : 'Envie a versão final corrigida (PDF) para análise do coordenador.'
+              : 'Envie a versão final corrigida (PDF) para validação do orientador.'
           }
           rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
           aoFechar={() => setModalUpload(null)}
