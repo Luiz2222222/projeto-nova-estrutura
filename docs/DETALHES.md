@@ -161,6 +161,24 @@ Módulo novo `apps/api/src/bancas/`. Migration `20260610174128_fase1_banca`: mod
   coordenador (com download). `ModalEnviarPdf` genérico (monografia/versão final). **Testado e2e na UI:
   enviar → ajustes → reenviar → concluir.** Ciclo **abertura → … → Concluído** completo.
 
+### ⚠️ T7 (atualização que SUPERA o que está acima nesta seção)
+Modelo de avaliação refeito para bater com o regulamento. O que vale hoje:
+- **Pesos por critério (somam 10)** no `Calendario` do semestre, definidos no **Planejamento**
+  (`PUT /calendario/pesos`). Fase I: resumo/introdução/revisão/desenvolvimento/conclusões;
+  Fase II: coerência/qualidade/domínio/clareza/observância. Constantes em `dominio.ts`
+  (`CRITERIOS_FASE1/2`, `colunaPeso/colunaNota`, `pesosSomam10`).
+- **Avaliação por critério** (não mais nota única): `POST /bancas/:id/avaliar` recebe `{notas}` —
+  cada nota é **capada no peso** do critério (pesos do **semestre do TCC**), a **nota total do
+  membro = soma** (gravada em `MembroBanca.nota` + 10 colunas por critério). **NF = média** das
+  notas totais. Tela `MinhasBancas` usa os pesos vindos em `banca.pesos`.
+- **Banca da Fase II NÃO é formada manualmente:** ao validar a Fase I, é criada automaticamente
+  com **orientador + os 2 avaliadores da Fase I** → vai direto para `AVALIACAO_FASE_2`. A fase
+  `FORMACAO_BANCA_FASE_2` foi **removida** do domínio; `formarBanca` só forma a Fase I.
+- **Versão final validada pelo ORIENTADOR** (não o coordenador): fase
+  `ANALISE_FINAL_COORDENADOR` renomeada para **`VALIDACAO_VERSAO_FINAL`**; rota
+  `POST /tccs/:id/validar-versao-final` (PROFESSOR, confere `orientadorId`): CONCLUIR → `CONCLUIDO`,
+  AJUSTES → volta para `AGUARDANDO_AJUSTES_FINAIS`. Ação na tela **Meus orientandos**.
+
 ## 5. Coordenador
 
 ### Estrutura + features que alimentam o aluno (FEITO)

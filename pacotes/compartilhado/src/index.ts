@@ -224,7 +224,7 @@ export const esquemaAvaliarBanca = z.object({
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
 
-// ---------- Conclusão (análise final do coordenador) ----------
+// ---------- Conclusão (validação da versão final pelo orientador) ----------
 
 export const esquemaAnaliseFinal = z
   .object({
