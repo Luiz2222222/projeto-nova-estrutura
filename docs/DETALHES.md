@@ -314,11 +314,25 @@ Quarta rodada de revisão (FEITO):
   - "Solicitações" = a antiga "Aberturas pendentes" (`PainelCoordenador`).
   - "Planejamento" (`PlanejamentoCoordenador`) junta **Calendário** (`SecaoCalendario`) +
     **Documentos de referência** (`SecaoModelos`) numa tela só — como no original (não é aba separada).
-  - TCCs, Relatórios, Usuários, Lista do período: **esqueleto** (`EmConstrucao`) até serem construídos.
+  - ✔ TCCs, Relatórios, Usuários, Lista do período: **construídas** (não há mais `EmConstrucao` na
+    área do coordenador). Ver detalhes abaixo.
   - Dashboard sem os "atalhos" inventados.
 - **Regra reforçada:** espelhar a IA do original (menu/telas/nomes); melhorar só a qualidade, não
   reinventar onde as coisas ficam. Ver [[feedback_espelhar_original_tcc]].
-- **[A FAZER]** Conteúdo real de TCCs/Relatórios/Usuários/Lista do período; menu do avaliador.
+- ✔ **Ciclo do menu do coordenador FECHADO** — os 8 itens apontam para telas reais, com endpoint
+  existente e protegido por `@Papeis('COORDENADOR')`:
+  - **TCCs** (`TccsCoordenador` + `GET /tccs`) — lista/god mode, formar/validar bancas (ver acima).
+  - **Relatórios** (`Relatorios` + `GET /relatorio`) — planilha em 5 abas com busca; **exporta XLSX**
+    com as 5 abas reais (SheetJS). Fase II montada por id (orientador + 2 avaliadores da Fase I), não
+    por índice.
+  - **Usuários** (`Usuarios` + `usuarios/lista`, `PUT usuarios/:id`, `PUT usuarios/:id/senha`,
+    `DELETE usuarios/:id`) — abas Professores/Alunos/Externos, busca, editar/resetar senha/excluir.
+    API recusa papel COORDENADOR; valida campos pelo papel real; titulação/afiliação aceitam "Outros"
+    (texto livre) como no cadastro. Exclusão bloqueada quando há vínculos.
+  - **Lista do período** (`ListaDoPeriodo` + `GET /lista-do-periodo`) — todos os alunos × TCC do
+    semestre; status pelo fluxo de **Solicitação** (Aprovado / Aprovação pendente / Não enviado),
+    card de resumo (semestre, prazo do Calendário, totais) e filtro por nome/e-mail.
+- **[A FAZER]** Revisar/fechar os menus dos outros papéis: **aluno, professor, avaliador**.
 
 ### Preferências visuais do usuário — em progresso
 - **[NA TELA]** ✔ Tela **Configurações** (`/configuracoes`) só com **preferências** (sem "dados do
