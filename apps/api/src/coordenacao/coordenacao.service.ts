@@ -323,6 +323,20 @@ export class CoordenacaoService {
   // propósito: não se lista nem se edita/exclui coordenador por esta tela.
   private readonly PAPEIS_GERENCIAVEIS = ['ALUNO', 'PROFESSOR', 'AVALIADOR'] as const;
 
+  // Tratamento/afiliação: aceita um valor da lista OU um texto livre (o "Outros" do
+  // cadastro grava o texto digitado, não o literal "Outros"). Exige não-vazio e um
+  // limite seguro pro valor customizado. Espelha ModalCadastro/esquemaCadastro.
+  private validarOpcaoOuLivre(valor: unknown, lista: readonly string[], campo: string, rotulo: string): string {
+    const v = String(valor ?? '').trim();
+    if (!v || v === 'Outros') {
+      throw new BadRequestException({ mensagem: `Informe ${rotulo.toLowerCase()}.`, erros: [{ campo, mensagem: `${rotulo} obrigatório` }] });
+    }
+    if (!lista.includes(v) && v.length > 80) {
+      throw new BadRequestException({ mensagem: `${rotulo} muito longo (máx. 80 caracteres).`, erros: [{ campo, mensagem: 'Texto muito longo' }] });
+    }
+    return v;
+  }
+
   listarUsuarios(papel: string) {
     if (!this.PAPEIS_GERENCIAVEIS.includes(papel as any)) {
       throw new BadRequestException({ mensagem: 'Papel inválido para gestão de usuários.' });
@@ -369,26 +383,14 @@ export class CoordenacaoService {
       }
       data.curso = curso;
     } else if (u.papel === 'PROFESSOR') {
-      const tratamento = String(dados?.tratamento ?? '');
-      if (!TRATAMENTOS.includes(tratamento as any)) {
-        throw new BadRequestException({ mensagem: 'Tratamento inválido.', erros: [{ campo: 'tratamento', mensagem: 'Tratamento válido obrigatório' }] });
-      }
       if (typeof dados?.disponivelParaOrientar !== 'boolean') {
         throw new BadRequestException({ mensagem: 'Disponibilidade para orientar inválida.', erros: [{ campo: 'disponivelParaOrientar', mensagem: 'Informe verdadeiro ou falso' }] });
       }
-      data.tratamento = tratamento;
+      data.tratamento = this.validarOpcaoOuLivre(dados?.tratamento, TRATAMENTOS, 'tratamento', 'Titulação');
       data.disponivelParaOrientar = dados.disponivelParaOrientar;
     } else if (u.papel === 'AVALIADOR') {
-      const tratamento = String(dados?.tratamento ?? '');
-      const afiliacao = String(dados?.afiliacao ?? '');
-      if (!TRATAMENTOS.includes(tratamento as any)) {
-        throw new BadRequestException({ mensagem: 'Tratamento inválido.', erros: [{ campo: 'tratamento', mensagem: 'Tratamento válido obrigatório' }] });
-      }
-      if (!AFILIACOES.includes(afiliacao as any)) {
-        throw new BadRequestException({ mensagem: 'Afiliação inválida.', erros: [{ campo: 'afiliacao', mensagem: 'Afiliação válida obrigatória' }] });
-      }
-      data.tratamento = tratamento;
-      data.afiliacao = afiliacao;
+      data.tratamento = this.validarOpcaoOuLivre(dados?.tratamento, TRATAMENTOS, 'tratamento', 'Titulação');
+      data.afiliacao = this.validarOpcaoOuLivre(dados?.afiliacao, AFILIACOES, 'afiliacao', 'Afiliação');
     }
 
     return this.prisma.usuario.update({ where: { id }, data, select: { id: true } });

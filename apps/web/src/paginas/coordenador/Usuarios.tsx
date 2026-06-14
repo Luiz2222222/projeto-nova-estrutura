@@ -12,6 +12,11 @@ type Papel = (typeof ABAS)[number]['id'];
 
 const cursoDe = (u: any) => (ROTULO_CURSO as Record<string, string>)[u.curso] ?? u.curso ?? '—';
 
+// "Outros" igual ao cadastro (ModalCadastro): valor fora da lista vira "Outros" + campo livre.
+const naLista = (v: string | null | undefined, lista: readonly string[]) => !!v && lista.includes(v);
+const selDe = (v: string | null | undefined, lista: readonly string[]) => (v ? (naLista(v, lista) ? v : 'Outros') : '');
+const livreDe = (v: string | null | undefined, lista: readonly string[]) => (v && !naLista(v, lista) ? v : '');
+
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {d.split('|').map((p, i) => <path key={i} d={p} />)}
@@ -63,8 +68,11 @@ export function Usuarios() {
     setForm({
       nomeCompleto: u.nomeCompleto,
       email: u.email,
-      tratamento: u.tratamento ?? '',
-      afiliacao: u.afiliacao ?? '',
+      // "Outros" igual ao cadastro: se o valor salvo não está na lista, é customizado.
+      tratSel: selDe(u.tratamento, TRATAMENTOS),
+      tratLivre: livreDe(u.tratamento, TRATAMENTOS),
+      afilSel: selDe(u.afiliacao, AFILIACOES),
+      afilLivre: livreDe(u.afiliacao, AFILIACOES),
       curso: u.curso ?? '',
       disponivelParaOrientar: u.disponivelParaOrientar,
     });
@@ -76,10 +84,13 @@ export function Usuarios() {
     if (!form.email?.trim()) return setErroEdit('Informe o e-mail.');
     setSalvando(true);
     try {
+      // Se "Outros" estiver selecionado, envia o texto livre digitado (igual ao cadastro).
+      const tratamento = (form.tratSel === 'Outros' ? form.tratLivre : form.tratSel || '').trim();
+      const afiliacao = (form.afilSel === 'Outros' ? form.afilLivre : form.afilSel || '').trim();
       const corpo: any = { nomeCompleto: form.nomeCompleto, email: form.email };
       if (aba === 'ALUNO') corpo.curso = form.curso || undefined;
-      if (aba === 'PROFESSOR') { corpo.tratamento = form.tratamento || undefined; corpo.disponivelParaOrientar = form.disponivelParaOrientar; }
-      if (aba === 'AVALIADOR') { corpo.tratamento = form.tratamento || undefined; corpo.afiliacao = form.afiliacao || undefined; }
+      if (aba === 'PROFESSOR') { corpo.tratamento = tratamento || undefined; corpo.disponivelParaOrientar = form.disponivelParaOrientar; }
+      if (aba === 'AVALIADOR') { corpo.tratamento = tratamento || undefined; corpo.afiliacao = afiliacao || undefined; }
       await apiPut(`/usuarios/${editando.id}`, corpo);
       setEditando(null);
       carregar();
@@ -209,18 +220,24 @@ export function Usuarios() {
           )}
           {(aba === 'PROFESSOR' || aba === 'AVALIADOR') && (
             <label className="campo"><span>Titulação</span>
-              <select value={form.tratamento} onChange={(e) => setForm({ ...form, tratamento: e.target.value })}>
+              <select value={form.tratSel} onChange={(e) => setForm({ ...form, tratSel: e.target.value })}>
                 <option value="">Selecione…</option>
                 {TRATAMENTOS.map((t) => <option key={t} value={t}>{t}</option>)}
               </select>
+              {form.tratSel === 'Outros' && (
+                <input placeholder="Digite a titulação" value={form.tratLivre} onChange={(e) => setForm({ ...form, tratLivre: e.target.value })} />
+              )}
             </label>
           )}
           {aba === 'AVALIADOR' && (
             <label className="campo"><span>Afiliação</span>
-              <select value={form.afiliacao} onChange={(e) => setForm({ ...form, afiliacao: e.target.value })}>
+              <select value={form.afilSel} onChange={(e) => setForm({ ...form, afilSel: e.target.value })}>
                 <option value="">Selecione…</option>
                 {AFILIACOES.map((a) => <option key={a} value={a}>{a}</option>)}
               </select>
+              {form.afilSel === 'Outros' && (
+                <input placeholder="Digite a instituição" value={form.afilLivre} onChange={(e) => setForm({ ...form, afilLivre: e.target.value })} />
+              )}
             </label>
           )}
           {aba === 'PROFESSOR' && (
