@@ -432,6 +432,55 @@ export class CoordenacaoService {
     return { ok: true };
   }
 
+  // ---------- Lista do período (espelha a tela do original) ----------
+
+  // Lista TODOS os alunos e cruza com o TCC do semestre atual, classificando o
+  // envio inicial pelo fluxo de Solicitação (não por documento, como era no antigo).
+  async listaDoPeriodo() {
+    const semestre = semestreAtual();
+    const calendario = await this.prisma.calendario.findUnique({ where: { semestre } });
+
+    const alunos = await this.prisma.usuario.findMany({
+      where: { papel: 'ALUNO' },
+      orderBy: { nomeCompleto: 'asc' },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        email: true,
+        curso: true,
+        tccsComoAluno: {
+          where: { semestre },
+          select: {
+            criadoEm: true,
+            faseAtual: true,
+            solicitacoes: { select: { status: true, criadoEm: true }, orderBy: { criadoEm: 'desc' } },
+          },
+        },
+      },
+    });
+
+    const lista = alunos.map((a) => {
+      const tcc = a.tccsComoAluno[0];
+      let status = 'Não enviado';
+      let dataEnvio: Date | null = null;
+      if (tcc) {
+        const sols = tcc.solicitacoes;
+        // Aprovado: TCC já saiu de INICIALIZACAO ou tem solicitação ACEITA.
+        // Pendente: tem solicitação PENDENTE. Senão (recusada/cancelada/sem) = não enviado.
+        if (tcc.faseAtual !== 'INICIALIZACAO' || sols.some((s) => s.status === 'ACEITA')) {
+          status = 'Aprovado';
+        } else if (sols.some((s) => s.status === 'PENDENTE')) {
+          status = 'Aprovação pendente';
+        }
+        // Data de envio: solicitação mais recente, ou a criação do TCC no semestre.
+        dataEnvio = sols[0]?.criadoEm ?? tcc.criadoEm ?? null;
+      }
+      return { alunoId: a.id, alunoNome: a.nomeCompleto, email: a.email, curso: a.curso, dataEnvio, status };
+    });
+
+    return { semestre, prazoEnvio: calendario?.envioDocumentos ?? null, alunos: lista };
+  }
+
   // Reseta o período: apaga os TCCs do semestre atual (cascade) e seus arquivos.
   // Segurança: exige a senha do coordenador e o texto de confirmação "APAGAR".
   async resetarPeriodo(usuarioId: string, senha: string, confirmacao: string) {

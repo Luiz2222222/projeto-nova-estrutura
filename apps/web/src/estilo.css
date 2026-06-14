@@ -458,6 +458,12 @@ select {
 .pilula-ok { background: var(--aprovado-suave); color: var(--aprovado); }
 .pilula-bad { background: var(--reprovado-suave); color: var(--reprovado); }
 .pilula-neutra { background: var(--inset); color: var(--tinta-3); border: 1px solid var(--borda); }
+.pilula-alerta { background: rgba(234, 179, 8, 0.12); color: #a16207; }
+
+/* Card de resumo (ex.: Lista do período): semestre, prazo e contadores. */
+.grade-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 16px; }
+.grade-resumo > div { display: flex; flex-direction: column; gap: 4px; }
+.resumo-valor { font-size: 18px; font-weight: 700; color: var(--tinta-1); }
 
 .cabecalho-secao { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .cabecalho-secao h2 { margin: 0; }

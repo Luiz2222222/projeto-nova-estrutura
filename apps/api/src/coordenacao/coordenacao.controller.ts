@@ -83,6 +83,13 @@ export class CoordenacaoController {
     return this.coord.relatorio();
   }
 
+  @Get('lista-do-periodo')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  listaDoPeriodo() {
+    return this.coord.listaDoPeriodo();
+  }
+
   // ---------- Usuários (só coordenador) ----------
 
   @Get('usuarios/lista')
