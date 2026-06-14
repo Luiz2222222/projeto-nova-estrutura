@@ -1,16 +1,39 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
-import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota } from '@tcc/compartilhado';
+import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
 
 // Tela de Relatórios do coordenador (espelha o original): planilha dos TCCs em abas,
-// com busca e exportação. Export em CSV (abre no Excel) — sem dependência de lib de xlsx.
+// com busca e exportação. Export em CSV (todas as abas juntas) — sem dependência de lib de xlsx.
 
 type Linha = Record<string, string>;
 
 const num = (v: any) => (v == null || v === '' ? '' : Number(v).toFixed(2).replace('.', ','));
-const membrosFase = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase)?.membros ?? [];
 const cursoDe = (t: any) => (ROTULO_CURSO as Record<string, string>)[t.aluno?.curso] ?? t.aluno?.curso ?? '';
+const membros = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase)?.membros ?? [];
+
+// Avaliadores da Fase I, em ordem estável (o banco não garante a ordem do array).
+const f1De = (t: any) => [...membros(t, 'FASE_1')].sort((a: any, b: any) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+// Fase II montada EXPLICITAMENTE por id (não por índice): orientador + os 2 avaliadores da Fase I.
+// Cada slot devolve o membro da banca da Fase II (com as notas) e o nome esperado.
+function f2De(t: any): { membro: any; nome: string }[] {
+  const f1 = f1De(t);
+  const lista = membros(t, 'FASE_2');
+  const achar = (id?: string) => (id ? lista.find((m: any) => m.avaliadorId === id) ?? null : null);
+  const esperados = [
+    { id: t.orientadorId, pessoa: t.orientador },
+    { id: f1[0]?.avaliadorId, pessoa: f1[0]?.avaliador },
+    { id: f1[1]?.avaliadorId, pessoa: f1[1]?.avaliador },
+  ];
+  return esperados.map((e) => {
+    const m = achar(e.id);
+    return { membro: m, nome: m?.avaliador?.nomeCompleto ?? e.pessoa?.nomeCompleto ?? '' };
+  });
+}
+
+const cells = (m: any, criterios: Criterio[]) =>
+  Object.fromEntries(criterios.map((c) => [c.rotulo, num(m?.[colunaNota(c.chave)])]));
 
 const ABAS = [
   { id: 'gerais', rotulo: 'Dados gerais' },
@@ -62,11 +85,12 @@ export function Relatorios() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tccs, busca, campo, numeroDe]);
 
-  const linhas: Linha[] = useMemo(() => {
-    if (aba === 'gerais') {
-      return filtrados.map((t) => {
-        const f1 = membrosFase(t, 'FASE_1');
-        const f2 = membrosFase(t, 'FASE_2');
+  // Linhas de uma aba (usado tanto na tabela quanto no export de todas as abas).
+  function linhasDaAba(qual: AbaId, lista: any[]): Linha[] {
+    if (qual === 'gerais') {
+      return lista.map((t) => {
+        const f1 = f1De(t);
+        const f2 = f2De(t);
         return {
           'Nº': nro(t),
           Curso: cursoDe(t),
@@ -76,33 +100,32 @@ export function Relatorios() {
           Coorientador: t.coorientador?.nomeCompleto ?? t.coorientadorNome ?? '',
           'Aval. 1 (F1)': f1[0]?.avaliador?.nomeCompleto ?? '',
           'Aval. 2 (F1)': f1[1]?.avaliador?.nomeCompleto ?? '',
-          'Aval. 1 (F2)': f2[0]?.avaliador?.nomeCompleto ?? '',
-          'Aval. 2 (F2)': f2[1]?.avaliador?.nomeCompleto ?? '',
-          'Aval. 3 (F2)': f2[2]?.avaliador?.nomeCompleto ?? '',
+          'Aval. 1 (F2)': f2[0].nome,
+          'Aval. 2 (F2)': f2[1].nome,
+          'Aval. 3 (F2)': f2[2].nome,
           Semestre: t.semestre,
           Fase: ROTULO_FASE[t.faseAtual] ?? t.faseAtual,
         };
       });
     }
-    if (aba === 'fase1' || aba === 'fase2') {
-      const fase = aba === 'fase1' ? 'FASE_1' : 'FASE_2';
-      const criterios = aba === 'fase1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
-      return filtrados.flatMap((t) => {
-        const membros = membrosFase(t, fase);
+    if (qual === 'fase1') {
+      return lista.flatMap((t) => {
+        const f1 = f1De(t);
         const base = { 'Nº': nro(t), 'Título': t.titulo, Aluno: t.aluno?.nomeCompleto ?? '' };
-        if (!membros.length) {
-          return [{ ...base, Avaliador: '—', ...Object.fromEntries(criterios.map((c) => [c.rotulo, ''])), Total: '' }];
-        }
-        return membros.map((m: any) => ({
-          ...base,
-          Avaliador: m.avaliador?.nomeCompleto ?? '',
-          ...Object.fromEntries(criterios.map((c) => [c.rotulo, num(m[colunaNota(c.chave)])])),
-          Total: num(m.nota),
-        }));
+        if (!f1.length) return [{ ...base, Avaliador: '—', ...cells(null, CRITERIOS_FASE1), Total: '' }];
+        return f1.map((m: any) => ({ ...base, Avaliador: m.avaliador?.nomeCompleto ?? '', ...cells(m, CRITERIOS_FASE1), Total: num(m.nota) }));
       });
     }
-    if (aba === 'apuracao') {
-      return filtrados.map((t) => ({
+    if (qual === 'fase2') {
+      return lista.flatMap((t) => {
+        const slots = f2De(t);
+        const base = { 'Nº': nro(t), 'Título': t.titulo, Aluno: t.aluno?.nomeCompleto ?? '' };
+        if (!membros(t, 'FASE_2').length) return [{ ...base, Avaliador: '—', ...cells(null, CRITERIOS_FASE2), Total: '' }];
+        return slots.map((s) => ({ ...base, Avaliador: s.nome || '—', ...cells(s.membro, CRITERIOS_FASE2), Total: num(s.membro?.nota) }));
+      });
+    }
+    if (qual === 'apuracao') {
+      return lista.map((t) => ({
         'Nº': nro(t),
         'Título': t.titulo,
         Aluno: t.aluno?.nomeCompleto ?? '',
@@ -114,9 +137,9 @@ export function Relatorios() {
       }));
     }
     // pareceres
-    return filtrados.map((t) => {
-      const f1 = membrosFase(t, 'FASE_1');
-      const f2 = membrosFase(t, 'FASE_2');
+    return lista.map((t) => {
+      const f1 = f1De(t);
+      const f2 = f2De(t);
       return {
         'Nº': nro(t),
         'Título': t.titulo,
@@ -125,37 +148,41 @@ export function Relatorios() {
         'Parecer 1 (F1)': f1[0]?.parecer ?? '',
         'Aval. 2 (F1)': f1[1]?.avaliador?.nomeCompleto ?? '',
         'Parecer 2 (F1)': f1[1]?.parecer ?? '',
-        'Aval. 1 (F2)': f2[0]?.avaliador?.nomeCompleto ?? '',
-        'Parecer 1 (F2)': f2[0]?.parecer ?? '',
-        'Aval. 2 (F2)': f2[1]?.avaliador?.nomeCompleto ?? '',
-        'Parecer 2 (F2)': f2[1]?.parecer ?? '',
-        'Aval. 3 (F2)': f2[2]?.avaliador?.nomeCompleto ?? '',
-        'Parecer 3 (F2)': f2[2]?.parecer ?? '',
+        'Aval. 1 (F2)': f2[0].nome,
+        'Parecer 1 (F2)': f2[0].membro?.parecer ?? '',
+        'Aval. 2 (F2)': f2[1].nome,
+        'Parecer 2 (F2)': f2[1].membro?.parecer ?? '',
+        'Aval. 3 (F2)': f2[2].nome,
+        'Parecer 3 (F2)': f2[2].membro?.parecer ?? '',
       };
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [aba, filtrados, numeroDe]);
+  }
 
-  function exportar() {
-    if (!linhas.length) return;
-    const cols = Object.keys(linhas[0]);
-    const esc = (v: string) => {
-      const s = String(v ?? '');
-      return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const csv = '﻿' + [cols.join(';'), ...linhas.map((l) => cols.map((c) => esc(l[c])).join(';'))].join('\r\n');
+  const linhas = useMemo(() => linhasDaAba(aba, filtrados), [aba, filtrados]); // eslint-disable-line react-hooks/exhaustive-deps
+  const cols = linhas[0] ? Object.keys(linhas[0]) : [];
+
+  const esc = (v: string) => {
+    const s = String(v ?? '');
+    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  function blocoCsv(titulo: string, ls: Linha[]) {
+    if (!ls.length) return `### ${titulo} ###\r\n(sem dados)`;
+    const c = Object.keys(ls[0]);
+    return [`### ${titulo} ###`, c.join(';'), ...ls.map((l) => c.map((x) => esc(l[x])).join(';'))].join('\r\n');
+  }
+  function exportarTudo() {
+    const partes = ABAS.map((a) => blocoCsv(a.rotulo, linhasDaAba(a.id, filtrados)));
+    const csv = '﻿' + partes.join('\r\n\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `relatorio_${aba}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `relatorio_TCCs_${new Date().toISOString().slice(0, 10)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
   }
-
-  const cols = linhas[0] ? Object.keys(linhas[0]) : [];
 
   return (
     <>
@@ -166,7 +193,7 @@ export function Relatorios() {
         </div>
         <div className="acoes" style={{ margin: 0 }}>
           <button className="botao botao-secundario" onClick={carregar}>Atualizar</button>
-          <button className="botao" onClick={exportar} disabled={!linhas.length}>Exportar CSV</button>
+          <button className="botao" onClick={exportarTudo} disabled={!tccs.length}>Exportar CSV (todas as abas)</button>
         </div>
       </div>
 
