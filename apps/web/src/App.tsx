@@ -23,6 +23,7 @@ import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
 import { MinhasBancas } from './paginas/MinhasBancas';
 import { Configuracoes } from './paginas/Configuracoes';
 import { Perfil } from './paginas/Perfil';
+import { Relatorios } from './paginas/coordenador/Relatorios';
 
 function Protegido({ children }: { children: JSX.Element }) {
   const { usuario, carregando } = useAuth();
@@ -67,10 +68,7 @@ export function App() {
             <Route element={<ExigePapel papeis={['COORDENADOR']} />}>
               <Route path="/coordenador" element={<DashboardCoordenador />} />
               <Route path="/coordenador/tccs" element={<TccsCoordenador />} />
-              <Route
-                path="/coordenador/relatorios"
-                element={<EmConstrucao titulo="Relatórios" descricao="Relatórios e exportações do período." />}
-              />
+              <Route path="/coordenador/relatorios" element={<Relatorios />} />
               <Route path="/coordenador/solicitacoes" element={<PainelCoordenador />} />
               <Route
                 path="/coordenador/usuarios"

@@ -297,6 +297,23 @@ export class CoordenacaoService {
     return { geradoEm: new Date().toISOString(), semestre: semestreAtual(), total: tccs.length, tccs };
   }
 
+  // Dados completos dos TCCs para a tela de Relatórios (com bancas, membros e notas por critério).
+  relatorio() {
+    return this.prisma.tcc.findMany({
+      orderBy: { criadoEm: 'asc' },
+      include: {
+        aluno: { select: { nomeCompleto: true, curso: true } },
+        orientador: { select: { nomeCompleto: true, tratamento: true, afiliacao: true } },
+        coorientador: { select: { nomeCompleto: true, tratamento: true, afiliacao: true } },
+        bancas: {
+          include: {
+            membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true, afiliacao: true } } } },
+          },
+        },
+      },
+    });
+  }
+
   // Reseta o período: apaga os TCCs do semestre atual (cascade) e seus arquivos.
   // Segurança: exige a senha do coordenador e o texto de confirmação "APAGAR".
   async resetarPeriodo(usuarioId: string, senha: string, confirmacao: string) {

@@ -75,6 +75,13 @@ export class CoordenacaoController {
 
   // ---------- Exportar / Resetar dados (só coordenador) ----------
 
+  @Get('relatorio')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  relatorio() {
+    return this.coord.relatorio();
+  }
+
   @Get('exportar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
