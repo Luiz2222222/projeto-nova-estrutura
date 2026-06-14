@@ -5,7 +5,7 @@ import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
 
 // Tela de Relatórios do coordenador (espelha o original): planilha dos TCCs em abas,
-// com busca e exportação. Export em CSV (todas as abas juntas) — sem dependência de lib de xlsx.
+// com busca e exportação. Export em XLSX com as 5 abas reais (uma sheet por aba), via SheetJS.
 
 type Linha = Record<string, string>;
 

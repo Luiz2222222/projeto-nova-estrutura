@@ -284,6 +284,11 @@ Quarta rodada de revisão (FEITO):
   (todas pedem `--force`/major). A maioria é toolchain de dev (vite/esbuild/picomatch) + a cadeia
   NestJS/multer. **Não apliquei `--force`** (quebraria) — virar upgrade dedicado (NestJS 10→11, Vite),
   testado. Build segue passando.
+  - **[A FAZER] `xlsx` (SheetJS) entrou como pendência do audit** — aparece como **high**
+    (Prototype Pollution + ReDoS) e **sem fix no registro npm** (`npm audit fix` não resolve;
+    a correção mora no CDN da SheetJS, fora do npm). Usada só na exportação do Relatório
+    (`Relatorios.tsx`), client-side, sobre dados do próprio coordenador — risco baixo no uso atual.
+    Tratar no upgrade dedicado: migrar para `cdn.sheetjs.com` ou trocar por `exceljs`.
 - ✔ **Testes (início):** **Vitest** no monorepo. Domínio do TCC (fases, rótulos, índices da trilha,
   cálculo de notas NF1/NF2/NF e cortes) virou **fonte única** em `pacotes/compartilhado/src/dominio.ts`,
   usada por **back** (`bancas.service`) e **front** (`utils/fases.ts` re-exporta). `dominio.test.ts`

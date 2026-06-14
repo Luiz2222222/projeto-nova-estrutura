@@ -17,6 +17,9 @@ import {
   CRITERIOS_FASE2,
   colunaPeso,
   pesosSomam10,
+  CURSOS,
+  TRATAMENTOS,
+  AFILIACOES,
   type DadosAviso,
 } from '@tcc/compartilhado';
 
@@ -316,7 +319,14 @@ export class CoordenacaoService {
 
   // ---------- Usuários (gestão pelo coordenador) ----------
 
+  // Papéis que o coordenador pode gerenciar. COORDENADOR fica de fora de
+  // propósito: não se lista nem se edita/exclui coordenador por esta tela.
+  private readonly PAPEIS_GERENCIAVEIS = ['ALUNO', 'PROFESSOR', 'AVALIADOR'] as const;
+
   listarUsuarios(papel: string) {
+    if (!this.PAPEIS_GERENCIAVEIS.includes(papel as any)) {
+      throw new BadRequestException({ mensagem: 'Papel inválido para gestão de usuários.' });
+    }
     return this.prisma.usuario.findMany({
       where: { papel },
       orderBy: { nomeCompleto: 'asc' },
@@ -337,6 +347,9 @@ export class CoordenacaoService {
   async editarUsuario(id: string, dados: any) {
     const u = await this.prisma.usuario.findUnique({ where: { id } });
     if (!u) throw new NotFoundException('Usuário não encontrado');
+    if (!this.PAPEIS_GERENCIAVEIS.includes(u.papel as any)) {
+      throw new ForbiddenException({ mensagem: 'Este usuário não pode ser gerenciado por aqui.' });
+    }
     const nomeCompleto = (dados?.nomeCompleto ?? '').trim();
     const email = (dados?.email ?? '').trim().toLowerCase();
     if (!nomeCompleto) throw new BadRequestException({ mensagem: 'Informe o nome.' });
@@ -345,18 +358,40 @@ export class CoordenacaoService {
     if (outro && outro.id !== id) {
       throw new BadRequestException({ mensagem: 'E-mail já está em uso.', erros: [{ campo: 'email', mensagem: 'E-mail em uso' }] });
     }
-    return this.prisma.usuario.update({
-      where: { id },
-      data: {
-        nomeCompleto,
-        email,
-        tratamento: dados?.tratamento ? String(dados.tratamento) : null,
-        afiliacao: dados?.afiliacao ? String(dados.afiliacao) : null,
-        curso: dados?.curso ? String(dados.curso) : null,
-        ...(typeof dados?.disponivelParaOrientar === 'boolean' ? { disponivelParaOrientar: dados.disponivelParaOrientar } : {}),
-      },
-      select: { id: true },
-    });
+
+    // Campos específicos validados pelo papel REAL do usuário, não pelo que veio no corpo.
+    // Não aceita string livre/inválida nem limpa campo obrigatório do papel.
+    const data: Record<string, unknown> = { nomeCompleto, email };
+    if (u.papel === 'ALUNO') {
+      const curso = String(dados?.curso ?? '');
+      if (!CURSOS.includes(curso as any)) {
+        throw new BadRequestException({ mensagem: 'Curso inválido.', erros: [{ campo: 'curso', mensagem: 'Curso obrigatório e válido' }] });
+      }
+      data.curso = curso;
+    } else if (u.papel === 'PROFESSOR') {
+      const tratamento = String(dados?.tratamento ?? '');
+      if (!TRATAMENTOS.includes(tratamento as any)) {
+        throw new BadRequestException({ mensagem: 'Tratamento inválido.', erros: [{ campo: 'tratamento', mensagem: 'Tratamento válido obrigatório' }] });
+      }
+      if (typeof dados?.disponivelParaOrientar !== 'boolean') {
+        throw new BadRequestException({ mensagem: 'Disponibilidade para orientar inválida.', erros: [{ campo: 'disponivelParaOrientar', mensagem: 'Informe verdadeiro ou falso' }] });
+      }
+      data.tratamento = tratamento;
+      data.disponivelParaOrientar = dados.disponivelParaOrientar;
+    } else if (u.papel === 'AVALIADOR') {
+      const tratamento = String(dados?.tratamento ?? '');
+      const afiliacao = String(dados?.afiliacao ?? '');
+      if (!TRATAMENTOS.includes(tratamento as any)) {
+        throw new BadRequestException({ mensagem: 'Tratamento inválido.', erros: [{ campo: 'tratamento', mensagem: 'Tratamento válido obrigatório' }] });
+      }
+      if (!AFILIACOES.includes(afiliacao as any)) {
+        throw new BadRequestException({ mensagem: 'Afiliação inválida.', erros: [{ campo: 'afiliacao', mensagem: 'Afiliação válida obrigatória' }] });
+      }
+      data.tratamento = tratamento;
+      data.afiliacao = afiliacao;
+    }
+
+    return this.prisma.usuario.update({ where: { id }, data, select: { id: true } });
   }
 
   async resetarSenhaUsuario(id: string, novaSenha: string) {
@@ -365,6 +400,9 @@ export class CoordenacaoService {
     }
     const u = await this.prisma.usuario.findUnique({ where: { id } });
     if (!u) throw new NotFoundException('Usuário não encontrado');
+    if (!this.PAPEIS_GERENCIAVEIS.includes(u.papel as any)) {
+      throw new ForbiddenException({ mensagem: 'Este usuário não pode ser gerenciado por aqui.' });
+    }
     const senhaHash = await bcrypt.hash(novaSenha, 10);
     await this.prisma.usuario.update({ where: { id }, data: { senhaHash } });
     return { ok: true };
@@ -376,10 +414,14 @@ export class CoordenacaoService {
       where: { id },
       select: {
         id: true,
+        papel: true,
         _count: { select: { tccsComoAluno: true, tccsComoOrientador: true, tccsComoCoorientador: true, bancasComoAvaliador: true } },
       },
     });
     if (!u) throw new NotFoundException('Usuário não encontrado');
+    if (!this.PAPEIS_GERENCIAVEIS.includes(u.papel as any)) {
+      throw new ForbiddenException({ mensagem: 'Este usuário não pode ser gerenciado por aqui.' });
+    }
     const c = u._count;
     if (c.tccsComoAluno + c.tccsComoOrientador + c.tccsComoCoorientador + c.bancasComoAvaliador > 0) {
       throw new BadRequestException({ mensagem: 'Não é possível excluir: o usuário tem TCCs, orientações ou bancas vinculados.' });
