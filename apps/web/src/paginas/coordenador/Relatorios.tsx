@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import * as XLSX from 'xlsx';
 import { apiGet } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
@@ -161,27 +162,23 @@ export function Relatorios() {
   const linhas = useMemo(() => linhasDaAba(aba, filtrados), [aba, filtrados]); // eslint-disable-line react-hooks/exhaustive-deps
   const cols = linhas[0] ? Object.keys(linhas[0]) : [];
 
-  const esc = (v: string) => {
-    const s = String(v ?? '');
-    return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-  };
-  function blocoCsv(titulo: string, ls: Linha[]) {
-    if (!ls.length) return `### ${titulo} ###\r\n(sem dados)`;
-    const c = Object.keys(ls[0]);
-    return [`### ${titulo} ###`, c.join(';'), ...ls.map((l) => c.map((x) => esc(l[x])).join(';'))].join('\r\n');
-  }
-  function exportarTudo() {
-    const partes = ABAS.map((a) => blocoCsv(a.rotulo, linhasDaAba(a.id, filtrados)));
-    const csv = '﻿' + partes.join('\r\n\r\n');
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `relatorio_TCCs_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+  // Exporta uma planilha Excel com as 5 abas reais (uma sheet por aba), como no projeto antigo.
+  function exportarXlsx() {
+    const wb = XLSX.utils.book_new();
+    ABAS.forEach((a) => {
+      const ls = linhasDaAba(a.id, filtrados);
+      const ws = XLSX.utils.json_to_sheet(ls);
+      if (ls.length) {
+        const cls = Object.keys(ls[0]);
+        ws['!cols'] = cls.map((c) => {
+          const max = Math.max(c.length, ...ls.map((l) => String(l[c] ?? '').length));
+          return { wch: Math.min(max + 2, 60) };
+        });
+      }
+      const nome = a.rotulo.replace(/[\\/?*[\]:]/g, '').slice(0, 31);
+      XLSX.utils.book_append_sheet(wb, ws, nome);
+    });
+    XLSX.writeFile(wb, `Relatorio_TCCs_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
 
   return (
@@ -193,7 +190,7 @@ export function Relatorios() {
         </div>
         <div className="acoes" style={{ margin: 0 }}>
           <button className="botao botao-secundario" onClick={carregar}>Atualizar</button>
-          <button className="botao" onClick={exportarTudo} disabled={!tccs.length}>Exportar CSV (todas as abas)</button>
+          <button className="botao" onClick={exportarXlsx} disabled={!tccs.length}>Exportar Excel</button>
         </div>
       </div>
 
