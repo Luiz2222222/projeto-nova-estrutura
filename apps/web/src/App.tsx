@@ -19,6 +19,8 @@ import { TccsCoordenador } from './paginas/coordenador/TccsCoordenador';
 import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
+import { DashboardAvaliador } from './paginas/avaliador/DashboardAvaliador';
+import { Coorientacoes } from './paginas/Coorientacoes';
 import { MinhasBancas } from './paginas/MinhasBancas';
 import { Configuracoes } from './paginas/Configuracoes';
 import { Perfil } from './paginas/Perfil';
@@ -83,9 +85,15 @@ export function App() {
               <Route path="/professor/orientandos" element={<MeusOrientandos />} />
             </Route>
 
-            {/* Bancas — professor e avaliador são membros de banca */}
+            {/* Rotas do avaliador */}
+            <Route element={<ExigePapel papeis={['AVALIADOR']} />}>
+              <Route path="/avaliador" element={<DashboardAvaliador />} />
+            </Route>
+
+            {/* Bancas e coorientações — professor e avaliador são membros de banca/coorientadores */}
             <Route element={<ExigePapel papeis={['PROFESSOR', 'AVALIADOR']} />}>
               <Route path="/bancas" element={<MinhasBancas />} />
+              <Route path="/coorientacoes" element={<Coorientacoes />} />
             </Route>
 
             {/* Comuns a qualquer usuário logado */}

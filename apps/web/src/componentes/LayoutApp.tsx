@@ -78,12 +78,15 @@ const NAV: Record<Papel, ItemNav[]> = {
   PROFESSOR: [
     { to: '/professor', rotulo: 'Início', icone: icoCasa, fim: true },
     { to: '/professor/orientandos', rotulo: 'Meus orientandos', icone: icoDoc },
-    { to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca },
+    { to: '/coorientacoes', rotulo: 'Coorientações', icone: icoUsuarios },
+    { to: '/bancas', rotulo: 'Participações em bancas', icone: icoBanca },
     { to: '/avisos', rotulo: 'Mural de avisos', icone: icoMegafone },
     itemConfig,
   ],
   AVALIADOR: [
-    { to: '/bancas', rotulo: 'Minhas bancas', icone: icoBanca },
+    { to: '/avaliador', rotulo: 'Início', icone: icoCasa, fim: true },
+    { to: '/bancas', rotulo: 'Participações em bancas', icone: icoBanca },
+    { to: '/coorientacoes', rotulo: 'Coorientações', icone: icoUsuarios },
     { to: '/avisos', rotulo: 'Mural de avisos', icone: icoMegafone },
     itemConfig,
   ],

@@ -132,6 +132,15 @@ export class TccsController {
     return this.tccs.orientandos(req.usuario.sub);
   }
 
+  // Coorientações: visão de leitura dos TCCs em que o usuário é coorientador.
+  // Professor ou avaliador podem ser coorientadores.
+  @Get('tccs/coorientando')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR', 'AVALIADOR')
+  coorientacoes(@Req() req: Req) {
+    return this.tccs.coorientacoes(req.usuario.sub);
+  }
+
   @Post('tccs/:id/monografia/avaliar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR')

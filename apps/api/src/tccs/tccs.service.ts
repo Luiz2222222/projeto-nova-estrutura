@@ -255,6 +255,19 @@ export class TccsService {
     });
   }
 
+  // Lista os TCCs em que o usuário é coorientador (visão de leitura: aluno, orientador e docs).
+  coorientacoes(usuarioId: string) {
+    return this.prisma.tcc.findMany({
+      where: { coorientadorId: usuarioId },
+      include: {
+        aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
+        orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
+        documentos: { orderBy: { criadoEm: 'desc' } },
+      },
+      orderBy: { criadoEm: 'desc' },
+    });
+  }
+
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
