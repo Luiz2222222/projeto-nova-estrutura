@@ -314,6 +314,80 @@ export class CoordenacaoService {
     });
   }
 
+  // ---------- Usuários (gestão pelo coordenador) ----------
+
+  listarUsuarios(papel: string) {
+    return this.prisma.usuario.findMany({
+      where: { papel },
+      orderBy: { nomeCompleto: 'asc' },
+      select: {
+        id: true,
+        nomeCompleto: true,
+        email: true,
+        papel: true,
+        curso: true,
+        tratamento: true,
+        afiliacao: true,
+        disponivelParaOrientar: true,
+        _count: { select: { tccsComoOrientador: true, tccsComoCoorientador: true, bancasComoAvaliador: true } },
+      },
+    });
+  }
+
+  async editarUsuario(id: string, dados: any) {
+    const u = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!u) throw new NotFoundException('Usuário não encontrado');
+    const nomeCompleto = (dados?.nomeCompleto ?? '').trim();
+    const email = (dados?.email ?? '').trim().toLowerCase();
+    if (!nomeCompleto) throw new BadRequestException({ mensagem: 'Informe o nome.' });
+    if (!email) throw new BadRequestException({ mensagem: 'Informe o e-mail.' });
+    const outro = await this.prisma.usuario.findUnique({ where: { email } });
+    if (outro && outro.id !== id) {
+      throw new BadRequestException({ mensagem: 'E-mail já está em uso.', erros: [{ campo: 'email', mensagem: 'E-mail em uso' }] });
+    }
+    return this.prisma.usuario.update({
+      where: { id },
+      data: {
+        nomeCompleto,
+        email,
+        tratamento: dados?.tratamento ? String(dados.tratamento) : null,
+        afiliacao: dados?.afiliacao ? String(dados.afiliacao) : null,
+        curso: dados?.curso ? String(dados.curso) : null,
+        ...(typeof dados?.disponivelParaOrientar === 'boolean' ? { disponivelParaOrientar: dados.disponivelParaOrientar } : {}),
+      },
+      select: { id: true },
+    });
+  }
+
+  async resetarSenhaUsuario(id: string, novaSenha: string) {
+    if (!novaSenha || novaSenha.length < 6) {
+      throw new BadRequestException({ mensagem: 'A nova senha precisa ter ao menos 6 caracteres.' });
+    }
+    const u = await this.prisma.usuario.findUnique({ where: { id } });
+    if (!u) throw new NotFoundException('Usuário não encontrado');
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await this.prisma.usuario.update({ where: { id }, data: { senhaHash } });
+    return { ok: true };
+  }
+
+  async excluirUsuario(id: string, solicitanteId: string) {
+    if (id === solicitanteId) throw new BadRequestException({ mensagem: 'Você não pode excluir a si mesmo.' });
+    const u = await this.prisma.usuario.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        _count: { select: { tccsComoAluno: true, tccsComoOrientador: true, tccsComoCoorientador: true, bancasComoAvaliador: true } },
+      },
+    });
+    if (!u) throw new NotFoundException('Usuário não encontrado');
+    const c = u._count;
+    if (c.tccsComoAluno + c.tccsComoOrientador + c.tccsComoCoorientador + c.bancasComoAvaliador > 0) {
+      throw new BadRequestException({ mensagem: 'Não é possível excluir: o usuário tem TCCs, orientações ou bancas vinculados.' });
+    }
+    await this.prisma.usuario.delete({ where: { id } });
+    return { ok: true };
+  }
+
   // Reseta o período: apaga os TCCs do semestre atual (cascade) e seus arquivos.
   // Segurança: exige a senha do coordenador e o texto de confirmação "APAGAR".
   async resetarPeriodo(usuarioId: string, senha: string, confirmacao: string) {

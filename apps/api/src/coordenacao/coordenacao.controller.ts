@@ -8,6 +8,7 @@ import {
   Param,
   Post,
   Put,
+  Query,
   Req,
   Res,
   UploadedFile,
@@ -80,6 +81,36 @@ export class CoordenacaoController {
   @Papeis('COORDENADOR')
   relatorio() {
     return this.coord.relatorio();
+  }
+
+  // ---------- Usuários (só coordenador) ----------
+
+  @Get('usuarios/lista')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  listarUsuarios(@Query('papel') papel: string) {
+    return this.coord.listarUsuarios(papel);
+  }
+
+  @Put('usuarios/:id')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editarUsuario(@Param('id') id: string, @Body() dados: Record<string, unknown>) {
+    return this.coord.editarUsuario(id, dados);
+  }
+
+  @Put('usuarios/:id/senha')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  resetarSenhaUsuario(@Param('id') id: string, @Body('senha') senha: string) {
+    return this.coord.resetarSenhaUsuario(id, senha);
+  }
+
+  @Delete('usuarios/:id')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  excluirUsuario(@Req() req: Req, @Param('id') id: string) {
+    return this.coord.excluirUsuario(id, req.usuario.sub);
   }
 
   @Get('exportar')

@@ -24,6 +24,7 @@ import { MinhasBancas } from './paginas/MinhasBancas';
 import { Configuracoes } from './paginas/Configuracoes';
 import { Perfil } from './paginas/Perfil';
 import { Relatorios } from './paginas/coordenador/Relatorios';
+import { Usuarios } from './paginas/coordenador/Usuarios';
 
 function Protegido({ children }: { children: JSX.Element }) {
   const { usuario, carregando } = useAuth();
@@ -70,10 +71,7 @@ export function App() {
               <Route path="/coordenador/tccs" element={<TccsCoordenador />} />
               <Route path="/coordenador/relatorios" element={<Relatorios />} />
               <Route path="/coordenador/solicitacoes" element={<PainelCoordenador />} />
-              <Route
-                path="/coordenador/usuarios"
-                element={<EmConstrucao titulo="Usuários" descricao="Professores, alunos e membros externos." />}
-              />
+              <Route path="/coordenador/usuarios" element={<Usuarios />} />
               <Route
                 path="/coordenador/lista-do-periodo"
                 element={<EmConstrucao titulo="Lista do período" descricao="Alunos do período e quem ainda não enviou solicitação." />}
