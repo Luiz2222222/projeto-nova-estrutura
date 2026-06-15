@@ -7,6 +7,7 @@ import {
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import type { DadosAbrirTcc } from '@tcc/compartilhado';
 
@@ -28,7 +29,23 @@ function prazoEncerrado(prazo?: Date | null): boolean {
 
 @Injectable()
 export class TccsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly email: EmailService,
+  ) {}
+
+  // ---------- Notificações por e-mail (helpers; nunca quebram o fluxo) ----------
+
+  private async notificar(evento: string, usuarioId: string | null | undefined, assunto: string, texto: string) {
+    if (!usuarioId) return;
+    const p = await this.prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, email: true, nomeCompleto: true } });
+    if (p) await this.email.enviarEvento(evento, p, assunto, texto);
+  }
+
+  private async notificarCoordenadores(evento: string, assunto: string, texto: string) {
+    const coords = await this.prisma.usuario.findMany({ where: { papel: 'COORDENADOR' }, select: { id: true, email: true, nomeCompleto: true } });
+    for (const c of coords) await this.email.enviarEvento(evento, c, assunto, texto);
+  }
 
   professoresDisponiveis() {
     return this.prisma.usuario.findMany({
@@ -78,7 +95,7 @@ export class TccsService {
       }
     }
 
-    return this.prisma.tcc.create({
+    const tcc = await this.prisma.tcc.create({
       data: {
         titulo: dados.titulo,
         semestre,
@@ -94,6 +111,11 @@ export class TccsService {
       },
       include: { solicitacoes: true },
     });
+
+    await this.notificar('aluno_solicitacao_enviada', alunoId, 'Solicitação de TCC enviada', `Sua solicitação de abertura do TCC "${tcc.titulo}" foi enviada e está em análise pela coordenação.`);
+    await this.notificarCoordenadores('coord_nova_solicitacao', 'Nova solicitação de TCC', `Há uma nova solicitação de abertura aguardando análise: "${tcc.titulo}".`);
+    await this.notificar('coorientador_indicado', tcc.coorientadorId, 'Você foi indicado como coorientador', `Você foi indicado como coorientador do TCC "${tcc.titulo}".`);
+    return tcc;
   }
 
   meu(alunoId: string) {
@@ -170,6 +192,10 @@ export class TccsService {
       }),
       this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'DESENVOLVIMENTO' } }),
     ]);
+    await this.notificar('aluno_solicitacao_aprovada', tcc.alunoId, 'Solicitação de TCC aprovada', `Sua solicitação do TCC "${tcc.titulo}" foi aprovada. O TCC entrou na fase de desenvolvimento.`);
+    await this.notificar('orientador_definido', tcc.orientadorId, 'Você é orientador de um novo TCC', `Você foi confirmado como orientador do TCC "${tcc.titulo}".`);
+    await this.notificar('orientador_confirmar_continuidade', tcc.orientadorId, 'Confirmar continuidade do TCC', `Quando puder, confirme a continuidade do TCC "${tcc.titulo}" na sua área de orientandos.`);
+    await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em desenvolvimento', `O TCC "${tcc.titulo}" (no qual você é coorientador) entrou na fase de desenvolvimento.`);
     return { ok: true };
   }
 
@@ -186,6 +212,7 @@ export class TccsService {
       where: { tccId, status: 'PENDENTE' },
       data: { status: 'RECUSADA', parecer, respondidoEm: new Date() },
     });
+    await this.notificar('aluno_solicitacao_recusada', tcc.alunoId, 'Solicitação de TCC recusada', `Sua solicitação do TCC "${tcc.titulo}" foi recusada.${parecer ? ' Parecer: ' + parecer : ''} Você pode corrigir os documentos e reenviar.`);
     return { ok: true };
   }
 
@@ -247,7 +274,7 @@ export class TccsService {
     }
     const arq = await this.gravarArquivo(arquivo);
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const doc = await this.prisma.$transaction(async (tx) => {
         // Versões pendentes anteriores deixam de valer (evita várias PENDENTE soltas).
         await tx.documentoTcc.updateMany({
           where: { tccId, tipo: 'MONOGRAFIA', status: 'PENDENTE' },
@@ -258,6 +285,8 @@ export class TccsService {
           data: { tccId, tipo: 'MONOGRAFIA', status: 'PENDENTE', versao: versoes + 1, ...arq },
         });
       });
+      await this.notificar('orientador_monografia_enviada', tcc.orientadorId, 'Monografia enviada para avaliação', `O aluno enviou/reenviou a monografia do TCC "${tcc.titulo}" para sua avaliação.`);
+      return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
       throw e;
@@ -319,8 +348,14 @@ export class TccsService {
           data: { monografiaAprovada: true, ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
         }),
       ]);
+      await this.notificar('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.`);
+      if (vaiPraBanca) {
+        await this.notificarCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`);
+        await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase I.`);
+      }
     } else {
       await this.prisma.documentoTcc.update({ where: { id: mono.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } });
+      await this.notificar('aluno_monografia_rejeitada', tcc.alunoId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na sua monografia do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
     }
     return { ok: true };
   }
@@ -338,11 +373,16 @@ export class TccsService {
         where: { id: tccId },
         data: { continuidadeConfirmada: true, ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
       });
+      if (vaiPraBanca) {
+        await this.notificarCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`);
+        await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase I.`);
+      }
     } else {
       await this.prisma.tcc.update({
         where: { id: tccId },
         data: { faseAtual: 'DESCONTINUADO', parecerContinuidade: parecer ?? null },
       });
+      await this.notificar('aluno_continuidade_rejeitada', tcc.alunoId, 'TCC descontinuado', `O orientador não confirmou a continuidade do TCC "${tcc.titulo}".${parecer ? ' Motivo: ' + parecer : ''}`);
     }
     return { ok: true };
   }
@@ -357,20 +397,24 @@ export class TccsService {
     if (tcc.faseAtual !== 'AGUARDANDO_AJUSTES_FINAIS') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando a versão final.' });
     }
+    const reenvio = (await this.prisma.documentoTcc.count({ where: { tccId, tipo: 'VERSAO_FINAL' } })) > 0;
     const arq = await this.gravarArquivo(arquivo);
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const doc = await this.prisma.$transaction(async (tx) => {
         await tx.documentoTcc.updateMany({
           where: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE' },
           data: { status: 'SUBSTITUIDA' },
         });
         const versoes = await tx.documentoTcc.count({ where: { tccId, tipo: 'VERSAO_FINAL' } });
-        const doc = await tx.documentoTcc.create({
+        const novo = await tx.documentoTcc.create({
           data: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE', versao: versoes + 1, ...arq },
         });
         await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: 'VALIDACAO_VERSAO_FINAL' } });
-        return doc;
+        return novo;
       });
+      const evento = reenvio ? 'orientador_versao_final_reenviada' : 'orientador_versao_final_enviada';
+      await this.notificar(evento, tcc.orientadorId, 'Versão final enviada', `O aluno ${reenvio ? 'reenviou' : 'enviou'} a versão final do TCC "${tcc.titulo}" para sua validação.`);
+      return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
       throw e;
@@ -396,6 +440,9 @@ export class TccsService {
           : []),
         this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO' } }),
       ]);
+      await this.notificar('aluno_tcc_concluido', tcc.alunoId, 'TCC concluído 🎉', `Parabéns! Seu TCC "${tcc.titulo}" foi aprovado e concluído.`);
+      await this.notificar('orientador_tcc_concluido', tcc.orientadorId, 'TCC concluído', `O TCC "${tcc.titulo}" que você orientou foi concluído (aprovado).`);
+      await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC concluído', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi concluído.`);
     } else {
       await this.prisma.$transaction([
         ...(versao
@@ -403,6 +450,7 @@ export class TccsService {
           : []),
         this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' } }),
       ]);
+      await this.notificar('aluno_versao_final_rejeitada', tcc.alunoId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
     }
     return { ok: true };
   }
