@@ -44,6 +44,45 @@ const ic = (d: string) => (
 const icoRelogio = ic('M12 7v5l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0');
 const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
 const icoAtividade = ic('M22 12h-4l-3 9L9 3l-3 9H2');
+// Alerta (estado vazio da Ação pendente, igual ao antigo).
+const icoAlerta = ic('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z|M12 9v4|M12 17h.01');
+
+// Quebra o ROTULO_FASE em fase macro + status/subfase (duas linhas no card "Fase atual").
+function faseMacroSub(tcc: any): { macro: string; sub: string } {
+  const f = tcc?.faseAtual;
+  const solic = tcc?.solicitacoes?.[0];
+  switch (f) {
+    case 'INICIALIZACAO':
+      return {
+        macro: 'Inicialização',
+        sub: solic?.status === 'PENDENTE' ? 'Aguardando aprovação do coordenador'
+          : solic?.status === 'RECUSADA' ? 'Abertura recusada'
+          : 'Aguardando aceite/aprovação',
+      };
+    case 'DESENVOLVIMENTO': {
+      const mono = ultimoDoc(tcc?.documentos, 'MONOGRAFIA');
+      return {
+        macro: 'Desenvolvimento',
+        sub: tcc?.monografiaAprovada ? 'Monografia aprovada'
+          : mono?.status === 'PENDENTE' ? 'Monografia em análise'
+          : mono?.status === 'REJEITADO' ? 'Ajustes na monografia'
+          : 'Aguardando envio da monografia',
+      };
+    }
+    case 'FORMACAO_BANCA_FASE_1': return { macro: 'Fase I', sub: 'Formação da banca' };
+    case 'AVALIACAO_FASE_1': return { macro: 'Fase I', sub: 'Avaliação da banca' };
+    case 'VALIDACAO_FASE_1': return { macro: 'Fase I', sub: 'Validação da Fase I' };
+    case 'AVALIACAO_FASE_2': return { macro: 'Fase II', sub: 'Avaliação da banca' };
+    case 'VALIDACAO_FASE_2': return { macro: 'Fase II', sub: 'Validação da Fase II' };
+    case 'AGUARDANDO_AJUSTES_FINAIS': return { macro: 'Finalização', sub: 'Envio da versão final' };
+    case 'VALIDACAO_VERSAO_FINAL': return { macro: 'Finalização', sub: 'Versão final aguardando orientador' };
+    case 'CONCLUIDO': return { macro: 'Concluído', sub: 'Aprovado' };
+    case 'REPROVADO_FASE_1': return { macro: 'Encerrado', sub: 'Reprovado na Fase I' };
+    case 'REPROVADO_FASE_2': return { macro: 'Encerrado', sub: 'Reprovado na Fase II' };
+    case 'DESCONTINUADO': return { macro: 'Encerrado', sub: 'Descontinuado' };
+    default: return { macro: ROTULO_FASE[f] ?? f ?? '—', sub: '' };
+  }
+}
 
 // Marcos que são prazos do ALUNO (exclui Reunião e Preparação das bancas,
 // que são atividades da coordenação) — espelha o "próximo prazo" do projeto antigo.
@@ -143,12 +182,20 @@ export function DashboardAluno() {
     if (tcc.faseAtual === 'CONCLUIDO') return semAcao('TCC concluído 🎉', 'Parabéns! Seu TCC foi aprovado e concluído.');
     if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO')) return semAcao('—', 'TCC encerrado.');
 
-    return semAcao('Nenhuma ação no momento', 'Acompanhe o andamento na trilha abaixo.');
+    return semAcao('Sem solicitação pendente', 'Nenhuma solicitação aguardando ação');
   }
 
   const acao = acaoPendente();
   const recusada = solic?.status === 'RECUSADA' && solic.parecer;
-  const docsEsperados = DOCS_ESPERADOS.map((tipo) => ({ tipo, doc: ultimoDoc(tcc?.documentos, tipo) }));
+
+  // Versão final só aparece no Dashboard quando o TCC já passou para a Fase I
+  // (índice >= 2) ou quando já existe um documento VERSAO_FINAL. Antes disso, o
+  // Dashboard mostra só Plano, Termo e Monografia (como no projeto antigo).
+  const mostrarVF = (idx !== null && idx >= 2) || !!ultimoDoc(tcc?.documentos, 'VERSAO_FINAL');
+  const docsEsperados = DOCS_ESPERADOS.filter((t) => t !== 'VERSAO_FINAL' || mostrarVF).map((tipo) => ({
+    tipo,
+    doc: ultimoDoc(tcc?.documentos, tipo),
+  }));
 
   return (
     <>
@@ -173,7 +220,7 @@ export function DashboardAluno() {
             <div className="card-status">
               <div className="card-status-topo">
                 <span className="card-status-titulo">Ação pendente</span>
-                {icoRelogio}
+                {acao.botao ? icoRelogio : icoAlerta}
               </div>
               <div className="card-status-corpo">
                 <span className="forte">{acao.titulo}</span>
@@ -208,7 +255,15 @@ export function DashboardAluno() {
                 {icoAtividade}
               </div>
               <div className="card-status-corpo">
-                <span className="fase">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
+                {(() => {
+                  const fs = faseMacroSub(tcc);
+                  return (
+                    <>
+                      <span className="fase">{fs.macro}</span>
+                      {fs.sub && <span className="fase-sub">{fs.sub}</span>}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </div>

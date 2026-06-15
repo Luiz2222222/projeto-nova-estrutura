@@ -446,6 +446,7 @@ select {
 .card-status-corpo .grande { font-size: 22px; font-weight: 700; color: var(--azul-forte); line-height: 1.15; }
 .card-status-corpo .num { font-size: 20px; font-weight: 700; color: var(--tinta-1); }
 .card-status-corpo .fase { font-size: 22px; font-weight: 700; color: #9333ea; line-height: 1.15; }
+.card-status-corpo .fase-sub { font-size: 14px; font-weight: 600; color: var(--tinta-2); }
 .card-status-corpo .sub { font-size: 13px; color: var(--tinta-3); }
 .card-status-corpo .botao { width: 100%; margin-top: auto; }
 .card-roxo .card-status-topo svg { color: #9333ea; }
