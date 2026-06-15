@@ -1,6 +1,7 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../autenticacao/contexto';
+import { Sino } from './Sino';
 import { ROTULO_PAPEL, type Papel } from '@tcc/compartilhado';
 
 interface ItemNav {
@@ -123,6 +124,8 @@ export function LayoutApp() {
         <div className="barra-marca">
           <img className="topo-logo" src="/Logo.png" alt="DEE" />
         </div>
+        <div className="barra-acoes">
+        <Sino />
         <div className="usuario" ref={menuRef}>
           <button className="usuario-gatilho" onClick={() => setMenuAberto((v) => !v)} aria-haspopup="menu" aria-expanded={menuAberto}>
             <div className="usuario-info">
@@ -150,6 +153,7 @@ export function LayoutApp() {
               </button>
             </div>
           )}
+        </div>
         </div>
       </header>
 

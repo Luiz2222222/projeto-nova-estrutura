@@ -437,6 +437,29 @@ select {
 .linha-toggle > span { display: flex; flex-direction: column; }
 .linha-toggle .legenda { margin: 2px 0 0; }
 
+/* Sino de notificações (header). */
+.barra-acoes { display: flex; align-items: center; gap: 12px; }
+.sino { position: relative; }
+.sino-gatilho { position: relative; display: grid; place-items: center; width: 40px; height: 40px; border: none; border-radius: 999px; background: transparent; color: var(--tinta-2); cursor: pointer; transition: background .15s, color .15s; }
+.sino-gatilho:hover { background: var(--inset); color: var(--azul-forte); }
+.sino-badge { position: absolute; top: 4px; right: 4px; min-width: 17px; height: 17px; padding: 0 4px; border-radius: 999px; background: var(--reprovado); color: #fff; font-size: 10.5px; font-weight: 700; display: grid; place-items: center; line-height: 1; }
+.sino-menu { position: absolute; right: 0; top: calc(100% + 8px); width: 340px; max-width: 90vw; background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-2); box-shadow: var(--sombra-2, 0 10px 30px rgba(0,0,0,.12)); z-index: 50; overflow: hidden; }
+.sino-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 12px 14px; border-bottom: 1px solid var(--borda); }
+.sino-cabecalho strong { font-size: 14px; color: var(--tinta-1); }
+.sino-vazio { padding: 24px 14px; text-align: center; color: var(--tinta-3); font-size: 13.5px; margin: 0; }
+.sino-lista { max-height: 380px; overflow-y: auto; }
+.sino-item { display: flex; gap: 10px; width: 100%; text-align: left; background: none; border: none; border-bottom: 1px solid var(--borda); padding: 12px 14px; cursor: pointer; }
+.sino-item:hover { background: var(--inset); }
+.sino-item:last-child { border-bottom: none; }
+.sino-ponto { flex-shrink: 0; width: 8px; height: 8px; margin-top: 6px; border-radius: 999px; background: transparent; }
+.sino-item.nao-lida { background: var(--azul-suave); }
+.sino-item.nao-lida:hover { background: var(--azul-suave); }
+.sino-item.nao-lida .sino-ponto { background: var(--azul); }
+.sino-item-texto { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.sino-item-titulo { font-size: 13.5px; font-weight: 600; color: var(--tinta-1); }
+.sino-item-msg { font-size: 12.5px; color: var(--tinta-2); line-height: 1.4; }
+.sino-item-data { font-size: 11px; color: var(--tinta-3); margin-top: 2px; }
+
 /* 3 cards de status (Dashboard do aluno — espelha o original) */
 .cards-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .card-status {
