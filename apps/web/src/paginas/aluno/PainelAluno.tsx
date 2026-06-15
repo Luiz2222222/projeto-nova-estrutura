@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC } from '../../utils/fases';
 
@@ -14,6 +15,7 @@ export function PainelAluno() {
   const [tcc, setTcc] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
+  const [modoTimeline, setModoTimeline] = useState<'vertical' | 'horizontal'>('vertical');
 
   function carregar() {
     setCarregando(true);
@@ -111,13 +113,21 @@ export function PainelAluno() {
       )}
 
       <section className="cartao-secao bloco">
-        <h2>Andamento</h2>
-        {idx === null ? (
+        <div className="cabecalho-secao">
+          <h2>Timeline de eventos</h2>
+          <div className="rel-abas" style={{ margin: 0 }}>
+            <button className={`rel-aba${modoTimeline === 'vertical' ? ' ativa' : ''}`} onClick={() => setModoTimeline('vertical')}>Vertical</button>
+            <button className={`rel-aba${modoTimeline === 'horizontal' ? ' ativa' : ''}`} onClick={() => setModoTimeline('horizontal')}>Horizontal</button>
+          </div>
+        </div>
+        {modoTimeline === 'vertical' ? (
+          <TimelineVerticalDetalhada tcc={tcc} />
+        ) : idx === null ? (
           <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
         ) : (
           <TrilhaFases atual={idx} />
         )}
-        <p className="nota-vazio">
+        <p className="nota-vazio" style={{ marginTop: 14 }}>
           Etapa atual: <strong>{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</strong>
         </p>
       </section>
@@ -125,6 +135,10 @@ export function PainelAluno() {
       <section className="cartao-secao bloco">
         <h2>Dados</h2>
         <dl className="dados">
+          <div>
+            <dt>Título</dt>
+            <dd>{tcc.titulo}</dd>
+          </div>
           <div>
             <dt>Orientador</dt>
             <dd>

@@ -622,6 +622,28 @@ textarea { resize: vertical; min-height: 72px; }
 .card-pendente { position: relative; background: rgba(234, 179, 8, 0.10); border: 2px solid rgba(234, 179, 8, 0.40); border-radius: var(--raio-2); padding: 20px 22px; box-shadow: var(--sombra-1); }
 .card-pendente .card-recusa-cabecalho svg { color: #a16207; }
 
+/* Timeline vertical detalhada (grupos numerados expansíveis + subestados). */
+.tl-vert { display: flex; flex-direction: column; }
+.tl-grupo { border-bottom: 1px solid var(--borda); }
+.tl-grupo:last-child { border-bottom: none; }
+.tl-cab { display: flex; align-items: center; gap: 12px; width: 100%; background: none; border: none; padding: 14px 4px; cursor: pointer; text-align: left; }
+.tl-num { flex-shrink: 0; width: 30px; height: 30px; border-radius: 999px; display: grid; place-items: center; font-size: 13px; font-weight: 700; border: 2px solid var(--borda-forte); color: var(--tinta-3); background: var(--papel-1); }
+.tl-num.concluido { background: var(--azul); border-color: var(--azul); color: #fff; }
+.tl-num.atual { border-color: var(--azul); color: var(--azul-forte); box-shadow: 0 0 0 4px var(--azul-suave); }
+.tl-num.problema { background: var(--reprovado); border-color: var(--reprovado); color: #fff; }
+.tl-cab-texto { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.tl-cab-label { font-weight: 600; color: var(--tinta-1); font-size: 15px; }
+.tl-cab-status { font-size: 12.5px; color: var(--tinta-3); }
+.tl-chevron { color: var(--tinta-3); display: inline-flex; transition: transform .15s ease; }
+.tl-chevron.aberto { transform: rotate(90deg); }
+.tl-subs { padding: 0 4px 14px 46px; display: flex; flex-direction: column; gap: 9px; }
+.tl-sub { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--tinta-2); }
+.tl-sub.atual { color: var(--tinta-1); font-weight: 600; }
+.tl-dot { width: 10px; height: 10px; border-radius: 999px; border: 2px solid var(--borda-forte); background: var(--papel-1); flex-shrink: 0; }
+.tl-dot.concluido { background: var(--azul); border-color: var(--azul); }
+.tl-dot.atual { background: var(--azul-suave); border-color: var(--azul); }
+.tl-dot.problema { background: var(--reprovado); border-color: var(--reprovado); }
+
 /* ============================================================
    Casca do app: menu lateral
    ============================================================ */
