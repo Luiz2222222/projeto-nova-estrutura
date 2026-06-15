@@ -3,6 +3,12 @@ import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ROTULO_FASE } from '../../utils/fases';
 
+const icoBaixar = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+  </svg>
+);
+
 type Doc = { id: string; tipo: string; status: string; versao: number; parecer?: string | null; nomeArquivo: string };
 
 function ultimaMonografia(docs: Doc[] = []): Doc | null {
@@ -116,9 +122,9 @@ export function MeusOrientandos() {
                           <span className="meta">Versão {mono.versao} · {statusDoc(mono.status)}</span>
                         </div>
                       </div>
-                      <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${mono.id}/baixar`} target="_blank" rel="noreferrer">
-                        Baixar
-                      </a>
+                      <span className="acoes-doc">
+                        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${mono.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                      </span>
                     </div>
                   ) : (
                     <p className="nota-vazio">Aguardando o aluno enviar a monografia.</p>
@@ -170,7 +176,7 @@ export function MeusOrientandos() {
                             <span className="meta">Versão {vf.versao}</span>
                           </div>
                         </div>
-                        <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${vf.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
+                        <span className="acoes-doc"><a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${vf.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a></span>
                       </div>
                     ) : (
                       <p className="nota-vazio">Aguardando o aluno enviar a versão final.</p>

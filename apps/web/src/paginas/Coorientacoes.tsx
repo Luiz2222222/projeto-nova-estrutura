@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { apiGet, URL_API } from '../api';
 import { ROTULO_FASE } from '../utils/fases';
 
+const icoBaixar = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+  </svg>
+);
+
 // Coorientações: TCCs em que o usuário (professor ou avaliador) é coorientador.
 // Visão de leitura — o coorientador não toma as ações do orientador.
 
@@ -67,9 +73,9 @@ export function Coorientacoes() {
                             <span className="meta">{d.tipo === 'MONOGRAFIA' ? 'Monografia' : 'Versão final'} · versão {d.versao}</span>
                           </div>
                         </div>
-                        <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">
-                          Baixar
-                        </a>
+                        <span className="acoes-doc">
+                          <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                        </span>
                       </div>
                     ))}
                   </div>
