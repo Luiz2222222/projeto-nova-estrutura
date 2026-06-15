@@ -23,6 +23,10 @@ export function DashboardProfessor() {
 
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
   const pendencias = tccs.filter(precisaAcao).length;
+  const emDesenvolvimento = tccs.filter((t) => t.faseAtual === 'DESENVOLVIMENTO').length;
+  const emAvaliacao = tccs.filter((t) =>
+    ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1', 'AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'].includes(t.faseAtual),
+  ).length;
   const disponivel = usuario?.disponivelParaOrientar ?? false;
 
   async function alternarDisponibilidade() {
@@ -45,7 +49,15 @@ export function DashboardProfessor() {
       <div className="cartoes-resumo bloco">
         <button className="cartao-resumo" onClick={() => navegar('/professor/orientandos')}>
           <span className="resumo-numero">{tccs.length}</span>
-          <span className="resumo-rotulo">Orientandos</span>
+          <span className="resumo-rotulo">Total de orientandos</span>
+        </button>
+        <button className="cartao-resumo" onClick={() => navegar('/professor/orientandos')}>
+          <span className="resumo-numero">{emDesenvolvimento}</span>
+          <span className="resumo-rotulo">Em desenvolvimento</span>
+        </button>
+        <button className="cartao-resumo" onClick={() => navegar('/professor/orientandos')}>
+          <span className="resumo-numero">{emAvaliacao}</span>
+          <span className="resumo-rotulo">Em avaliação</span>
         </button>
         <button className="cartao-resumo" onClick={() => navegar('/professor/orientandos')}>
           <span className="resumo-numero">{pendencias}</span>
