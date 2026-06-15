@@ -346,6 +346,7 @@ select {
 /* ============================================================
    Listas, dados, formulários do domínio
    ============================================================ */
+.titulo-bloco { font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tinta-3); margin: 0 0 10px; }
 .dados { display: grid; gap: 10px; margin: 0; }
 .dados > div { display: grid; grid-template-columns: 160px 1fr; gap: 8px; font-size: 14px; }
 .dados dt { color: var(--tinta-3); font-weight: 600; margin: 0; }

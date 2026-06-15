@@ -1,13 +1,26 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPost, type ErroApi } from '../../api';
+import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ROTULO_FASE } from '../../utils/fases';
+import { ROTULO_CURSO } from '@tcc/compartilhado';
 
 const bancaDe = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase);
 const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1';
 const ehValidar = (f: string) => f === 'VALIDACAO_FASE_1' || f === 'VALIDACAO_FASE_2';
 const qtdBanca = (_f: string) => 2; // só a Fase I é formada manualmente (2 avaliadores)
 const faseValidando = (f: string) => (f === 'VALIDACAO_FASE_2' ? 'FASE_2' : 'FASE_1');
+
+const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
+const ROTULO_DOC: Record<string, string> = {
+  PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento',
+  TERMO_ACEITE: 'Termo de aceite',
+  MONOGRAFIA: 'Monografia',
+  VERSAO_FINAL: 'Versão final',
+};
+const rotuloDoc = (t: string) => ROTULO_DOC[t] ?? t;
+const rotuloStatusDoc = (s: string) =>
+  ({ PENDENTE: 'Aguardando', EM_ANALISE: 'Em análise', APROVADO: 'Aprovado', REJEITADO: 'Rejeitado', SUBSTITUIDA: 'Substituída' } as Record<string, string>)[s] ?? s;
+const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 
 export function TccsCoordenador() {
   const [tccs, setTccs] = useState<any[]>([]);
@@ -19,6 +32,8 @@ export function TccsCoordenador() {
 
   const [validando, setValidando] = useState<any | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
+
+  const [detalhe, setDetalhe] = useState<any | null>(null);
 
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -103,18 +118,17 @@ export function TccsCoordenador() {
                 {t.nf2 != null ? ` · NF2: ${Number(t.nf2).toFixed(1)}` : ''}
                 {t.nf != null ? ` · NF: ${Number(t.nf).toFixed(1)}` : ''}
               </p>
-              {ehFormar(t.faseAtual) && (
-                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                <button className="botao botao-secundario" onClick={() => setDetalhe(t)}>Ver detalhes</button>
+                {ehFormar(t.faseAtual) && (
                   <button className="botao" onClick={() => abrirFormar(t)}>Formar banca (Fase I)</button>
-                </div>
-              )}
-              {ehValidar(t.faseAtual) && (
-                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                )}
+                {ehValidar(t.faseAtual) && (
                   <button className="botao" onClick={() => { setValidando(t); setResultado(null); setErro(''); }}>
                     {t.faseAtual === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
                   </button>
-                </div>
-              )}
+                )}
+              </div>
             </section>
           ))}
         </div>
@@ -203,6 +217,80 @@ export function TccsCoordenador() {
               {!resultado && (
                 <button className="botao" disabled={enviando} onClick={confirmarValidar}>{enviando ? 'Validando…' : 'Validar'}</button>
               )}
+            </div>
+          </Modal>
+        );
+      })()}
+
+      {detalhe && (() => {
+        const t = detalhe;
+        const coorient = t.coorientador
+          ? nomeComTrat(t.coorientador)
+          : t.coorientadorNome
+            ? `${t.coorientadorTitulacao ? t.coorientadorTitulacao + ' ' : ''}${t.coorientadorNome}${t.coorientadorAfiliacao ? ' · ' + t.coorientadorAfiliacao : ''}`
+            : '—';
+        const bancas = [...(t.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+        return (
+          <Modal titulo={t.titulo} subtitulo={ROTULO_FASE[t.faseAtual] ?? t.faseAtual} aoFechar={() => setDetalhe(null)}>
+            <h3 className="titulo-bloco">Dados gerais</h3>
+            <dl className="dados">
+              <div><dt>Aluno</dt><dd>{t.aluno?.nomeCompleto}{t.aluno?.email ? ` · ${t.aluno.email}` : ''}</dd></div>
+              <div><dt>Curso</dt><dd>{cursoDe(t.aluno?.curso)}</dd></div>
+              <div><dt>Semestre</dt><dd>{t.semestre}</dd></div>
+              <div><dt>Orientador</dt><dd>{nomeComTrat(t.orientador)}</dd></div>
+              <div><dt>Coorientador</dt><dd>{coorient}</dd></div>
+              {(t.nf1 != null || t.nf2 != null || t.nf != null) && (
+                <div><dt>Notas</dt><dd>
+                  {t.nf1 != null ? `NF1 ${Number(t.nf1).toFixed(1)}` : '—'}
+                  {t.nf2 != null ? ` · NF2 ${Number(t.nf2).toFixed(1)}` : ''}
+                  {t.nf != null ? ` · NF ${Number(t.nf).toFixed(1)}` : ''}
+                  {t.resultado ? ` · ${t.resultado}` : ''}
+                </dd></div>
+              )}
+            </dl>
+
+            <h3 className="titulo-bloco" style={{ marginTop: 18 }}>Documentos</h3>
+            {(t.documentos ?? []).length === 0 ? (
+              <p className="nota-vazio">Nenhum documento enviado.</p>
+            ) : (
+              t.documentos.map((d: any) => (
+                <div key={d.id} className="item-arquivo">
+                  <div className="item-arquivo-info">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                      <polyline points="14 2 14 8 20 8" />
+                    </svg>
+                    <div>
+                      <span className="nome">{rotuloDoc(d.tipo)}</span>
+                      <span className="meta">v{d.versao} · {rotuloStatusDoc(d.status)}</span>
+                    </div>
+                  </div>
+                  <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
+                </div>
+              ))
+            )}
+
+            <h3 className="titulo-bloco" style={{ marginTop: 18 }}>Banca e notas</h3>
+            {bancas.length === 0 ? (
+              <p className="nota-vazio">Banca ainda não formada.</p>
+            ) : (
+              bancas.map((b: any) => (
+                <div key={b.id} className="trilha-bloco">
+                  <div className="trilha-titulo"><strong>{b.fase === 'FASE_1' ? 'Fase I' : 'Fase II'}</strong></div>
+                  <dl className="dados">
+                    {(b.membros ?? []).map((m: any) => (
+                      <div key={m.id}>
+                        <dt>{nomeComTrat(m.avaliador)}</dt>
+                        <dd>{m.nota != null ? Number(m.nota).toFixed(1) : '—'}{m.parecer ? ` · ${m.parecer}` : ''}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </div>
+              ))
+            )}
+
+            <div className="acoes">
+              <button className="botao" onClick={() => setDetalhe(null)}>Fechar</button>
             </div>
           </Modal>
         );

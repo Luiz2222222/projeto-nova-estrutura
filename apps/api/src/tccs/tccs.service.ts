@@ -100,15 +100,17 @@ export class TccsService {
     return { ok: true };
   }
 
-  // TCCs do período atual (visão do coordenador), com dados pra gerir banca/fase.
+  // TCCs do período atual (visão do coordenador), com dados pra gerir banca/fase
+  // e abrir o detalhe (aluno, orientador, coorientador, documentos, banca + notas).
   todos() {
     return this.prisma.tcc.findMany({
       where: { semestre: semestreAtual() },
       include: {
-        aluno: { select: { id: true, nomeCompleto: true, curso: true } },
+        aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
-        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
-        documentos: true,
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
+        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
+        documentos: { orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },
     });
