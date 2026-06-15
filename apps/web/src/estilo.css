@@ -470,9 +470,12 @@ select {
 .cabecalho-secao { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 .cabecalho-secao h2 { margin: 0; }
 
-.acoes-doc { display: inline-flex; gap: 6px; }
-.botao-icone { display: inline-grid; place-items: center; width: 30px; height: 30px; border: 1px solid var(--borda); border-radius: var(--raio-1); color: var(--tinta-2); background: var(--papel-1); cursor: pointer; }
-.botao-icone:hover { background: var(--inset); color: var(--azul-forte); }
+.acoes-doc { display: inline-flex; gap: 8px; align-items: center; justify-content: center; }
+/* Ícone limpo (olho/baixar), como no projeto antigo: sem fundo/borda, só o ícone
+   colorido com hover de opacidade. Alinhado e sem o "quadrado branco". */
+.botao-icone { display: inline-grid; place-items: center; width: 28px; height: 28px; border: none; border-radius: var(--raio-1); color: var(--azul-forte); background: transparent; cursor: pointer; transition: opacity .15s ease; }
+.botao-icone:hover { opacity: 0.65; background: transparent; color: var(--azul-forte); }
+.botao-icone svg { width: 18px; height: 18px; }
 
 /* Barra de filtros (Documentos do aluno) */
 .filtros { display: flex; gap: 16px; flex-wrap: wrap; }
