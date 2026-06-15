@@ -41,8 +41,34 @@ model Usuario {
   tccsComoCoorientador Tcc[] @relation("TccCoorientador")
   bancasComoAvaliador  MembroBanca[]
   tokensSenha          TokenSenha[]
+  preferenciasEmail    PreferenciaEmail[]
 
   @@map("usuarios")
+}
+
+// Configuração GLOBAL de envio de e-mail (linha única). Dois interruptores:
+// recuperação de senha e e-mails normais do fluxo do TCC.
+model ConfiguracaoEmail {
+  id                    String   @id @default("global")
+  recuperacaoSenhaAtiva Boolean  @default(true)
+  fluxoTccAtivo         Boolean  @default(true)
+  atualizadoEm          DateTime @updatedAt
+  criadoEm              DateTime @default(now())
+
+  @@map("configuracao_email")
+}
+
+// Preferência individual por usuário e tipo de evento (só vale para e-mails de
+// fluxo; recuperação de senha não depende disso). Sem linha = padrão LIGADO.
+model PreferenciaEmail {
+  id        String  @id @default(cuid())
+  usuario   Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  evento    String
+  ativo     Boolean @default(true)
+
+  @@unique([usuarioId, evento])
+  @@map("preferencias_email")
 }
 
 // Token de recuperação de senha (uso único, prazo curto). Guardamos só o HASH do

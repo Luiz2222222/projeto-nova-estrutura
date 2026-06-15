@@ -19,6 +19,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { join } from 'path';
 import { CoordenacaoService } from './coordenacao.service';
+import { EmailService } from '../email/email.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
@@ -34,7 +35,26 @@ type Req = { usuario: { sub: string; papel: string; nomeCompleto?: string } };
 
 @Controller()
 export class CoordenacaoController {
-  constructor(private readonly coord: CoordenacaoService) {}
+  constructor(
+    private readonly coord: CoordenacaoService,
+    private readonly email: EmailService,
+  ) {}
+
+  // ---------- Configuração global de e-mails (só coordenador) ----------
+
+  @Get('email-config')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  emailConfig() {
+    return this.email.obterConfig();
+  }
+
+  @Put('email-config')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  salvarEmailConfig(@Body() dados: { recuperacaoSenhaAtiva?: boolean; fluxoTccAtivo?: boolean }) {
+    return this.email.atualizarConfig(dados);
+  }
 
   // ---------- Calendário ----------
 

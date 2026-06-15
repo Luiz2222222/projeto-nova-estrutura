@@ -249,3 +249,53 @@ export const DESC_MARCO: Record<MarcoCalendario, string> = {
   apresentacaoFase2: 'Prazo final para as apresentações orais.',
   ajustesFinais: 'Prazo para correções após a defesa.',
 };
+
+// ---------- E-mails do fluxo do TCC ----------
+// Catálogo dos tipos de e-mail "normais" (de fluxo). A recuperação de senha NÃO
+// entra aqui — é uma categoria à parte, controlada só pelo toggle global.
+// `papeis` define quais usuários veem/ajustam a preferência do evento.
+export interface EventoEmail {
+  chave: string;
+  rotulo: string;
+  grupo: string;
+  papeis: Papel[];
+}
+
+export const EVENTOS_EMAIL: EventoEmail[] = [
+  // Aluno
+  { chave: 'aluno_solicitacao_enviada', rotulo: 'Solicitação enviada', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_solicitacao_aprovada', rotulo: 'Solicitação aprovada', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_solicitacao_recusada', rotulo: 'Solicitação recusada', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_monografia_rejeitada', rotulo: 'Monografia rejeitada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_monografia_aprovada', rotulo: 'Monografia aprovada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_continuidade_rejeitada', rotulo: 'Continuidade rejeitada / descontinuação', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_banca_fase1_formada', rotulo: 'Banca da Fase I formada', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_resultado_fase1', rotulo: 'Resultado da Fase I validado', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_resultado_fase2', rotulo: 'Resultado da Fase II validado', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_versao_final_solicitada', rotulo: 'Versão final solicitada', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_versao_final_rejeitada', rotulo: 'Versão final rejeitada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_tcc_concluido', rotulo: 'TCC concluído / aprovado', grupo: 'Aluno', papeis: ['ALUNO'] },
+  // Orientador (professor)
+  { chave: 'orientador_definido', rotulo: 'Definido como orientador de um TCC aprovado', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_monografia_enviada', rotulo: 'Aluno enviou/reenviou monografia', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_confirmar_continuidade', rotulo: 'Precisa confirmar continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_versao_final_enviada', rotulo: 'Aluno enviou versão final', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_versao_final_reenviada', rotulo: 'Versão final reenviada após ajustes', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_tcc_concluido', rotulo: 'TCC concluído', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  // Coordenador
+  { chave: 'coord_nova_solicitacao', rotulo: 'Nova solicitação aguardando análise', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_solicitacao_corrigida', rotulo: 'Solicitação corrigida/reaberta pelo aluno', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_formar_banca_fase1', rotulo: 'Monografia aprovada + continuidade: formar banca Fase I', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_validar_fase1', rotulo: 'Notas da Fase I completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_validar_fase2', rotulo: 'Notas da Fase II completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  // Avaliadores / membros da banca (professor ou avaliador)
+  { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'avaliador_fase1_liberada', rotulo: 'Avaliação da Fase I liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'avaliador_adicionado_fase2', rotulo: 'Adicionado à banca da Fase II', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'avaliador_fase2_liberada', rotulo: 'Avaliação da Fase II liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  // Coorientador (professor ou avaliador)
+  { chave: 'coorientador_indicado', rotulo: 'Indicado como coorientador', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'coorientador_mudanca_fase', rotulo: 'Mudança de fase importante do TCC', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
+];
+
+export const CHAVES_EVENTO_EMAIL = EVENTOS_EMAIL.map((e) => e.chave);

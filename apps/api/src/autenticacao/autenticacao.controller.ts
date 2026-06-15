@@ -11,6 +11,7 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import { AutenticacaoService } from './autenticacao.service';
+import { EmailService } from '../email/email.service';
 import { GuardaJwt } from './guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
@@ -28,7 +29,10 @@ const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
 @Controller('autenticacao')
 export class AutenticacaoController {
-  constructor(private readonly auth: AutenticacaoService) {}
+  constructor(
+    private readonly auth: AutenticacaoService,
+    private readonly email: EmailService,
+  ) {}
 
   @Post('cadastro')
   async cadastro(@Body(new ZodValidacaoPipe(esquemaCadastro)) dados: DadosCadastro) {
@@ -95,6 +99,22 @@ export class AutenticacaoController {
   ) {
     await this.auth.trocarSenha(req.usuario!.sub, dados.senhaAtual, dados.novaSenha);
     return { ok: true };
+  }
+
+  // Preferências de e-mail do próprio usuário (quais e-mails de fluxo quer receber).
+  @Get('preferencias-email')
+  @UseGuards(GuardaJwt)
+  preferenciasEmail(@Req() req: Request & { usuario?: { sub: string } }) {
+    return this.email.obterPreferencias(req.usuario!.sub);
+  }
+
+  @Put('preferencias-email')
+  @UseGuards(GuardaJwt)
+  atualizarPreferenciaEmail(
+    @Req() req: Request & { usuario?: { sub: string } },
+    @Body() dados: { evento?: string; ativo?: boolean },
+  ) {
+    return this.email.atualizarPreferencia(req.usuario!.sub, dados.evento ?? '', !!dados.ativo);
   }
 
   // Professor liga/desliga a disponibilidade para orientar.
