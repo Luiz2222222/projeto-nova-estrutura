@@ -2,6 +2,7 @@ import { SecaoCalendario } from './SecaoCalendario';
 import { SecaoCodigos } from './SecaoCodigos';
 import { SecaoPesos } from './SecaoPesos';
 import { SecaoModelos } from './SecaoModelos';
+import { SecaoConfiguracaoEmail } from './SecaoConfiguracaoEmail';
 import { SecaoDados } from './SecaoDados';
 
 // Espelha "Planejamento acadêmico" do projeto original: calendário do semestre + documentos
@@ -15,6 +16,7 @@ export function PlanejamentoCoordenador() {
       <SecaoCodigos />
       <SecaoPesos />
       <SecaoModelos />
+      <SecaoConfiguracaoEmail />
       <SecaoDados />
     </>
   );

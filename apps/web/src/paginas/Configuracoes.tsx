@@ -1,4 +1,5 @@
 import { useTema, type Familia, type Fonte, type Tema } from '../tema/contexto';
+import { PreferenciasEmail } from '../componentes/PreferenciasEmail';
 
 const TEMAS: { valor: Tema; titulo: string; fundo: string; destaque: string }[] = [
   { valor: 'claro', titulo: 'Claro', fundo: '#fafafa', destaque: '#0ea5e9' },
@@ -93,6 +94,8 @@ export function Configuracoes() {
           </div>
         </div>
       </section>
+
+      <PreferenciasEmail />
     </>
   );
 }
