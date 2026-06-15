@@ -1,7 +1,17 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
+import { ROTULO_TIPO_DOC } from '../../utils/fases';
 import { Modal } from '../../componentes/Modal';
+
+const ic = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {d.split('|').map((p, i) => <path key={i} d={p} />)}
+  </svg>
+);
+const icoArquivo = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
+const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
+const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
 
 export function PainelCoordenador() {
   const [pendentes, setPendentes] = useState<any[]>([]);
@@ -82,16 +92,21 @@ export function PainelCoordenador() {
 
                 <h3 style={{ marginTop: 14, fontSize: 14 }}>Documentos</h3>
                 {t.documentos?.length ? (
-                  <ul className="lista-docs">
-                    {t.documentos.map((d: any) => (
-                      <li key={d.id}>
-                        <a href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">
-                          {d.nomeArquivo}
-                        </a>{' '}
-                        <span className="muted">({d.tipo})</span>
-                      </li>
-                    ))}
-                  </ul>
+                  t.documentos.map((d: any) => (
+                    <div key={d.id} className="item-arquivo">
+                      <div className="item-arquivo-info">
+                        {icoArquivo}
+                        <div>
+                          <span className="nome">{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</span>
+                          <span className="meta">{d.nomeArquivo}</span>
+                        </div>
+                      </div>
+                      <span className="acoes-doc">
+                        <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                      </span>
+                    </div>
+                  ))
                 ) : (
                   <p className="nota-vazio">Nenhum documento.</p>
                 )}
