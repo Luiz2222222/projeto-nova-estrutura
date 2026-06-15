@@ -15,6 +15,16 @@ function semestreAtual(): string {
   return `${d.getFullYear()}.${s}`;
 }
 
+// Prazo encerrado: existe a data e ela já passou (compara só a data; o próprio
+// dia do prazo ainda é permitido). Sem data, não há prazo a encerrar.
+function prazoEncerrado(prazo?: Date | null): boolean {
+  if (!prazo) return false;
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
+  const dia = new Date(prazo.getUTCFullYear(), prazo.getUTCMonth(), prazo.getUTCDate());
+  return hoje > dia;
+}
+
 @Injectable()
 export class TccsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -42,6 +52,15 @@ export class TccsService {
       where: { alunoId_semestre: { alunoId, semestre } },
     });
     if (jaTem) throw new BadRequestException({ mensagem: 'Você já tem um TCC neste semestre.' });
+
+    // Prazo de envio de documentos (calendário da coordenação): se já encerrou, bloqueia
+    // a abertura — espelha o bloqueio do projeto antigo. Sem data definida, não bloqueia.
+    const calendario = await this.prisma.calendario.findUnique({ where: { semestre } });
+    if (prazoEncerrado(calendario?.envioDocumentos)) {
+      throw new BadRequestException({
+        mensagem: 'O prazo de envio de documentos já encerrou. Procure a coordenação.',
+      });
+    }
 
     const orientador = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
     if (!orientador || orientador.papel !== 'PROFESSOR') {

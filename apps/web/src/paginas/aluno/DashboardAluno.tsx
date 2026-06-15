@@ -4,6 +4,7 @@ import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC } from '../../utils/fases';
+import { prazoEncerrado } from '../../utils/prazos';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
@@ -205,7 +206,19 @@ export function DashboardAluno() {
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
           <h2>Você ainda não iniciou seu TCC</h2>
           <p className="nota-vazio">Comece enviando a solicitação de orientação com os documentos iniciais.</p>
-          <button className="botao" style={{ marginTop: 16 }} onClick={() => navegar('/aluno/abrir')}>Iniciar meu TCC</button>
+          {prazoEncerrado(calendario?.envioDocumentos) && (
+            <div className="alerta alerta-erro" style={{ marginTop: 16, textAlign: 'left' }}>
+              <strong>Prazo encerrado.</strong> O período de envio de documentos já terminou — procure a coordenação.
+            </div>
+          )}
+          <button
+            className="botao"
+            style={{ marginTop: 16 }}
+            disabled={prazoEncerrado(calendario?.envioDocumentos)}
+            onClick={() => navegar('/aluno/abrir')}
+          >
+            Iniciar meu TCC
+          </button>
         </section>
       ) : (
         <>
