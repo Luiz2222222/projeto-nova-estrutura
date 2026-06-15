@@ -222,6 +222,7 @@ export class BancasService {
         await this.notificar('avaliador_adicionado_fase2', id, 'Você está na banca da Fase II', `Você integra a banca da Fase II do TCC "${tcc.titulo}".`);
         await this.notificar('avaliador_fase2_liberada', id, 'Avaliação da Fase II liberada', `A avaliação da Fase II do TCC "${tcc.titulo}" está liberada na sua área de bancas.`);
       }
+      await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase II', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase II.`);
       return { ok: true, fase, nf1: media, aprovado };
     }
 
@@ -244,6 +245,7 @@ export class BancasService {
     await this.notificar('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada (NF ${nf.toFixed(2)}). ${aprovado ? 'Aprovado na defesa!' : 'Resultado: reprovado.'}`);
     if (aprovado) {
       await this.notificar('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
+      await this.notificar('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
     }
     return { ok: true, fase, nf2, nf, aprovado };
   }

@@ -284,7 +284,8 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'orientador_tcc_concluido', rotulo: 'TCC concluído', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   // Coordenador
   { chave: 'coord_nova_solicitacao', rotulo: 'Nova solicitação aguardando análise', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
-  { chave: 'coord_solicitacao_corrigida', rotulo: 'Solicitação corrigida/reaberta pelo aluno', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  // coord_solicitacao_corrigida removido por ora: o "Corrigir e reenviar" apaga o TCC recusado
+  // e cria um novo (vira coord_nova_solicitacao); não há como distinguir reabertura sem mudar o fluxo.
   { chave: 'coord_formar_banca_fase1', rotulo: 'Monografia aprovada + continuidade: formar banca Fase I', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_validar_fase1', rotulo: 'Notas da Fase I completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_validar_fase2', rotulo: 'Notas da Fase II completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
