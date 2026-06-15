@@ -8,6 +8,7 @@ import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { NotificacoesService } from '../notificacoes/notificacoes.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import type { DadosAbrirTcc } from '@tcc/compartilhado';
 
@@ -32,19 +33,25 @@ export class TccsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly email: EmailService,
+    private readonly notificacoes: NotificacoesService,
   ) {}
 
-  // ---------- Notificações por e-mail (helpers; nunca quebram o fluxo) ----------
+  // ---------- Avisos (e-mail + notificação interna; nunca quebram o fluxo) ----------
+  // A notificação interna NÃO depende das preferências de e-mail (sistemas separados).
 
   private async notificar(evento: string, usuarioId: string | null | undefined, assunto: string, texto: string) {
     if (!usuarioId) return;
     const p = await this.prisma.usuario.findUnique({ where: { id: usuarioId }, select: { id: true, email: true, nomeCompleto: true } });
     if (p) await this.email.enviarEvento(evento, p, assunto, texto);
+    await this.notificacoes.criar(usuarioId, evento, assunto, texto);
   }
 
   private async notificarCoordenadores(evento: string, assunto: string, texto: string) {
     const coords = await this.prisma.usuario.findMany({ where: { papel: 'COORDENADOR' }, select: { id: true, email: true, nomeCompleto: true } });
-    for (const c of coords) await this.email.enviarEvento(evento, c, assunto, texto);
+    for (const c of coords) {
+      await this.email.enviarEvento(evento, c, assunto, texto);
+      await this.notificacoes.criar(c.id, evento, assunto, texto);
+    }
   }
 
   professoresDisponiveis() {

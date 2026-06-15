@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './email/email.module';
+import { NotificacoesModule } from './notificacoes/notificacoes.module';
 import { AutenticacaoModule } from './autenticacao/autenticacao.module';
 import { TccsModule } from './tccs/tccs.module';
 import { CoordenacaoModule } from './coordenacao/coordenacao.module';
@@ -13,6 +14,7 @@ import { SaudeController } from './saude/saude.controller';
     ConfigModule.forRoot({ isGlobal: true }),
     PrismaModule,
     EmailModule,
+    NotificacoesModule,
     AutenticacaoModule,
     TccsModule,
     CoordenacaoModule,
