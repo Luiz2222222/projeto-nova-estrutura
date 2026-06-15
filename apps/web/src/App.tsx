@@ -3,6 +3,8 @@ import type { Papel } from '@tcc/compartilhado';
 import { ProvedorAuth, useAuth } from './autenticacao/contexto';
 import { ProvedorTema } from './tema/contexto';
 import { Login } from './paginas/Login';
+import { RecuperarSenha } from './paginas/RecuperarSenha';
+import { RedefinirSenha } from './paginas/RedefinirSenha';
 import { LayoutApp } from './componentes/LayoutApp';
 import { RedirecionarHome } from './paginas/RedirecionarHome';
 import { PlaceholderPapel } from './paginas/PlaceholderPapel';
@@ -49,6 +51,8 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/recuperar-senha" element={<RecuperarSenha />} />
+          <Route path="/redefinir-senha" element={<RedefinirSenha />} />
 
           <Route
             element={

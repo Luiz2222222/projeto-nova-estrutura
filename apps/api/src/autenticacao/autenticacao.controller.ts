@@ -63,6 +63,21 @@ export class AutenticacaoController {
     return { ok: true };
   }
 
+  // Esqueci minha senha: dispara o e-mail com o link (resposta sempre "ok", não
+  // revela se o e-mail existe).
+  @Post('recuperar-senha')
+  async recuperarSenha(@Body('email') email: string) {
+    await this.auth.solicitarRecuperacaoSenha(email || '');
+    return { ok: true };
+  }
+
+  // Redefine a senha a partir do token do link recebido por e-mail.
+  @Post('redefinir-senha')
+  async redefinirSenha(@Body() dados: { token?: string; novaSenha?: string; confirmarNovaSenha?: string }) {
+    await this.auth.redefinirSenha(dados.token ?? '', dados.novaSenha ?? '', dados.confirmarNovaSenha ?? '');
+    return { ok: true };
+  }
+
   @Get('eu')
   @UseGuards(GuardaJwt)
   async eu(@Req() req: Request & { usuario?: { sub: string } }) {

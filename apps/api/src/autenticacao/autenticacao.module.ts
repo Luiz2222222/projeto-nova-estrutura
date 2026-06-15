@@ -5,6 +5,7 @@ import { AutenticacaoController } from './autenticacao.controller';
 import { AutenticacaoService } from './autenticacao.service';
 import { GuardaJwt } from './guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
+import { EmailService } from '../email/email.service';
 
 @Module({
   imports: [
@@ -24,7 +25,7 @@ import { GuardaPapeis } from '../comum/guarda-papeis';
     }),
   ],
   controllers: [AutenticacaoController],
-  providers: [AutenticacaoService, GuardaJwt, GuardaPapeis],
+  providers: [AutenticacaoService, GuardaJwt, GuardaPapeis, EmailService],
   exports: [GuardaJwt, JwtModule],
 })
 export class AutenticacaoModule {}

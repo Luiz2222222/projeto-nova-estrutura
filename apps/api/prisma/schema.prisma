@@ -40,8 +40,23 @@ model Usuario {
   tccsComoOrientador   Tcc[] @relation("TccOrientador")
   tccsComoCoorientador Tcc[] @relation("TccCoorientador")
   bancasComoAvaliador  MembroBanca[]
+  tokensSenha          TokenSenha[]
 
   @@map("usuarios")
+}
+
+// Token de recuperação de senha (uso único, prazo curto). Guardamos só o HASH do
+// token; o valor cru vai apenas no link enviado por e-mail.
+model TokenSenha {
+  id        String    @id @default(cuid())
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  tokenHash String    @unique
+  expiraEm  DateTime
+  usadoEm   DateTime?
+  criadoEm  DateTime  @default(now())
+
+  @@map("tokens_senha")
 }
 
 // Código que controla quem pode se cadastrar, por tipo de usuário.

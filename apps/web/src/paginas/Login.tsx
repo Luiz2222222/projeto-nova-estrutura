@@ -80,7 +80,7 @@ export function Login() {
             <input type="checkbox" checked={manterLogin} onChange={(e) => setManterLogin(e.target.checked)} />
             <span>Manter login</span>
           </label>
-          <a className="vidro-link" href="/esqueci-senha" onClick={(e) => e.preventDefault()}>
+          <a className="vidro-link" href="/recuperar-senha" onClick={(e) => { e.preventDefault(); navegar('/recuperar-senha'); }}>
             Esqueci minha senha
           </a>
         </div>

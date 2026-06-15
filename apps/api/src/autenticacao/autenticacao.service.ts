@@ -5,7 +5,9 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
+import { EmailService } from '../email/email.service';
 import type { DadosCadastro, DadosLogin, UsuarioPublico } from '@tcc/compartilhado';
 
 @Injectable()
@@ -13,6 +15,7 @@ export class AutenticacaoService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwt: JwtService,
+    private readonly email: EmailService,
   ) {}
 
   // Remove a senha antes de devolver o usuário.
@@ -105,6 +108,60 @@ export class AutenticacaoService {
     }
     const senhaHash = await bcrypt.hash(novaSenha, 10);
     await this.prisma.usuario.update({ where: { id: userId }, data: { senhaHash } });
+  }
+
+  // ---------- Recuperação de senha ("esqueci minha senha") ----------
+
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
+  // Solicita o link de recuperação. NUNCA revela se o e-mail existe (resposta
+  // sempre "ok") para não vazar quais e-mails estão cadastrados.
+  async solicitarRecuperacaoSenha(email: string): Promise<void> {
+    const u = await this.prisma.usuario.findUnique({ where: { email: (email || '').toLowerCase() } });
+    if (!u) return;
+
+    // Invalida pedidos anteriores ainda pendentes desse usuário.
+    await this.prisma.tokenSenha.deleteMany({ where: { usuarioId: u.id, usadoEm: null } });
+
+    const token = crypto.randomBytes(32).toString('hex');
+    const expiraEm = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
+    await this.prisma.tokenSenha.create({
+      data: { usuarioId: u.id, tokenHash: this.hashToken(token), expiraEm },
+    });
+
+    const base = process.env.APP_URL || 'http://localhost:5173';
+    const link = `${base}/redefinir-senha?token=${token}`;
+    await this.email.enviarRecuperacaoSenha(u.email, u.nomeCompleto, link);
+  }
+
+  // Redefine a senha a partir do token do link. Valida hash, prazo e uso único.
+  async redefinirSenha(token: string, novaSenha: string, confirmarNovaSenha: string): Promise<void> {
+    if (!token) throw new BadRequestException({ mensagem: 'Link inválido.' });
+    if (!novaSenha || novaSenha.length < 6) {
+      throw new BadRequestException({
+        mensagem: 'A nova senha precisa ter ao menos 6 caracteres.',
+        erros: [{ campo: 'novaSenha', mensagem: 'Mínimo 6 caracteres' }],
+      });
+    }
+    if (novaSenha !== confirmarNovaSenha) {
+      throw new BadRequestException({
+        mensagem: 'As senhas não coincidem.',
+        erros: [{ campo: 'confirmarNovaSenha', mensagem: 'As senhas não coincidem' }],
+      });
+    }
+
+    const registro = await this.prisma.tokenSenha.findUnique({ where: { tokenHash: this.hashToken(token) } });
+    if (!registro || registro.usadoEm || registro.expiraEm < new Date()) {
+      throw new BadRequestException({ mensagem: 'Link inválido ou expirado. Solicite a recuperação novamente.' });
+    }
+
+    const senhaHash = await bcrypt.hash(novaSenha, 10);
+    await this.prisma.$transaction([
+      this.prisma.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } }),
+      this.prisma.tokenSenha.update({ where: { id: registro.id }, data: { usadoEm: new Date() } }),
+    ]);
   }
 
   // Professor liga/desliga a disponibilidade para receber novas orientações.
