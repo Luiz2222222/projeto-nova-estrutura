@@ -71,6 +71,16 @@ model ConfiguracaoEmail {
   id                    String   @id @default("global")
   recuperacaoSenhaAtiva Boolean  @default(true)
   fluxoTccAtivo         Boolean  @default(true)
+
+  // SMTP configurável pela UI (substitui o .env quando smtpHost estiver setado).
+  // A senha é guardada CRIPTOGRAFADA (AES-256-GCM); nunca em texto puro.
+  smtpHost               String?
+  smtpPort               Int?
+  smtpSecure             Boolean @default(false)
+  smtpUsuario            String?
+  smtpRemetente          String?
+  smtpSenhaCriptografada String?
+
   atualizadoEm          DateTime @updatedAt
   criadoEm              DateTime @default(now())
 

@@ -46,13 +46,25 @@ export class CoordenacaoController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   emailConfig() {
-    return this.email.obterConfig();
+    return this.email.obterConfigSegura();
   }
 
   @Put('email-config')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  salvarEmailConfig(@Body() dados: { recuperacaoSenhaAtiva?: boolean; fluxoTccAtivo?: boolean }) {
+  salvarEmailConfig(
+    @Body()
+    dados: {
+      recuperacaoSenhaAtiva?: boolean;
+      fluxoTccAtivo?: boolean;
+      smtpHost?: string | null;
+      smtpPort?: number | null;
+      smtpSecure?: boolean;
+      smtpUsuario?: string | null;
+      smtpRemetente?: string | null;
+      smtpSenha?: string;
+    },
+  ) {
     return this.email.atualizarConfig(dados);
   }
 
