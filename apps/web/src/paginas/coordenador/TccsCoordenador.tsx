@@ -1,8 +1,16 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
+
+const ic = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    {d.split('|').map((p, i) => <path key={i} d={p} />)}
+  </svg>
+);
+const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
+const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
 
 const bancaDe = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase);
 const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1';
@@ -38,11 +46,24 @@ export function TccsCoordenador() {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
 
+  const [busca, setBusca] = useState('');
+  const [filtroFase, setFiltroFase] = useState('TODAS');
+
   function carregar() {
     setCarregando(true);
     apiGet('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
   }
   useEffect(carregar, []);
+
+  const fasesPresentes = useMemo(() => Array.from(new Set(tccs.map((t) => t.faseAtual))), [tccs]);
+  const filtrados = useMemo(() => {
+    const termo = busca.trim().toLowerCase();
+    return tccs.filter((t) => {
+      if (filtroFase !== 'TODAS' && t.faseAtual !== filtroFase) return false;
+      if (!termo) return true;
+      return [t.titulo, t.aluno?.nomeCompleto, t.orientador?.nomeCompleto].some((x) => (x ?? '').toLowerCase().includes(termo));
+    });
+  }, [tccs, busca, filtroFase]);
 
   async function abrirFormar(t: any) {
     setFormando(t);
@@ -105,8 +126,30 @@ export function TccsCoordenador() {
           <p className="nota-vazio">Nenhum TCC ainda.</p>
         </section>
       ) : (
-        <div className="lista bloco">
-          {tccs.map((t) => (
+        <>
+          <section className="cartao-secao bloco">
+            <div className="filtros">
+              <label className="campo" style={{ flex: 2 }}>
+                <span>Pesquisar</span>
+                <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Aluno, título ou orientador…" />
+              </label>
+              <label className="campo">
+                <span>Fase</span>
+                <select value={filtroFase} onChange={(e) => setFiltroFase(e.target.value)}>
+                  <option value="TODAS">Todas as fases</option>
+                  {fasesPresentes.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
+                </select>
+              </label>
+            </div>
+          </section>
+          <p className="legenda" style={{ marginTop: 10 }}>
+            Exibindo <strong>{filtrados.length}</strong> de <strong>{tccs.length}</strong> TCCs.
+          </p>
+          {filtrados.length === 0 ? (
+            <section className="cartao-secao bloco"><p className="nota-vazio">Nenhum TCC encontrado com os filtros.</p></section>
+          ) : (
+          <div className="lista bloco">
+          {filtrados.map((t) => (
             <section key={t.id} className="cartao-secao">
               <div className="aviso-cabecalho">
                 <h2>{t.titulo}</h2>
@@ -131,7 +174,9 @@ export function TccsCoordenador() {
               </div>
             </section>
           ))}
-        </div>
+          </div>
+          )}
+        </>
       )}
 
       {formando && (() => {
@@ -265,7 +310,13 @@ export function TccsCoordenador() {
                       <span className="meta">v{d.versao} · {rotuloStatusDoc(d.status)}</span>
                     </div>
                   </div>
-                  <a className="botao botao-secundario" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">Baixar</a>
+                  <span className="acoes-doc">
+                    {/* Monografia/versão final, como no antigo: só baixar (sem visualizar). */}
+                    {d.tipo !== 'MONOGRAFIA' && d.tipo !== 'VERSAO_FINAL' && (
+                      <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                    )}
+                    <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                  </span>
                 </div>
               ))
             )}
