@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal } from '../../utils/fases';
 import { prazoEncerrado } from '../../utils/prazos';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
@@ -189,10 +189,10 @@ export function DashboardAluno() {
   const acao = acaoPendente();
   const recusada = solic?.status === 'RECUSADA' && solic.parecer;
 
-  // Versão final só aparece no Dashboard quando o TCC já passou para a Fase I
-  // (índice >= 2) ou quando já existe um documento VERSAO_FINAL. Antes disso, o
-  // Dashboard mostra só Plano, Termo e Monografia (como no projeto antigo).
-  const mostrarVF = (idx !== null && idx >= 2) || !!ultimoDoc(tcc?.documentos, 'VERSAO_FINAL');
+  // Versão final só aparece depois da Fase II aprovada (AGUARDANDO_AJUSTES_FINAIS),
+  // na validação do orientador (VALIDACAO_VERSAO_FINAL) ou já concluído — ou quando
+  // já existe um documento VERSAO_FINAL. Antes disso, só Plano, Termo e Monografia.
+  const mostrarVF = mostrarVersaoFinal(tcc?.faseAtual, !!ultimoDoc(tcc?.documentos, 'VERSAO_FINAL'));
   const docsEsperados = DOCS_ESPERADOS.filter((t) => t !== 'VERSAO_FINAL' || mostrarVF).map((tipo) => ({
     tipo,
     doc: ultimoDoc(tcc?.documentos, tipo),

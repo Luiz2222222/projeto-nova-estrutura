@@ -4,7 +4,7 @@ import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, mostrarVersaoFinal } from '../../utils/fases';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
@@ -214,6 +214,7 @@ export function PainelAluno() {
         </section>
       )}
 
+      {mostrarVersaoFinal(tcc.faseAtual, !!ultimoDoc(tcc.documentos, 'VERSAO_FINAL')) && (
       <section className="cartao-secao bloco">
         <h2>Versão final</h2>
         {(() => {
@@ -247,6 +248,7 @@ export function PainelAluno() {
           </button>
         )}
       </section>
+      )}
 
       {modalUpload && (
         <ModalEnviarPdf

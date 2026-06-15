@@ -18,3 +18,12 @@ export const ROTULO_TIPO_DOC: Record<string, string> = {
   MONOGRAFIA: 'Monografia',
   VERSAO_FINAL: 'Versão final',
 };
+
+// A versão final só entra depois da Fase II aprovada (TCC vai para AGUARDANDO_AJUSTES_FINAIS),
+// segue para validação do orientador e conclusão. Antes disso ela não deve aparecer.
+export const FASES_VERSAO_FINAL = ['AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO'];
+
+// Mostra a versão final quando o TCC já está numa dessas fases OU já existe um doc VERSAO_FINAL.
+export function mostrarVersaoFinal(faseAtual?: string | null, temDocVersaoFinal = false): boolean {
+  return temDocVersaoFinal || (!!faseAtual && FASES_VERSAO_FINAL.includes(faseAtual));
+}

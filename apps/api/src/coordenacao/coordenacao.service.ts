@@ -9,6 +9,7 @@ import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
+import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import {
   MARCOS_CALENDARIO,
   DESTINATARIOS_AVISO,
@@ -260,9 +261,8 @@ export class CoordenacaoService {
     const caminho = join('uploads', 'referencia', nome);
     await fs.writeFile(join(dir, nome), arquivo.buffer);
 
-    // O multer entrega o originalname interpretado como latin1; reinterpreta como UTF-8
-    // para preservar acentos (ex.: "Orientações" em vez de "OrientaÃ§oes").
-    const nomeArquivo = Buffer.from(arquivo.originalname || '', 'latin1').toString('utf8');
+    // Corrige acentos do nome enviado (latin1->UTF-8), de forma segura/condicional.
+    const nomeArquivo = corrigirNomeArquivo(arquivo.originalname);
     try {
       return await this.prisma.documentoReferencia.create({
         data: { titulo, nomeArquivo, caminho, tamanho: arquivo.size, visivelPara: visivel },

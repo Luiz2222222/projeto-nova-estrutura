@@ -7,6 +7,7 @@ import {
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
+import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import type { DadosAbrirTcc } from '@tcc/compartilhado';
 
 function semestreAtual(): string {
@@ -227,9 +228,8 @@ export class TccsService {
     const ext = extname(arquivo.originalname || '').replace(/[^.a-zA-Z0-9]/g, '').slice(0, 10);
     const nome = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
     await fs.writeFile(join(dir, nome), arquivo.buffer);
-    // O multer entrega o originalname interpretado como latin1; reinterpreta como UTF-8
-    // para preservar acentos (ex.: "Orientações" em vez de "OrientaÃ§oes").
-    const nomeArquivo = Buffer.from(arquivo.originalname || '', 'latin1').toString('utf8');
+    // Corrige acentos do nome enviado (latin1->UTF-8), de forma segura/condicional.
+    const nomeArquivo = corrigirNomeArquivo(arquivo.originalname);
     return { nomeArquivo, caminho: join('uploads', nome), tamanho: arquivo.size };
   }
 
