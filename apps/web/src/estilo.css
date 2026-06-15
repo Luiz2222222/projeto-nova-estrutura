@@ -476,6 +476,9 @@ select {
 .botao-icone { display: inline-grid; place-items: center; width: 28px; height: 28px; border: none; border-radius: var(--raio-1); color: var(--azul-forte); background: transparent; cursor: pointer; transition: opacity .15s ease; }
 .botao-icone:hover { opacity: 0.65; background: transparent; color: var(--azul-forte); }
 .botao-icone svg { width: 18px; height: 18px; }
+/* Feedback de rejeição (documento rejeitado), igual ao antigo: caixa vermelha discreta. */
+.feedback-rejeicao { display: block; margin-top: 8px; padding: 8px 10px; font-size: 13px; line-height: 1.45; color: var(--reprovado); background: var(--reprovado-suave); border-left: 3px solid var(--reprovado); border-radius: var(--raio-1); }
+.feedback-rejeicao strong { color: var(--tinta-1); }
 
 /* Barra de filtros (Documentos do aluno) */
 .filtros { display: flex; gap: 16px; flex-wrap: wrap; }

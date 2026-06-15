@@ -309,7 +309,10 @@ export function DashboardAluno() {
                       <td>
                         {doc && (
                           <span className="acoes-doc">
-                            <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${doc.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                            {/* Monografia, como no antigo: só baixar (sem visualizar). */}
+                            {tipo !== 'MONOGRAFIA' && (
+                              <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${doc.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                            )}
                             <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${doc.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
                           </span>
                         )}

@@ -9,6 +9,13 @@ function formatarTamanho(bytes?: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
+// dd/MM/yyyy (split da ISO evita "voltar" um dia por fuso).
+const fmtData = (iso?: string | null) => {
+  if (!iso) return '';
+  const [ano, mes, dia] = iso.split('T')[0].split('-');
+  return `${dia}/${mes}/${ano}`;
+};
+
 const STATUS_DOC: Record<string, { rotulo: string; classe: string }> = {
   APROVADO: { rotulo: 'Aprovado', classe: 'pilula-ok' },
   REJEITADO: { rotulo: 'Rejeitado', classe: 'pilula-bad' },
@@ -108,12 +115,20 @@ export function Documentos() {
                       </span>
                       <span className="meta">
                         {d.nomeArquivo}
+                        {d.tipo === 'MONOGRAFIA' ? ` · Versão ${d.versao}` : ''}
+                        {d.criadoEm ? ` · ${fmtData(d.criadoEm)}` : ''}
                         {d.tamanho ? ` · ${formatarTamanho(d.tamanho)}` : ''}
                       </span>
+                      {d.status === 'REJEITADO' && d.parecer && (
+                        <span className="feedback-rejeicao"><strong>Feedback do orientador:</strong> {d.parecer}</span>
+                      )}
                     </div>
                   </div>
                   <span className="acoes-doc">
-                    <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                    {/* Monografia, como no antigo: só baixar (sem visualizar). */}
+                    {d.tipo !== 'MONOGRAFIA' && (
+                      <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                    )}
                     <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
                   </span>
                 </li>
