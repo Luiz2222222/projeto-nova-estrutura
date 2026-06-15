@@ -42,8 +42,27 @@ model Usuario {
   bancasComoAvaliador  MembroBanca[]
   tokensSenha          TokenSenha[]
   preferenciasEmail    PreferenciaEmail[]
+  notificacoes         Notificacao[]
 
   @@map("usuarios")
+}
+
+// Notificação interna (sino/central). Sistema separado do e-mail e das suas
+// preferências. Sempre pertence a um usuário — ninguém vê a de outro.
+model Notificacao {
+  id        String    @id @default(cuid())
+  usuario   Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  evento    String
+  titulo    String
+  mensagem  String
+  link      String?
+  lida      Boolean   @default(false)
+  criadoEm  DateTime  @default(now())
+  lidaEm    DateTime?
+
+  @@index([usuarioId, lida])
+  @@map("notificacoes")
 }
 
 // Configuração GLOBAL de envio de e-mail (linha única). Dois interruptores:
