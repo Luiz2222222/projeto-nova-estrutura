@@ -618,6 +618,9 @@ textarea { resize: vertical; min-height: 72px; }
 .card-recusa-cabecalho h3 { font-size: 18px; font-weight: 600; color: var(--tinta-1); margin: 0; }
 .card-recusa-texto { font-size: 13px; color: var(--tinta-2); margin: 0 0 12px; }
 .card-recusa-parecer { background: var(--papel-1); border: 1px solid rgba(185, 28, 28, 0.3); border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; color: var(--tinta-2); }
+/* Card de solicitação pendente: destacado no topo, em âmbar (reusa as sub-classes do card-recusa). */
+.card-pendente { position: relative; background: rgba(234, 179, 8, 0.10); border: 2px solid rgba(234, 179, 8, 0.40); border-radius: var(--raio-2); padding: 20px 22px; box-shadow: var(--sombra-1); }
+.card-pendente .card-recusa-cabecalho svg { color: #a16207; }
 
 /* ============================================================
    Casca do app: menu lateral

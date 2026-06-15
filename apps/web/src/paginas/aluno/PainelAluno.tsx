@@ -90,6 +90,26 @@ export function PainelAluno() {
         </div>
       )}
 
+      {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
+      {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
+        <div className="card-pendente bloco">
+          <div className="card-recusa-cabecalho">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10" />
+              <path d="M12 7v5l3 2" />
+            </svg>
+            <h3>Aguardando aprovação do coordenador</h3>
+          </div>
+          <p className="card-recusa-texto">
+            Sua solicitação de abertura foi enviada e está em análise pela coordenação. Você pode
+            cancelá-la enquanto não for aprovada.
+          </p>
+          <div className="acoes" style={{ marginTop: 6, justifyContent: 'flex-start' }}>
+            <button className="botao botao-secundario" onClick={cancelar}>Cancelar solicitação</button>
+          </div>
+        </div>
+      )}
+
       <section className="cartao-secao bloco">
         <h2>Andamento</h2>
         {idx === null ? (
@@ -139,12 +159,6 @@ export function PainelAluno() {
           </ul>
         ) : (
           <p className="nota-vazio">Nenhum documento enviado.</p>
-        )}
-
-        {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
-          <button className="botao botao-secundario" style={{ marginTop: 18 }} onClick={cancelar}>
-            Cancelar solicitação
-          </button>
         )}
       </section>
 
