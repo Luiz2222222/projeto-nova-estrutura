@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { EmailModule } from './email/email.module';
 import { NotificacoesModule } from './notificacoes/notificacoes.module';
+import { EventosTccModule } from './eventos-tcc/eventos-tcc.module';
 import { AutenticacaoModule } from './autenticacao/autenticacao.module';
 import { TccsModule } from './tccs/tccs.module';
 import { CoordenacaoModule } from './coordenacao/coordenacao.module';
@@ -15,6 +16,7 @@ import { SaudeController } from './saude/saude.controller';
     PrismaModule,
     EmailModule,
     NotificacoesModule,
+    EventosTccModule,
     AutenticacaoModule,
     TccsModule,
     CoordenacaoModule,
