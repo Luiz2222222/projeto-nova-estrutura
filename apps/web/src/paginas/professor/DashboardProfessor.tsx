@@ -5,6 +5,8 @@ import { useAuth } from '../../autenticacao/contexto';
 import type { UsuarioPublico } from '@tcc/compartilhado';
 
 function precisaAcao(t: any): boolean {
+  // Versão final aguardando o orientador validar (aprovar/pedir ajustes).
+  if (t.faseAtual === 'VALIDACAO_VERSAO_FINAL') return true;
   if (t.faseAtual !== 'DESENVOLVIMENTO') return false;
   const mono = (t.documentos ?? []).filter((d: any) => d.tipo === 'MONOGRAFIA').sort((a: any, b: any) => b.versao - a.versao)[0];
   const monoPendente = mono && mono.status === 'PENDENTE';
