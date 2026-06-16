@@ -114,7 +114,7 @@ export function DashboardCoordenador() {
           ) : (
             <div className="acoes-fila">
               {acoes.map((a) => (
-                <button key={a.id} className={`acao-item acao-${a.cor}`} onClick={() => navegar(a.link)}>
+                <button key={a.id} className={`acao-item cor-${a.cor}`} onClick={() => navegar(a.link)}>
                   <span className="acao-texto">
                     <span className="acao-titulo">{a.titulo}</span>
                     <span className="acao-sub">{a.sub}</span>
