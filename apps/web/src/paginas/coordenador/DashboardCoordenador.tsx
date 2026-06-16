@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
@@ -16,6 +16,22 @@ const icoX = ic('M18 6 6 18|M6 6l12 12');
 const icoAlerta = ic('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z|M12 9v4|M12 17h.01');
 const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
 const icoBarras = ic('M3 3v18h18|M7 16v-5M12 16V8M17 16v-9');
+const icoUsers = ic('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2|M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8|M22 21v-2a4 4 0 0 0-3-3.87|M16 3.13a4 4 0 0 1 0 7.75');
+const icoPasta = ic('M20 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2|M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2');
+const icoLivro = ic('M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z|M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z');
+
+// Ícone + cor por marco (igual ao painel de datas do projeto antigo / aba Informações).
+const MARCO_INFO: Record<string, { icone: ReactNode; cor: string }> = {
+  reuniaoAlunos: { icone: icoUsers, cor: '#3b82f6' },
+  envioDocumentos: { icone: icoDoc, cor: '#3b82f6' },
+  avaliacaoContinuidade: { icone: icoRelogio, cor: '#eab308' },
+  submissaoMonografia: { icone: icoDoc, cor: '#eab308' },
+  preparacaoBancasFase1: { icone: icoPasta, cor: '#a855f7' },
+  avaliacaoFase1: { icone: icoLivro, cor: '#a855f7' },
+  preparacaoBancasFase2: { icone: icoPasta, cor: '#ef4444' },
+  apresentacaoFase2: { icone: icoUsers, cor: '#3b82f6' },
+  ajustesFinais: { icone: icoCheck, cor: '#22c55e' },
+};
 
 const fmtData = (iso?: string | null) => {
   if (!iso) return 'A definir';
@@ -80,9 +96,13 @@ export function DashboardCoordenador() {
 
   const etapas = useMemo(() => {
     const counts = [0, 0, 0, 0, 0];
-    tccs.forEach((t) => { const b = bucketEtapa(t.faseAtual); if (b >= 0) counts[b]++; });
+    const alunos: string[][] = [[], [], [], [], []];
+    tccs.forEach((t) => {
+      const b = bucketEtapa(t.faseAtual);
+      if (b >= 0) { counts[b]++; alunos[b].push(t.aluno?.nomeCompleto ?? '—'); }
+    });
     const total = tccs.length || 1;
-    return ETAPAS.map((e, i) => ({ ...e, count: counts[i], pct: (counts[i] / total) * 100 }));
+    return ETAPAS.map((e, i) => ({ ...e, count: counts[i], pct: (counts[i] / total) * 100, alunos: alunos[i] }));
   }, [tccs]);
 
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
@@ -96,8 +116,7 @@ export function DashboardCoordenador() {
 
   return (
     <>
-      <h1>Olá, {primeiroNome} 👋</h1>
-      <p className="legenda">Painel de coordenação do TCC.</p>
+      <h1>Seja bem-vindo(a), {primeiroNome}!</h1>
 
       {/* Linha 1: Ações pendentes + Datas do período */}
       <div className="grade-dash bloco">
@@ -134,6 +153,7 @@ export function DashboardCoordenador() {
           <div className="datas-compact">
             {MARCOS_CALENDARIO.map((m) => (
               <div key={m} className="data-linha">
+                <span className="data-icone" style={{ background: `${MARCO_INFO[m].cor}1f`, color: MARCO_INFO[m].cor }}>{MARCO_INFO[m].icone}</span>
                 <span className="data-texto">
                   <span className="data-titulo">{ROTULO_MARCO[m]}</span>
                   <span className="data-desc">{DESC_MARCO[m]}</span>
@@ -164,12 +184,13 @@ export function DashboardCoordenador() {
           {etapas.map((e) => (
             <div key={e.nome} className="etapa-linha">
               <span className="etapa-nome">{e.nome}</span>
-              <div className="etapa-barra" title={`${e.count} TCC(s)`}>
+              <div className="etapa-barra" title={e.count > 0 ? `${e.nome} (${e.count}):\n${e.alunos.join('\n')}` : `${e.nome}: nenhum TCC`}>
                 {e.count > 0 && (
                   <button
                     className={`etapa-preenchida cor-${e.cor}`}
                     style={{ width: `${Math.max(e.pct, 6)}%` }}
                     onClick={() => navegar('/coordenador/tccs')}
+                    title={`${e.nome} (${e.count}):\n${e.alunos.join('\n')}`}
                   >
                     {e.count}
                   </button>
