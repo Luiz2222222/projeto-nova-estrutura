@@ -2,19 +2,60 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
+import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO } from '@tcc/compartilhado';
 
-// Dashboard do coordenador (espelha o antigo): estatísticas do período + fila de
-// ações pendentes. Respeita as regras novas — não há "análise final do coordenador"
-// (a versão final é validada pelo orientador), então essa ação não entra na fila.
+const ic = (d: string) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" strokeLinecap="round" strokeLinejoin="round">
+    {d.split('|').map((p, i) => <path key={i} d={p} />)}
+  </svg>
+);
+const icoDoc = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
+const icoRelogio = ic('M12 7v5l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0');
+const icoCheck = ic('M22 11.08V12a10 10 0 1 1-5.93-9.14|M22 4 12 14.01l-3-3');
+const icoX = ic('M18 6 6 18|M6 6l12 12');
+const icoAlerta = ic('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z|M12 9v4|M12 17h.01');
+const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
+const icoBarras = ic('M3 3v18h18|M7 16v-5M12 16V8M17 16v-9');
+
+const fmtData = (iso?: string | null) => {
+  if (!iso) return 'A definir';
+  const [a, m, d] = iso.split('T')[0].split('-');
+  return a && m && d ? `${d}/${m}/${a}` : 'A definir';
+};
+
+// 5 etapas macro (como no antigo). Reprovados contam na fase; descontinuado no desenvolvimento.
+function bucketEtapa(f: string): number {
+  switch (f) {
+    case 'INICIALIZACAO': return 0;
+    case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
+    case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
+    case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
+    case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
+    default: return -1;
+  }
+}
+const ETAPAS = [
+  { nome: 'Inicial', cor: 'azul' },
+  { nome: 'Desenvolvimento', cor: 'amarelo' },
+  { nome: 'Fase I', cor: 'roxo' },
+  { nome: 'Fase II', cor: 'rosa' },
+  { nome: 'Finalização', cor: 'verde' },
+];
+
 export function DashboardCoordenador() {
   const navegar = useNavigate();
   const { usuario } = useAuth();
   const [tccs, setTccs] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
+  const [calendario, setCalendario] = useState<any | null>(null);
+  const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    apiGet('/tccs').then((r: any) => setTccs(r ?? [])).catch(() => setTccs([]));
-    apiGet('/tccs/pendentes').then((r: any) => setPendentes(r ?? [])).catch(() => setPendentes([]));
+    Promise.all([
+      apiGet('/tccs').then((r: any) => setTccs(r ?? [])).catch(() => setTccs([])),
+      apiGet('/tccs/pendentes').then((r: any) => setPendentes(r ?? [])).catch(() => setPendentes([])),
+      apiGet('/calendario').then(setCalendario).catch(() => setCalendario(null)),
+    ]).finally(() => setCarregando(false));
   }, []);
 
   const stats = useMemo(() => {
@@ -26,62 +67,118 @@ export function DashboardCoordenador() {
     return { total, aprovados, reprovados, emAndamento, pct };
   }, [tccs]);
 
-  const conta = (fase: string) => tccs.filter((t) => t.faseAtual === fase).length;
-  const acoes = [
-    { rotulo: 'Análise de documentos iniciais', qtd: pendentes.length, ir: () => navegar('/coordenador/solicitacoes') },
-    { rotulo: 'Formação da banca — Fase I', qtd: conta('FORMACAO_BANCA_FASE_1'), ir: () => navegar('/coordenador/tccs') },
-    { rotulo: 'Análise das avaliações — Fase I', qtd: conta('VALIDACAO_FASE_1'), ir: () => navegar('/coordenador/tccs') },
-    { rotulo: 'Análise das avaliações — Fase II', qtd: conta('VALIDACAO_FASE_2'), ir: () => navegar('/coordenador/tccs') },
-  ].filter((a) => a.qtd > 0);
+  // Fila de ações pendentes, item a item (com aluno/título), como no antigo.
+  const acoes = useMemo(() => {
+    const nome = (t: any) => t.aluno?.nomeCompleto ?? '—';
+    const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
+    pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/solicitacoes' }));
+    tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
+    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
+    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
+    return items;
+  }, [tccs, pendentes]);
+
+  const etapas = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0];
+    tccs.forEach((t) => { const b = bucketEtapa(t.faseAtual); if (b >= 0) counts[b]++; });
+    const total = tccs.length || 1;
+    return ETAPAS.map((e, i) => ({ ...e, count: counts[i], pct: (counts[i] / total) * 100 }));
+  }, [tccs]);
 
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
+
+  const cards = [
+    { rotulo: 'Total de TCCs', sub: 'TCCs cadastrados', valor: stats.total, icone: icoDoc, cor: 'azul', corNum: undefined as string | undefined },
+    { rotulo: 'Em andamento', sub: stats.pct(stats.emAndamento), valor: stats.emAndamento, icone: icoRelogio, cor: 'amarelo', corNum: undefined },
+    { rotulo: 'Aprovados', sub: stats.pct(stats.aprovados), valor: stats.aprovados, icone: icoCheck, cor: 'verde', corNum: 'var(--aprovado)' },
+    { rotulo: 'Reprovados', sub: stats.pct(stats.reprovados), valor: stats.reprovados, icone: icoX, cor: 'vermelho', corNum: 'var(--reprovado)' },
+  ];
 
   return (
     <>
       <h1>Olá, {primeiroNome} 👋</h1>
       <p className="legenda">Painel de coordenação do TCC.</p>
 
-      <div className="cartoes-resumo bloco">
-        <button className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
-          <span className="resumo-numero">{stats.total}</span>
-          <span className="resumo-rotulo">Total de TCCs</span>
-        </button>
-        <button className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
-          <span className="resumo-numero">{stats.emAndamento}</span>
-          <span className="resumo-rotulo">Em andamento</span>
-          <span className="resumo-extra">{stats.pct(stats.emAndamento)}</span>
-        </button>
-        <button className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
-          <span className="resumo-numero" style={{ color: 'var(--aprovado)' }}>{stats.aprovados}</span>
-          <span className="resumo-rotulo">Aprovados</span>
-          <span className="resumo-extra">{stats.pct(stats.aprovados)}</span>
-        </button>
-        <button className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
-          <span className="resumo-numero" style={{ color: 'var(--reprovado)' }}>{stats.reprovados}</span>
-          <span className="resumo-rotulo">Reprovados</span>
-          <span className="resumo-extra">{stats.pct(stats.reprovados)}</span>
-        </button>
+      {/* Linha 1: Ações pendentes + Datas do período */}
+      <div className="grade-dash bloco">
+        <section className="cartao-secao" style={{ display: 'flex', flexDirection: 'column' }}>
+          <h2 className="h2-icone"><span className="h2-ico">{icoAlerta}</span>Ações pendentes</h2>
+          {carregando ? (
+            <p className="nota-vazio">Carregando…</p>
+          ) : acoes.length === 0 ? (
+            <div className="dash-vazio">
+              {icoAlerta}
+              <strong>Sem ações pendentes</strong>
+              <span>Nenhuma ação aguardando sua aprovação</span>
+            </div>
+          ) : (
+            <div className="acoes-fila">
+              {acoes.map((a) => (
+                <button key={a.id} className={`acao-item acao-${a.cor}`} onClick={() => navegar(a.link)}>
+                  <span className="acao-texto">
+                    <span className="acao-titulo">{a.titulo}</span>
+                    <span className="acao-sub">{a.sub}</span>
+                  </span>
+                  <span className="acao-ir">Ir →</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </section>
+
+        <section className="cartao-secao">
+          <h2 className="h2-icone">
+            <span className="h2-ico">{icoCalendario}</span>
+            Datas do período{calendario?.semestre ? ` — ${calendario.semestre}` : ''}
+          </h2>
+          <div className="datas-compact">
+            {MARCOS_CALENDARIO.map((m) => (
+              <div key={m} className="data-linha">
+                <span className="data-texto">
+                  <span className="data-titulo">{ROTULO_MARCO[m]}</span>
+                  <span className="data-desc">{DESC_MARCO[m]}</span>
+                </span>
+                <span className={`data-quando${calendario?.[m] ? ' definida' : ''}`}>{fmtData(calendario?.[m])}</span>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
 
+      {/* Linha 2: estatísticas */}
+      <div className="cartoes-resumo bloco">
+        {cards.map((c) => (
+          <button key={c.rotulo} className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
+            <span className={`resumo-icone cor-${c.cor}`}>{c.icone}</span>
+            <span className="resumo-numero" style={c.corNum ? { color: c.corNum } : undefined}>{c.valor}</span>
+            <span className="resumo-rotulo">{c.rotulo}</span>
+            <span className="resumo-extra">{c.sub}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Linha 3: TCCs por etapa */}
       <section className="cartao-secao bloco">
-        <h2>Ações pendentes</h2>
-        {acoes.length === 0 ? (
-          <p className="nota-vazio">Nenhuma ação pendente no momento. 🎉</p>
-        ) : (
-          <table className="tabela">
-            <tbody>
-              {acoes.map((a) => (
-                <tr key={a.rotulo}>
-                  <td>{a.rotulo}</td>
-                  <td style={{ width: 70 }}><span className="pilula pilula-alerta">{a.qtd} pendente{a.qtd > 1 ? 's' : ''}</span></td>
-                  <td style={{ width: 90, textAlign: 'right' }}>
-                    <button className="botao botao-secundario" onClick={a.ir}>Ver</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+        <h2 className="h2-icone"><span className="h2-ico">{icoBarras}</span>TCCs por etapa</h2>
+        <div className="etapas-lista">
+          {etapas.map((e) => (
+            <div key={e.nome} className="etapa-linha">
+              <span className="etapa-nome">{e.nome}</span>
+              <div className="etapa-barra" title={`${e.count} TCC(s)`}>
+                {e.count > 0 && (
+                  <button
+                    className={`etapa-preenchida cor-${e.cor}`}
+                    style={{ width: `${Math.max(e.pct, 6)}%` }}
+                    onClick={() => navegar('/coordenador/tccs')}
+                  >
+                    {e.count}
+                  </button>
+                )}
+              </div>
+              <span className="etapa-pct">{e.pct.toFixed(0)}%</span>
+            </div>
+          ))}
+        </div>
       </section>
     </>
   );

@@ -460,6 +460,47 @@ select {
 .sino-item-msg { font-size: 12.5px; color: var(--tinta-2); line-height: 1.4; }
 .sino-item-data { font-size: 11px; color: var(--tinta-3); margin-top: 2px; }
 
+/* ===== Dashboard do coordenador ===== */
+.cor-azul { --c: #3b82f6; } .cor-amarelo { --c: #eab308; } .cor-roxo { --c: #9333ea; }
+.cor-rosa { --c: #ec4899; } .cor-verde { --c: #22c55e; } .cor-vermelho { --c: #ef4444; }
+
+.grade-dash { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grade-dash { grid-template-columns: 1fr; } }
+.grade-dash > .cartao-secao { margin: 0; }
+
+.dash-vazio { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; text-align: center; color: var(--tinta-3); padding: 24px 0; }
+.dash-vazio svg { width: 34px; height: 34px; color: var(--borda-forte); margin-bottom: 6px; }
+.dash-vazio strong { color: var(--tinta-1); font-size: 15px; }
+.dash-vazio span { font-size: 13px; }
+
+.acoes-fila { display: flex; flex-direction: column; gap: 8px; }
+.acao-item { display: flex; align-items: center; justify-content: space-between; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--borda); border-left: 4px solid var(--c); border-radius: var(--raio-1); background: var(--papel-1); cursor: pointer; transition: background .15s; }
+.acao-item:hover { background: var(--inset); }
+.acao-texto { display: flex; flex-direction: column; min-width: 0; }
+.acao-titulo { font-size: 13.5px; font-weight: 600; color: var(--tinta-1); }
+.acao-sub { font-size: 12.5px; color: var(--tinta-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.acao-ir { flex-shrink: 0; font-size: 12.5px; font-weight: 600; color: var(--azul-forte); }
+
+.datas-compact { display: flex; flex-direction: column; }
+.data-linha { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--borda); }
+.data-linha:last-child { border-bottom: none; }
+.data-texto { display: flex; flex-direction: column; min-width: 0; }
+.data-titulo { font-size: 13.5px; font-weight: 600; color: var(--tinta-1); }
+.data-desc { font-size: 12px; color: var(--tinta-3); }
+.data-quando { flex-shrink: 0; font-size: 13px; color: var(--tinta-3); }
+.data-quando.definida { color: var(--tinta-1); font-weight: 600; }
+
+.resumo-icone { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: var(--c); color: #fff; margin-bottom: 4px; }
+.resumo-icone svg { width: 22px; height: 22px; }
+
+.etapas-lista { display: flex; flex-direction: column; gap: 12px; }
+.etapa-linha { display: flex; align-items: center; gap: 12px; }
+.etapa-nome { width: 130px; flex-shrink: 0; font-size: 13.5px; color: var(--tinta-2); }
+.etapa-barra { flex: 1; height: 30px; background: var(--inset); border-radius: 999px; overflow: hidden; }
+.etapa-preenchida { height: 30px; border: none; border-radius: 999px; background: var(--c); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: opacity .15s; min-width: 24px; }
+.etapa-preenchida:hover { opacity: .85; }
+.etapa-pct { width: 40px; text-align: right; font-size: 12.5px; color: var(--tinta-3); flex-shrink: 0; }
+
 /* 3 cards de status (Dashboard do aluno — espelha o original) */
 .cards-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .card-status {
