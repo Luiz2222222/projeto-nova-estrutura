@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
-import { ROTULO_FASE } from '../../utils/fases';
-import { ROTULO_CURSO } from '@tcc/compartilhado';
+import { ROTULO_FASE, faseParaIndice } from '../../utils/fases';
+import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
+import { TrilhaFases } from '../../componentes/TrilhaFases';
+
+// 5 etapas macro (igual ao dashboard / "Distribuição por etapa" do antigo).
+function bucketEtapa(f: string): number {
+  switch (f) {
+    case 'INICIALIZACAO': return 0;
+    case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
+    case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
+    case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
+    case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
+    default: return -1;
+  }
+}
+const NOMES_ETAPA = ['Inicial', 'Desenvolvimento', 'Fase I', 'Fase II', 'Finalização'];
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -48,6 +62,7 @@ export function TccsCoordenador() {
 
   const [busca, setBusca] = useState('');
   const [filtroFase, setFiltroFase] = useState('TODAS');
+  const [filtroCurso, setFiltroCurso] = useState('TODOS');
 
   function carregar() {
     setCarregando(true);
@@ -56,14 +71,20 @@ export function TccsCoordenador() {
   useEffect(carregar, []);
 
   const fasesPresentes = useMemo(() => Array.from(new Set(tccs.map((t) => t.faseAtual))), [tccs]);
+  const distribuicao = useMemo(() => {
+    const counts = [0, 0, 0, 0, 0];
+    tccs.forEach((t) => { const b = bucketEtapa(t.faseAtual); if (b >= 0) counts[b]++; });
+    return NOMES_ETAPA.map((nome, i) => ({ nome, count: counts[i] }));
+  }, [tccs]);
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return tccs.filter((t) => {
       if (filtroFase !== 'TODAS' && t.faseAtual !== filtroFase) return false;
+      if (filtroCurso !== 'TODOS' && t.aluno?.curso !== filtroCurso) return false;
       if (!termo) return true;
       return [t.titulo, t.aluno?.nomeCompleto, t.orientador?.nomeCompleto].some((x) => (x ?? '').toLowerCase().includes(termo));
     });
-  }, [tccs, busca, filtroFase]);
+  }, [tccs, busca, filtroFase, filtroCurso]);
 
   async function abrirFormar(t: any) {
     setFormando(t);
@@ -128,6 +149,17 @@ export function TccsCoordenador() {
       ) : (
         <>
           <section className="cartao-secao bloco">
+            <h2>Distribuição por etapa</h2>
+            <div className="dist-row">
+              {distribuicao.map((d) => (
+                <div key={d.nome} className="dist-item">
+                  <span className="dist-num">{d.count}</span>
+                  <span className="dist-nome">{d.nome}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+          <section className="cartao-secao bloco">
             <div className="filtros">
               <label className="campo" style={{ flex: 2 }}>
                 <span>Pesquisar</span>
@@ -138,6 +170,13 @@ export function TccsCoordenador() {
                 <select value={filtroFase} onChange={(e) => setFiltroFase(e.target.value)}>
                   <option value="TODAS">Todas as fases</option>
                   {fasesPresentes.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
+                </select>
+              </label>
+              <label className="campo">
+                <span>Curso</span>
+                <select value={filtroCurso} onChange={(e) => setFiltroCurso(e.target.value)}>
+                  <option value="TODOS">Todos os cursos</option>
+                  {CURSOS.map((c) => <option key={c} value={c}>{ROTULO_CURSO[c]}</option>)}
                 </select>
               </label>
             </div>
@@ -161,6 +200,7 @@ export function TccsCoordenador() {
                 {t.nf2 != null ? ` · NF2: ${Number(t.nf2).toFixed(1)}` : ''}
                 {t.nf != null ? ` · NF: ${Number(t.nf).toFixed(1)}` : ''}
               </p>
+              <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} /></div>
               <div className="acoes" style={{ justifyContent: 'flex-start' }}>
                 <button className="botao botao-secundario" onClick={() => setDetalhe(t)}>Ver detalhes</button>
                 {ehFormar(t.faseAtual) && (

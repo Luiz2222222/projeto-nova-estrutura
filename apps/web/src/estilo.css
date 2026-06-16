@@ -503,6 +503,13 @@ select {
 .etapa-preenchida:hover { opacity: .85; }
 .etapa-pct { width: 40px; text-align: right; font-size: 12.5px; color: var(--tinta-3); flex-shrink: 0; }
 
+/* Distribuição por etapa (aba TCCs) + trilha embutida no card */
+.dist-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.dist-item { flex: 1; min-width: 110px; border: 1px solid var(--borda); border-radius: var(--raio-1); padding: 12px; text-align: center; }
+.dist-num { display: block; font-size: 24px; font-weight: 700; color: var(--azul-forte); line-height: 1.1; }
+.dist-nome { font-size: 12.5px; color: var(--tinta-3); }
+.tcc-trilha { margin: 4px 0 14px; }
+
 /* 3 cards de status (Dashboard do aluno — espelha o original) */
 .cards-status { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
 .card-status {
