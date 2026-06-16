@@ -65,6 +65,10 @@ export function DashboardCoordenador() {
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [calendario, setCalendario] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [tooltip, setTooltip] = useState<{ vis: boolean; x: number; y: number; texto: string }>({ vis: false, x: 0, y: 0, texto: '' });
+
+  const mostrarTooltip = (ev: { clientX: number; clientY: number }, texto: string) => setTooltip({ vis: true, x: ev.clientX, y: ev.clientY, texto });
+  const esconderTooltip = () => setTooltip((t) => ({ ...t, vis: false }));
 
   useEffect(() => {
     Promise.all([
@@ -169,9 +173,11 @@ export function DashboardCoordenador() {
       <div className="cartoes-resumo bloco">
         {cards.map((c) => (
           <button key={c.rotulo} className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
-            <span className={`resumo-icone cor-${c.cor}`}>{c.icone}</span>
+            <span className="resumo-topo">
+              <span className={`resumo-icone cor-${c.cor}`}>{c.icone}</span>
+              <span className="resumo-rotulo-forte">{c.rotulo}</span>
+            </span>
             <span className="resumo-numero" style={c.corNum ? { color: c.corNum } : undefined}>{c.valor}</span>
-            <span className="resumo-rotulo">{c.rotulo}</span>
             <span className="resumo-extra">{c.sub}</span>
           </button>
         ))}
@@ -184,13 +190,15 @@ export function DashboardCoordenador() {
           {etapas.map((e) => (
             <div key={e.nome} className="etapa-linha">
               <span className="etapa-nome">{e.nome}</span>
-              <div className="etapa-barra" title={e.count > 0 ? `${e.nome} (${e.count}):\n${e.alunos.join('\n')}` : `${e.nome}: nenhum TCC`}>
+              <div className="etapa-barra">
                 {e.count > 0 && (
                   <button
                     className={`etapa-preenchida cor-${e.cor}`}
                     style={{ width: `${Math.max(e.pct, 6)}%` }}
                     onClick={() => navegar('/coordenador/tccs')}
-                    title={`${e.nome} (${e.count}):\n${e.alunos.join('\n')}`}
+                    onMouseEnter={(ev) => mostrarTooltip(ev, e.alunos.join('\n'))}
+                    onMouseMove={(ev) => mostrarTooltip(ev, e.alunos.join('\n'))}
+                    onMouseLeave={esconderTooltip}
                   >
                     {e.count}
                   </button>
@@ -201,6 +209,10 @@ export function DashboardCoordenador() {
           ))}
         </div>
       </section>
+
+      {tooltip.vis && tooltip.texto && (
+        <div className="dash-tooltip" style={{ top: tooltip.y, left: tooltip.x + 14 }}>{tooltip.texto}</div>
+      )}
     </>
   );
 }

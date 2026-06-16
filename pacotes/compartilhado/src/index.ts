@@ -176,10 +176,10 @@ export const ROTULO_MARCO: Record<MarcoCalendario, string> = {
   reuniaoAlunos: 'Reunião com alunos',
   envioDocumentos: 'Envio de documentos',
   avaliacaoContinuidade: 'Avaliação de continuidade',
-  submissaoMonografia: 'Submissão da monografia + termo',
+  submissaoMonografia: 'Submissão de monografia + termo',
   preparacaoBancasFase1: 'Preparação das bancas (Fase I)',
-  avaliacaoFase1: 'Avaliação — Fase I',
-  preparacaoBancasFase2: 'Preparação para apresentação (Fase II)',
+  avaliacaoFase1: 'Avaliação - Fase I',
+  preparacaoBancasFase2: 'Preparação das bancas (Fase II)',
   apresentacaoFase2: 'Apresentação dos trabalhos (Fase II)',
   ajustesFinais: 'Ajustes finais',
 };
@@ -239,15 +239,15 @@ export const esquemaAnaliseFinal = z
 export type DadosAnaliseFinal = z.infer<typeof esquemaAnaliseFinal>;
 
 export const DESC_MARCO: Record<MarcoCalendario, string> = {
-  reuniaoAlunos: 'Orientações gerais sobre o TCC e o regulamento.',
-  envioDocumentos: 'Prazo para envio do plano e do termo de aceite.',
-  avaliacaoContinuidade: 'Prazo para o orientador avaliar o progresso.',
-  submissaoMonografia: 'Entrega da versão final com o termo.',
-  preparacaoBancasFase1: 'Período de formação das bancas avaliadoras.',
-  avaliacaoFase1: 'Prazo final para avaliação pela banca.',
-  preparacaoBancasFase2: 'Janela da Fase II — a banca é o orientador + os 2 avaliadores da Fase I.',
-  apresentacaoFase2: 'Prazo final para as apresentações orais.',
-  ajustesFinais: 'Prazo para correções após a defesa.',
+  reuniaoAlunos: 'Orientações gerais sobre o TCC e Regulamento',
+  envioDocumentos: 'Prazo para envio do plano e termo',
+  avaliacaoContinuidade: 'Prazo para orientador avaliar progresso',
+  submissaoMonografia: 'Entrega da versão final + Termo',
+  preparacaoBancasFase1: 'Período de formação das bancas avaliadoras',
+  avaliacaoFase1: 'Prazo final para avaliação pela banca',
+  preparacaoBancasFase2: 'Formação das bancas para apresentação',
+  apresentacaoFase2: 'Prazo final para apresentações orais',
+  ajustesFinais: 'Prazo para correções pós-defesa',
 };
 
 // ---------- E-mails do fluxo do TCC ----------

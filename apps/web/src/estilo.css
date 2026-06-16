@@ -492,8 +492,13 @@ select {
 .data-quando { flex-shrink: 0; font-size: 13px; color: var(--tinta-3); }
 .data-quando.definida { color: var(--tinta-1); font-weight: 600; }
 
-.resumo-icone { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: var(--c); color: #fff; margin-bottom: 4px; }
+.resumo-icone { width: 42px; height: 42px; border-radius: 11px; display: grid; place-items: center; background: var(--c); color: #fff; }
 .resumo-icone svg { width: 22px; height: 22px; }
+.resumo-topo { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.resumo-rotulo-forte { font-weight: 700; color: var(--tinta-1); font-size: 14px; }
+
+/* Tooltip escuro (barras de etapa) — aparece colado no cursor, como no antigo. */
+.dash-tooltip { position: fixed; z-index: 100; transform: translateY(-110%); background: var(--tinta-1); color: var(--papel-1); font-size: 12.5px; line-height: 1.5; padding: 8px 11px; border-radius: 7px; box-shadow: 0 8px 24px rgba(0, 0, 0, .22); white-space: pre-line; max-width: 280px; pointer-events: none; }
 
 .etapas-lista { display: flex; flex-direction: column; gap: 12px; }
 .etapa-linha { display: flex; align-items: center; gap: 12px; }
