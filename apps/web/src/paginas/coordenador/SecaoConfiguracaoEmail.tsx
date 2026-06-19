@@ -1,10 +1,22 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut, type ErroApi } from '../../api';
 
+const icoOlho = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" />
+  </svg>
+);
+const icoOlhoFechado = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><path d="M1 1l22 22" />
+  </svg>
+);
+
 // Configuração GLOBAL de e-mails (coordenador): 2 interruptores + servidor SMTP.
 export function SecaoConfiguracaoEmail() {
   const [cfg, setCfg] = useState<any | null>(null);
   const [salvando, setSalvando] = useState(false);
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   // Form do SMTP (separado; salva com botão).
   const [host, setHost] = useState('');
@@ -111,7 +123,13 @@ export function SecaoConfiguracaoEmail() {
               <label className="campo"><span>E-mail remetente (From)</span><input value={remetente} onChange={(e) => setRemetente(e.target.value)} placeholder="Sistema de TCC <nao-responda@dominio>" /></label>
               <label className="campo">
                 <span>Senha de app</span>
-                <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder={cfg.temSenha ? '•••••• (deixe em branco para manter)' : 'Senha de app do provedor'} />
+                <span className="campo-com-acao">
+                  <input type={mostrarSenha ? 'text' : 'password'} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder={cfg.temSenha ? '•••••• (deixe em branco para manter)' : 'Senha de app do provedor'} />
+                  <button type="button" className="campo-acao" onClick={() => setMostrarSenha((v) => !v)} title={mostrarSenha ? 'Ocultar' : 'Mostrar'} aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}>
+                    {mostrarSenha ? icoOlhoFechado : icoOlho}
+                  </button>
+                </span>
+                <small className="legenda">Use uma senha de app do provedor, não sua senha principal.</small>
               </label>
               <label className="linha-check linha-toggle" style={{ alignSelf: 'end' }}>
                 <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
