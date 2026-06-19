@@ -23,7 +23,6 @@ export function SecaoConfiguracaoEmail() {
   const [porta, setPorta] = useState('');
   const [secure, setSecure] = useState(false);
   const [usuario, setUsuario] = useState('');
-  const [remetente, setRemetente] = useState('');
   const [senha, setSenha] = useState(''); // vazio = manter a atual
   const [salvandoSmtp, setSalvandoSmtp] = useState(false);
   const [msg, setMsg] = useState('');
@@ -35,7 +34,6 @@ export function SecaoConfiguracaoEmail() {
     setPorta(c.smtpPort != null ? String(c.smtpPort) : '');
     setSecure(!!c.smtpSecure);
     setUsuario(c.smtpUsuario ?? '');
-    setRemetente(c.smtpRemetente ?? '');
     setSenha('');
   }
 
@@ -68,7 +66,7 @@ export function SecaoConfiguracaoEmail() {
         smtpPort: porta ? Number(porta) : null,
         smtpSecure: secure,
         smtpUsuario: usuario,
-        smtpRemetente: remetente,
+        smtpRemetente: '', // sem campo From: o remetente cai no próprio e-mail (smtpUsuario)
         smtpSenha: senha, // vazio = mantém a atual
       });
       aplicar(c); // recarrega (atualiza temSenha e limpa o campo de senha)
@@ -117,10 +115,7 @@ export function SecaoConfiguracaoEmail() {
             {msg && <div className="erro-geral" style={{ background: 'var(--aprovado-suave)', borderColor: 'rgba(21,128,61,0.25)', color: 'var(--aprovado)' }}>{msg}</div>}
             {erro && <div className="erro-geral">{erro}</div>}
             <div className="grade-2">
-              <label className="campo"><span>Servidor (host)</span><input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.seuprovedor.com" /></label>
-              <label className="campo"><span>Porta</span><input type="number" value={porta} onChange={(e) => setPorta(e.target.value)} placeholder="587" /></label>
-              <label className="campo"><span>Usuário</span><input value={usuario} onChange={(e) => setUsuario(e.target.value)} placeholder="usuario@dominio" /></label>
-              <label className="campo"><span>E-mail remetente (From)</span><input value={remetente} onChange={(e) => setRemetente(e.target.value)} placeholder="Sistema de TCC <nao-responda@dominio>" /></label>
+              <label className="campo"><span>E-mail</span><input value={usuario} onChange={(e) => setUsuario(e.target.value)} placeholder="seu-email@provedor.com" /></label>
               <label className="campo">
                 <span>Senha de app</span>
                 <span className="campo-com-acao">
@@ -131,6 +126,8 @@ export function SecaoConfiguracaoEmail() {
                 </span>
                 <small className="legenda">Use uma senha de app do provedor, não sua senha principal.</small>
               </label>
+              <label className="campo"><span>Servidor (host)</span><input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.seuprovedor.com" /></label>
+              <label className="campo"><span>Porta</span><input type="number" value={porta} onChange={(e) => setPorta(e.target.value)} placeholder="587" /></label>
               <label className="linha-check linha-toggle" style={{ alignSelf: 'end' }}>
                 <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
                 <span><strong>Conexão segura (TLS/SSL)</strong><span className="legenda">Marque para porta 465 (SSL). Para 587 (STARTTLS), deixe desmarcado.</span></span>
