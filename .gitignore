@@ -13,3 +13,6 @@ apps/api/prisma/*.sqlite
 
 # Vite
 **/node_modules/.vite/
+
+# Logs dos servidores de dev (não versionar)
+*.log

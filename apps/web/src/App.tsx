@@ -18,6 +18,7 @@ import { DashboardCoordenador } from './paginas/coordenador/DashboardCoordenador
 import { PainelCoordenador } from './paginas/coordenador/PainelCoordenador';
 import { PlanejamentoCoordenador } from './paginas/coordenador/PlanejamentoCoordenador';
 import { TccsCoordenador } from './paginas/coordenador/TccsCoordenador';
+import { TccDetalheCoordenador } from './paginas/coordenador/TccDetalheCoordenador';
 import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
@@ -75,6 +76,7 @@ export function App() {
             <Route element={<ExigePapel papeis={['COORDENADOR']} />}>
               <Route path="/coordenador" element={<DashboardCoordenador />} />
               <Route path="/coordenador/tccs" element={<TccsCoordenador />} />
+              <Route path="/coordenador/tccs/:id" element={<TccDetalheCoordenador />} />
               <Route path="/coordenador/relatorios" element={<Relatorios />} />
               <Route path="/coordenador/solicitacoes" element={<PainelCoordenador />} />
               <Route path="/coordenador/usuarios" element={<Usuarios />} />

@@ -1,175 +1,101 @@
+// Gestão de TCCs do coordenador — lista espelhando o layout do projeto antigo:
+// header "Gestão de TCCs", distribuição por etapa, busca com ícone, filtros de
+// fase e curso, e cards com título/aluno/orientador/badge/timeline. O card abre
+// a página interna de detalhe (/coordenador/tccs/:id), não um modal.
 import { useEffect, useMemo, useState } from 'react';
-import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
-import { Modal } from '../../componentes/Modal';
+import { useNavigate } from 'react-router-dom';
+import { apiGet } from '../../api';
 import { ROTULO_FASE, faseParaIndice } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
-
-// 5 etapas macro (igual ao dashboard / "Distribuição por etapa" do antigo).
-function bucketEtapa(f: string): number {
-  switch (f) {
-    case 'INICIALIZACAO': return 0;
-    case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
-    case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
-    case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
-    case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
-    default: return -1;
-  }
-}
-const NOMES_ETAPA = ['Inicial', 'Desenvolvimento', 'Fase I', 'Fase II', 'Finalização'];
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {d.split('|').map((p, i) => <path key={i} d={p} />)}
   </svg>
 );
-const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
-const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
+const icoBusca = ic('M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M21 21l-4.35-4.35');
+const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
 
-const bancaDe = (t: any, fase: string) => t.bancas?.find((b: any) => b.fase === fase);
-const ehFormar = (f: string) => f === 'FORMACAO_BANCA_FASE_1';
-const ehValidar = (f: string) => f === 'VALIDACAO_FASE_1' || f === 'VALIDACAO_FASE_2';
-const qtdBanca = (_f: string) => 2; // só a Fase I é formada manualmente (2 avaliadores)
-const faseValidando = (f: string) => (f === 'VALIDACAO_FASE_2' ? 'FASE_2' : 'FASE_1');
-
-const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
-const ROTULO_DOC: Record<string, string> = {
-  PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento',
-  TERMO_ACEITE: 'Termo de aceite',
-  MONOGRAFIA: 'Monografia',
-  VERSAO_FINAL: 'Versão final',
-};
-const rotuloDoc = (t: string) => ROTULO_DOC[t] ?? t;
-const rotuloStatusDoc = (s: string) =>
-  ({ PENDENTE: 'Aguardando', EM_ANALISE: 'Em análise', APROVADO: 'Aprovado', REJEITADO: 'Rejeitado', SUBSTITUIDA: 'Substituída' } as Record<string, string>)[s] ?? s;
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const nomeCurto = (p?: any) => p?.nomeCompleto ?? '—';
 
 export function TccsCoordenador() {
+  const navigate = useNavigate();
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
-
-  const [formando, setFormando] = useState<any | null>(null);
-  const [candidatos, setCandidatos] = useState<any[]>([]);
-  const [selecionados, setSelecionados] = useState<string[]>([]);
-
-  const [validando, setValidando] = useState<any | null>(null);
-  const [resultado, setResultado] = useState<any | null>(null);
-
-  const [detalhe, setDetalhe] = useState<any | null>(null);
-
-  const [erro, setErro] = useState('');
-  const [enviando, setEnviando] = useState(false);
 
   const [busca, setBusca] = useState('');
   const [filtroFase, setFiltroFase] = useState('TODAS');
   const [filtroCurso, setFiltroCurso] = useState('TODOS');
 
-  function carregar() {
+  useEffect(() => {
     setCarregando(true);
     apiGet('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
-  }
-  useEffect(carregar, []);
+  }, []);
 
-  const fasesPresentes = useMemo(() => Array.from(new Set(tccs.map((t) => t.faseAtual))), [tccs]);
+  // Distribuição por etapa: uma "carta" por fase presente, com contagem e barra (como no antigo).
   const distribuicao = useMemo(() => {
-    const counts = [0, 0, 0, 0, 0];
-    tccs.forEach((t) => { const b = bucketEtapa(t.faseAtual); if (b >= 0) counts[b]++; });
-    return NOMES_ETAPA.map((nome, i) => ({ nome, count: counts[i] }));
+    const counts: Record<string, number> = {};
+    tccs.forEach((t) => { counts[t.faseAtual] = (counts[t.faseAtual] || 0) + 1; });
+    return Object.keys(counts).map((f) => ({ fase: f, count: counts[f] }));
   }, [tccs]);
+  const fasesPresentes = useMemo(() => distribuicao.map((d) => d.fase), [distribuicao]);
+
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return tccs.filter((t) => {
       if (filtroFase !== 'TODAS' && t.faseAtual !== filtroFase) return false;
       if (filtroCurso !== 'TODOS' && t.aluno?.curso !== filtroCurso) return false;
       if (!termo) return true;
-      return [t.titulo, t.aluno?.nomeCompleto, t.orientador?.nomeCompleto].some((x) => (x ?? '').toLowerCase().includes(termo));
+      return [t.titulo, t.aluno?.nomeCompleto, t.orientador?.nomeCompleto, t.coorientador?.nomeCompleto].some(
+        (x) => (x ?? '').toLowerCase().includes(termo),
+      );
     });
   }, [tccs, busca, filtroFase, filtroCurso]);
-
-  async function abrirFormar(t: any) {
-    setFormando(t);
-    setSelecionados([]);
-    setErro('');
-    setCandidatos([]);
-    try {
-      setCandidatos(await apiGet(`/tccs/${t.id}/banca/candidatos`));
-    } catch {
-      /* lista vazia */
-    }
-  }
-  function toggle(id: string, qtd: number) {
-    setSelecionados((s) => (s.includes(id) ? s.filter((x) => x !== id) : s.length < qtd ? [...s, id] : s));
-  }
-  async function confirmarFormar() {
-    const qtd = qtdBanca(formando.faseAtual);
-    setErro('');
-    if (selecionados.length !== qtd) return setErro(`Selecione exatamente ${qtd} avaliadores.`);
-    setEnviando(true);
-    try {
-      await apiPost(`/tccs/${formando.id}/banca`, { avaliadorIds: selecionados });
-      setFormando(null);
-      carregar();
-    } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível formar a banca.');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
-  function fecharValidar() {
-    setValidando(null);
-    setResultado(null);
-  }
-  async function confirmarValidar() {
-    setErro('');
-    setEnviando(true);
-    try {
-      const r = await apiPost(`/tccs/${validando.id}/banca/validar`, {});
-      setResultado(r);
-      carregar();
-    } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível validar.');
-    } finally {
-      setEnviando(false);
-    }
-  }
-
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
   return (
     <>
-      <h1>TCCs</h1>
-      <p className="legenda">TCCs do período e a gestão de cada um.</p>
+      <h1>Gestão de TCCs</h1>
+      <p className="legenda">Acompanhe todos os trabalhos de conclusão de curso.</p>
 
       {tccs.length === 0 ? (
-        <section className="cartao-secao bloco">
-          <p className="nota-vazio">Nenhum TCC ainda.</p>
-        </section>
+        <section className="cartao-secao bloco"><p className="nota-vazio">Ainda não há TCCs cadastrados no período.</p></section>
       ) : (
         <>
+          {/* Distribuição por etapa */}
           <section className="cartao-secao bloco">
             <h2>Distribuição por etapa</h2>
-            <div className="dist-row">
+            <div className="dist-grid">
               {distribuicao.map((d) => (
-                <div key={d.nome} className="dist-item">
+                <button key={d.fase} type="button" className={`dist-card${filtroFase === d.fase ? ' ativo' : ''}`} onClick={() => setFiltroFase(filtroFase === d.fase ? 'TODAS' : d.fase)}>
                   <span className="dist-num">{d.count}</span>
-                  <span className="dist-nome">{d.nome}</span>
-                </div>
+                  <span className="dist-nome">{ROTULO_FASE[d.fase] ?? d.fase}</span>
+                  <span className="dist-barra"><span className="dist-barra-preenchida" style={{ width: `${(d.count / tccs.length) * 100}%` }} /></span>
+                </button>
               ))}
             </div>
           </section>
+
+          {/* Filtros e busca */}
           <section className="cartao-secao bloco">
             <div className="filtros">
               <label className="campo" style={{ flex: 2 }}>
                 <span>Pesquisar</span>
-                <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Aluno, título ou orientador…" />
+                <span className="campo-busca">
+                  {icoBusca}
+                  <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por título, aluno ou orientador…" />
+                </span>
               </label>
               <label className="campo">
-                <span>Fase</span>
+                <span>Etapa</span>
                 <select value={filtroFase} onChange={(e) => setFiltroFase(e.target.value)}>
-                  <option value="TODAS">Todas as fases</option>
-                  {fasesPresentes.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
+                  <option value="TODAS">Todas as etapas ({tccs.length})</option>
+                  {fasesPresentes.map((f) => {
+                    const n = distribuicao.find((d) => d.fase === f)?.count ?? 0;
+                    return <option key={f} value={f}>{(ROTULO_FASE[f] ?? f)} ({n})</option>;
+                  })}
                 </select>
               </label>
               <label className="campo">
@@ -181,212 +107,38 @@ export function TccsCoordenador() {
               </label>
             </div>
           </section>
+
           <p className="legenda" style={{ marginTop: 10 }}>
             Exibindo <strong>{filtrados.length}</strong> de <strong>{tccs.length}</strong> TCCs.
           </p>
+
           {filtrados.length === 0 ? (
-            <section className="cartao-secao bloco"><p className="nota-vazio">Nenhum TCC encontrado com os filtros.</p></section>
+            <section className="cartao-secao bloco"><p className="nota-vazio">Nenhum TCC encontrado com os filtros aplicados.</p></section>
           ) : (
-          <div className="lista bloco">
-          {filtrados.map((t) => (
-            <section key={t.id} className="cartao-secao">
-              <div className="aviso-cabecalho">
-                <h2>{t.titulo}</h2>
-                <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
-              </div>
-              <p className="nota-vazio" style={{ margin: '4px 0 12px' }}>
-                {t.aluno?.nomeCompleto} · Orientador: {t.orientador?.nomeCompleto ?? '—'}
-                {t.nf1 != null ? ` · NF1: ${Number(t.nf1).toFixed(1)}` : ''}
-                {t.nf2 != null ? ` · NF2: ${Number(t.nf2).toFixed(1)}` : ''}
-                {t.nf != null ? ` · NF: ${Number(t.nf).toFixed(1)}` : ''}
-              </p>
-              <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} /></div>
-              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                <button className="botao botao-secundario" onClick={() => setDetalhe(t)}>Ver detalhes</button>
-                {ehFormar(t.faseAtual) && (
-                  <button className="botao" onClick={() => abrirFormar(t)}>Formar banca (Fase I)</button>
-                )}
-                {ehValidar(t.faseAtual) && (
-                  <button className="botao" onClick={() => { setValidando(t); setResultado(null); setErro(''); }}>
-                    {t.faseAtual === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
-                  </button>
-                )}
-              </div>
-            </section>
-          ))}
-          </div>
+            <div className="lista bloco">
+              {filtrados.map((t) => (
+                <section key={t.id} className="cartao-secao card-tcc" onClick={() => navigate(`/coordenador/tccs/${t.id}`)} role="button" tabIndex={0}
+                  onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/coordenador/tccs/${t.id}`); }}>
+                  <div className="card-tcc-cabecalho">
+                    <div className="card-tcc-info">
+                      <h2>{t.titulo}</h2>
+                      <p className="card-tcc-pessoas">
+                        <span className="card-tcc-pessoa">{icoUser}<span><strong>Aluno:</strong> {nomeCurto(t.aluno)}</span></span>
+                        <span><strong>Orientador:</strong> {nomeCurto(t.orientador)}</span>
+                        {(t.coorientador?.nomeCompleto || t.coorientadorNome) && (
+                          <span className="card-tcc-co">(Co: {t.coorientador?.nomeCompleto || t.coorientadorNome})</span>
+                        )}
+                      </p>
+                    </div>
+                    <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
+                  </div>
+                  <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} /></div>
+                </section>
+              ))}
+            </div>
           )}
         </>
       )}
-
-      {formando && (() => {
-        const qtd = qtdBanca(formando.faseAtual);
-        const rotulo = 'Fase I';
-        return (
-          <Modal titulo={`Formar banca (${rotulo})`} subtitulo={`Escolha ${qtd} avaliadores · ${formando.titulo}`} aoFechar={() => !enviando && setFormando(null)}>
-            {erro && <div className="erro-geral">{erro}</div>}
-            {candidatos.length === 0 ? (
-              <p className="nota-vazio">Nenhum avaliador disponível (cadastre professores/avaliadores).</p>
-            ) : (
-              <div className="opcoes" style={{ flexDirection: 'column' }}>
-                {candidatos.map((c) => (
-                  <label key={c.id} className={`opcao${selecionados.includes(c.id) ? ' sel' : ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
-                    <input type="checkbox" checked={selecionados.includes(c.id)} onChange={() => toggle(c.id, qtd)} />
-                    <span style={{ flex: 1, minWidth: 0 }}>
-                      <span className="opcao-titulo">{c.tratamento ? c.tratamento + ' ' : ''}{c.nomeCompleto}</span>
-                      <span className="opcao-desc">{c.papel === 'AVALIADOR' ? `Externo${c.afiliacao ? ' · ' + c.afiliacao : ''}` : 'Professor'}</span>
-                    </span>
-                  </label>
-                ))}
-              </div>
-            )}
-            <div className="acoes">
-              <button className="botao botao-secundario" disabled={enviando} onClick={() => setFormando(null)}>Voltar</button>
-              <button className="botao" disabled={enviando || selecionados.length !== qtd} onClick={confirmarFormar}>
-                {enviando ? 'Formando…' : `Formar (${selecionados.length}/${qtd})`}
-              </button>
-            </div>
-          </Modal>
-        );
-      })()}
-
-      {validando && (() => {
-        const fase = faseValidando(validando.faseAtual);
-        const ehF2 = fase === 'FASE_2';
-        const banca = bancaDe(validando, fase);
-        const notas: number[] = (banca?.membros ?? []).map((m: any) => m.nota).filter((n: any) => n != null);
-        const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
-        const nfFinal = ehF2 && media != null ? 0.6 * (validando.nf1 ?? 0) + 0.4 * media : null;
-        return (
-          <Modal titulo={ehF2 ? 'Validar Fase II' : 'Validar Fase I'} subtitulo={validando.titulo} aoFechar={() => !enviando && fecharValidar()}>
-            {erro && <div className="erro-geral">{erro}</div>}
-            <dl className="dados">
-              {banca?.membros?.map((m: any) => (
-                <div key={m.id}>
-                  <dt>{m.avaliador?.nomeCompleto}</dt>
-                  <dd>{m.nota != null ? Number(m.nota).toFixed(1) : '—'}</dd>
-                </div>
-              ))}
-              <div>
-                <dt>{ehF2 ? 'NF2 (média)' : 'NF1 (média)'}</dt>
-                <dd><strong>{media != null ? media.toFixed(2) : '—'}</strong></dd>
-              </div>
-              {ehF2 && (
-                <div>
-                  <dt>Nota final (NF)</dt>
-                  <dd>
-                    <strong>{nfFinal != null ? nfFinal.toFixed(2) : '—'}</strong>
-                    {nfFinal != null ? (nfFinal >= 7 ? ' · aprovado' : ' · reprovado') : ''}
-                  </dd>
-                </div>
-              )}
-              {!ehF2 && media != null && (
-                <div><dt>Corte</dt><dd>{media >= 6 ? 'aprovado (≥6)' : 'reprovado (<6)'}</dd></div>
-              )}
-            </dl>
-            {resultado && (
-              <div className="alerta" style={resultado.aprovado
-                ? { background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginTop: 14 }
-                : { background: 'var(--reprovado-suave)', color: 'var(--reprovado)', marginTop: 14 }}>
-                {resultado.fase === 'FASE_1'
-                  ? (resultado.aprovado
-                      ? `Aprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}). Segue para a Fase II.`
-                      : `Reprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}).`)
-                  : (resultado.aprovado
-                      ? `Aprovado na Fase II — NF ${Number(resultado.nf).toFixed(2)}. Agora o aluno deve enviar a versão final.`
-                      : `Reprovado na Fase II. Nota final NF ${Number(resultado.nf).toFixed(2)}.`)}
-              </div>
-            )}
-            <div className="acoes">
-              <button className="botao botao-secundario" disabled={enviando} onClick={fecharValidar}>{resultado ? 'Fechar' : 'Voltar'}</button>
-              {!resultado && (
-                <button className="botao" disabled={enviando} onClick={confirmarValidar}>{enviando ? 'Validando…' : 'Validar'}</button>
-              )}
-            </div>
-          </Modal>
-        );
-      })()}
-
-      {detalhe && (() => {
-        const t = detalhe;
-        const coorient = t.coorientador
-          ? nomeComTrat(t.coorientador)
-          : t.coorientadorNome
-            ? `${t.coorientadorTitulacao ? t.coorientadorTitulacao + ' ' : ''}${t.coorientadorNome}${t.coorientadorAfiliacao ? ' · ' + t.coorientadorAfiliacao : ''}`
-            : '—';
-        const bancas = [...(t.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
-        return (
-          <Modal titulo={t.titulo} subtitulo={ROTULO_FASE[t.faseAtual] ?? t.faseAtual} aoFechar={() => setDetalhe(null)}>
-            <h3 className="titulo-bloco">Dados gerais</h3>
-            <dl className="dados">
-              <div><dt>Aluno</dt><dd>{t.aluno?.nomeCompleto}{t.aluno?.email ? ` · ${t.aluno.email}` : ''}</dd></div>
-              <div><dt>Curso</dt><dd>{cursoDe(t.aluno?.curso)}</dd></div>
-              <div><dt>Semestre</dt><dd>{t.semestre}</dd></div>
-              <div><dt>Orientador</dt><dd>{nomeComTrat(t.orientador)}</dd></div>
-              <div><dt>Coorientador</dt><dd>{coorient}</dd></div>
-              {(t.nf1 != null || t.nf2 != null || t.nf != null) && (
-                <div><dt>Notas</dt><dd>
-                  {t.nf1 != null ? `NF1 ${Number(t.nf1).toFixed(1)}` : '—'}
-                  {t.nf2 != null ? ` · NF2 ${Number(t.nf2).toFixed(1)}` : ''}
-                  {t.nf != null ? ` · NF ${Number(t.nf).toFixed(1)}` : ''}
-                  {t.resultado ? ` · ${t.resultado}` : ''}
-                </dd></div>
-              )}
-            </dl>
-
-            <h3 className="titulo-bloco" style={{ marginTop: 18 }}>Documentos</h3>
-            {(t.documentos ?? []).length === 0 ? (
-              <p className="nota-vazio">Nenhum documento enviado.</p>
-            ) : (
-              t.documentos.map((d: any) => (
-                <div key={d.id} className="item-arquivo">
-                  <div className="item-arquivo-info">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                      <polyline points="14 2 14 8 20 8" />
-                    </svg>
-                    <div>
-                      <span className="nome">{rotuloDoc(d.tipo)}</span>
-                      <span className="meta">v{d.versao} · {rotuloStatusDoc(d.status)}</span>
-                    </div>
-                  </div>
-                  <span className="acoes-doc">
-                    {/* Monografia/versão final, como no antigo: só baixar (sem visualizar). */}
-                    {d.tipo !== 'MONOGRAFIA' && d.tipo !== 'VERSAO_FINAL' && (
-                      <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
-                    )}
-                    <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
-                  </span>
-                </div>
-              ))
-            )}
-
-            <h3 className="titulo-bloco" style={{ marginTop: 18 }}>Banca e notas</h3>
-            {bancas.length === 0 ? (
-              <p className="nota-vazio">Banca ainda não formada.</p>
-            ) : (
-              bancas.map((b: any) => (
-                <div key={b.id} className="trilha-bloco">
-                  <div className="trilha-titulo"><strong>{b.fase === 'FASE_1' ? 'Fase I' : 'Fase II'}</strong></div>
-                  <dl className="dados">
-                    {(b.membros ?? []).map((m: any) => (
-                      <div key={m.id}>
-                        <dt>{nomeComTrat(m.avaliador)}</dt>
-                        <dd>{m.nota != null ? Number(m.nota).toFixed(1) : '—'}{m.parecer ? ` · ${m.parecer}` : ''}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              ))
-            )}
-
-            <div className="acoes">
-              <button className="botao" onClick={() => setDetalhe(null)}>Fechar</button>
-            </div>
-          </Modal>
-        );
-      })()}
-
     </>
   );
 }
