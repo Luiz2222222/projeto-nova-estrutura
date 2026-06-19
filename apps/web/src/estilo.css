@@ -657,6 +657,8 @@ select {
 .cor-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
 .cor-swatch { width: 30px; height: 30px; border-radius: var(--raio-1); border: 2px solid var(--borda-forte); cursor: pointer; }
 .cor-swatch.sel { box-shadow: 0 0 0 2px var(--azul); }
+.pin-mini { display: inline-flex; flex-shrink: 0; color: var(--tinta-3); }
+.pin-mini svg { width: 15px; height: 15px; }
 .muted { color: var(--tinta-3); font-size: 12px; }
 .acoes { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
 .radios { display: flex; gap: 20px; font-size: 14px; }

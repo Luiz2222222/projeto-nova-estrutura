@@ -260,7 +260,7 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
           </label>
           <div className="campo">
             <span>Destinatários</span>
-            <div className="radios" style={{ flexWrap: 'wrap' }}>
+            <div className="radios" style={{ flexDirection: 'column', gap: 8, alignItems: 'flex-start' }}>
               {PERFIS.map((p) => (
                 <label key={p.value}>
                   <input type="checkbox" checked={destinatarios.includes(p.value)} onChange={() => alternaDest(p.value)} />
@@ -279,18 +279,19 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
                   className={`cor-swatch${cor === c.value ? ' sel' : ''}`}
                   title={c.label}
                   onClick={() => setCor(c.value)}
-                  style={{ background: c.hex || 'var(--papel-2)', borderColor: c.hex || 'var(--borda-forte)' }}
+                  style={{ background: c.hex || 'var(--papel-2)' }}
                 />
               ))}
             </div>
           </div>
-          <label className="linha-check" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
+          <label className="linha-check" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', marginTop: 12 }}>
             <input type="checkbox" checked={fixado} onChange={(e) => setFixado(e.target.checked)} />
+            <span className="pin-mini">{icoPin}</span>
             <span>Fixar no topo do mural</span>
           </label>
           <div className="acoes">
             <button className="botao botao-secundario" disabled={salvando} onClick={() => setModal(false)}>Cancelar</button>
-            <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : editando ? 'Salvar' : 'Publicar'}</button>
+            <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : editando ? 'Salvar' : 'Publicar aviso'}</button>
           </div>
         </Modal>
       )}
