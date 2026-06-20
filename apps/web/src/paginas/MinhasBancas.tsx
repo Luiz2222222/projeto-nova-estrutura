@@ -23,13 +23,13 @@ const ultimaMonografia = (docs: any[] = []) => docs.filter((d) => d.tipo === 'MO
 type Grupo = { tcc: any; fase1?: any; fase2?: any };
 
 // Estado de uma fase para o card (cor do botão + texto de status + se abre a página).
-// Sem fase ainda formada (ou fase não liberada) → texto neutro "Aguardando liberação",
-// nunca "você não participa" (o membro participa da banca quando ela existir).
+// Quando a fase ainda não chegou/não está liberada, o botão fica indisponível/aguardando
+// SEM nenhuma frase abaixo (status vazio). Só há texto para enviada/pendente.
 function estadoFase(membro: any, tcc: any, faseAval: string) {
-  if (!membro) return { classe: 'indisponivel', status: 'Aguardando liberação', clicavel: false, feito: false };
+  if (!membro) return { classe: 'indisponivel', status: '', clicavel: false, feito: false };
   if (membro.nota != null) return { classe: 'feito', status: 'Avaliação enviada', clicavel: true, feito: true };
   if (tcc.faseAtual === faseAval) return { classe: 'disponivel', status: 'Avaliação pendente', clicavel: true, feito: false };
-  return { classe: 'aguardando', status: 'Aguardando liberação', clicavel: true, feito: false };
+  return { classe: 'aguardando', status: '', clicavel: true, feito: false };
 }
 
 export function MinhasBancas() {
@@ -116,13 +116,13 @@ export function MinhasBancas() {
                     <button className={`fase-btn ${e1.classe}`} disabled={!e1.clicavel} onClick={() => abrir(g.fase1)}>
                       {icoDoc}<span>Fase I – Monografia</span>{e1.feito && icoCheck}
                     </button>
-                    <span className={`fase-status ${e1.classe}`}>{e1.status}</span>
+                    {e1.status && <span className={`fase-status ${e1.classe}`}>{e1.status}</span>}
                   </div>
                   <div className="fase-coluna">
                     <button className={`fase-btn ${e2.classe}`} disabled={!e2.clicavel} onClick={() => abrir(g.fase2)}>
                       {icoApresentacao}<span>Fase II – Apresentação</span>{e2.feito && icoCheck}
                     </button>
-                    <span className={`fase-status ${e2.classe}`}>{e2.status}</span>
+                    {e2.status && <span className={`fase-status ${e2.classe}`}>{e2.status}</span>}
                   </div>
                 </div>
               </section>
