@@ -13,6 +13,11 @@ const icoBaixar = (
     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
   </svg>
 );
+const icoOlho = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" />
+  </svg>
+);
 const fmt = (n: number) => n.toString().replace('.', ',');
 
 export function MinhasBancas() {
@@ -87,7 +92,10 @@ export function MinhasBancas() {
         <div className="lista bloco">
           {itens.map((m) => {
             const tcc = m.banca.tcc;
-            const mono = ultimaMonografia(tcc.documentos);
+            // Documento que a banca avalia: o enviado pelo coordenador ao formar a banca
+            // (quando existe) substitui a monografia original.
+            const docAval = m.banca.documentoAvaliacao ?? ultimaMonografia(tcc.documentos);
+            const ehDocBanca = !!m.banca.documentoAvaliacao;
             const faseAval = m.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
             const podeAvaliar = tcc.faseAtual === faseAval && m.nota === null;
             return (
@@ -100,7 +108,7 @@ export function MinhasBancas() {
                   {tcc.aluno?.nomeCompleto} · {ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}
                 </p>
 
-                {mono && (
+                {docAval && (
                   <div className="item-arquivo">
                     <div className="item-arquivo-info">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -108,12 +116,13 @@ export function MinhasBancas() {
                         <polyline points="14 2 14 8 20 8" />
                       </svg>
                       <div>
-                        <span className="nome">Monografia</span>
-                        <span className="meta">{mono.nomeArquivo}</span>
+                        <span className="nome">{ehDocBanca ? 'Documento para avaliação' : 'Monografia'}</span>
+                        <span className="meta">{docAval.nomeArquivo}</span>
                       </div>
                     </div>
                     <span className="acoes-doc">
-                      <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${mono.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+                      <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${docAval.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
+                      <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${docAval.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
                     </span>
                   </div>
                 )}

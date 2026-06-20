@@ -194,6 +194,10 @@ model DocumentoTcc {
   parecer     String? // devolutiva do orientador (ex.: ao rejeitar a monografia)
   criadoEm    DateTime @default(now())
 
+  // Quando este documento é o "documento para avaliação" enviado pelo coordenador
+  // ao formar uma banca (tipo AVALIACAO_BANCA), aponta de volta para essa banca.
+  bancaDocumento Banca? @relation("BancaDocumento")
+
   @@map("documentos_tcc")
 }
 
@@ -204,6 +208,12 @@ model Banca {
   tccId    String
   fase     String // FASE_1 | FASE_2
   criadoEm DateTime @default(now())
+
+  // Documento que a banca deve avaliar, enviado manualmente pelo coordenador ao
+  // formar a banca (tipo AVALIACAO_BANCA). Quando existe, substitui a monografia
+  // original como documento de avaliação para os membros da banca.
+  documentoAvaliacaoId String?       @unique
+  documentoAvaliacao   DocumentoTcc? @relation("BancaDocumento", fields: [documentoAvaliacaoId], references: [id])
 
   membros MembroBanca[]
 

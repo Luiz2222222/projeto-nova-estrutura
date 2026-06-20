@@ -226,9 +226,10 @@ export class TccsService {
       t.alunoId === usuario.sub ||
       t.orientadorId === usuario.sub ||
       t.coorientadorId === usuario.sub;
-    // Membro de banca só acessa a monografia/versão final (não os documentos de abertura).
+    // Membro de banca acessa a monografia/versão final e o documento de avaliação
+    // enviado pelo coordenador (não os documentos de abertura).
     const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
-    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL'].includes(doc.tipo);
+    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'].includes(doc.tipo);
     return ehDono || acessoBanca ? doc : null;
   }
 

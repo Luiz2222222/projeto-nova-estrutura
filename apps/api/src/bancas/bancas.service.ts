@@ -1,6 +1,9 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { promises as fs } from 'fs';
+import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
+import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import {
   mediaNotas,
   notaFinal,
@@ -32,14 +35,30 @@ export class BancasService {
     });
   }
 
-  // Coordenador forma a banca da Fase I (2 avaliadores). A da Fase II é montada
-  // automaticamente ao validar a Fase I (orientador + os 2 avaliadores da Fase I).
-  async formarBanca(tccId: string, avaliadorIds: string[]) {
+  // Grava um arquivo no disco e devolve {nomeArquivo, caminho, tamanho}. Mesmo padrão
+  // seguro dos uploads de TCC: nome interno aleatório (sem path traversal); o nome
+  // enviado vira só metadado (com acentos corrigidos).
+  private async gravarArquivo(arquivo: any) {
+    const dir = join(process.cwd(), 'uploads');
+    await fs.mkdir(dir, { recursive: true });
+    const ext = extname(arquivo.originalname || '').replace(/[^.a-zA-Z0-9]/g, '').slice(0, 10);
+    const nome = `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`;
+    await fs.writeFile(join(dir, nome), arquivo.buffer);
+    return { nomeArquivo: corrigirNomeArquivo(arquivo.originalname), caminho: join('uploads', nome), tamanho: arquivo.size };
+  }
+
+  // Coordenador forma a banca da Fase I (2 avaliadores) e ENVIA o documento que a
+  // banca deve avaliar. A da Fase II é montada automaticamente ao validar a Fase I
+  // (orientador + os 2 avaliadores da Fase I).
+  async formarBanca(tccId: string, avaliadorIds: string[], arquivo: any) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
 
     if (tcc.faseAtual !== 'FORMACAO_BANCA_FASE_1') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando formação da banca da Fase I.' });
+    }
+    if (!arquivo) {
+      throw new BadRequestException({ mensagem: 'Envie o documento para avaliação da banca.' });
     }
     const fase = 'FASE_1' as const;
     const qtd = 2;
@@ -58,12 +77,27 @@ export class BancasService {
     });
     if (validos !== qtd) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
 
-    await this.prisma.$transaction([
-      this.prisma.banca.create({
-        data: { tccId, fase, membros: { create: ids.map((id) => ({ avaliadorId: id })) } },
-      }),
-      this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: proxima } }),
-    ]);
+    // Grava o arquivo primeiro; se a transação falhar, remove o órfão.
+    const meta = await this.gravarArquivo(arquivo);
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const doc = await tx.documentoTcc.create({
+          data: { tccId, tipo: 'AVALIACAO_BANCA', status: 'APROVADO', ...meta },
+        });
+        await tx.banca.create({
+          data: {
+            tccId,
+            fase,
+            documentoAvaliacaoId: doc.id,
+            membros: { create: ids.map((id) => ({ avaliadorId: id })) },
+          },
+        });
+        await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: proxima } });
+      });
+    } catch (e) {
+      await fs.unlink(join(process.cwd(), meta.caminho)).catch(() => undefined);
+      throw e;
+    }
     await this.eventos.emitirParaUsuario('aluno_banca_fase1_formada', tcc.alunoId, 'Banca da Fase I formada', `A banca da Fase I do seu TCC "${tcc.titulo}" foi formada.`);
     for (const id of ids) {
       await this.eventos.emitirParaUsuario('avaliador_adicionado_fase1', id, 'Você foi adicionado a uma banca (Fase I)', `Você foi adicionado à banca da Fase I do TCC "${tcc.titulo}".`);
@@ -80,6 +114,7 @@ export class BancasService {
         banca: {
           include: {
             tcc: { include: { aluno: { select: { nomeCompleto: true } }, documentos: true } },
+            documentoAvaliacao: true,
           },
         },
       },

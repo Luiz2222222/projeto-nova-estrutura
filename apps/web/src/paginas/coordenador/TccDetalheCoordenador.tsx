@@ -7,7 +7,7 @@
 //  - a versão final é validada pelo ORIENTADOR, não pelo coordenador.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
@@ -33,6 +33,7 @@ const ROTULO_DOC: Record<string, string> = {
   TERMO_ACEITE: 'Termo de aceite',
   MONOGRAFIA: 'Monografia',
   VERSAO_FINAL: 'Versão final',
+  AVALIACAO_BANCA: 'Documento para avaliação (banca)',
 };
 const rotuloDoc = (t: string) => ROTULO_DOC[t] ?? t;
 const rotuloStatusDoc = (s: string) =>
@@ -57,6 +58,7 @@ export function TccDetalheCoordenador() {
 
   const [candidatos, setCandidatos] = useState<any[]>([]);
   const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
@@ -107,10 +109,15 @@ export function TccDetalheCoordenador() {
   async function formarBanca() {
     setErro('');
     if (selecionados.length !== 2) return setErro('Selecione exatamente 2 avaliadores.');
+    if (!arquivoBanca) return setErro('Envie o documento para avaliação da banca.');
     setEnviando(true);
     try {
-      await apiPost(`/tccs/${tcc.id}/banca`, { avaliadorIds: selecionados });
+      const form = new FormData();
+      form.append('arquivo', arquivoBanca);
+      form.append('avaliadorIds', JSON.stringify(selecionados));
+      await apiUpload(`/tccs/${tcc.id}/banca`, form);
       setSelecionados([]);
+      setArquivoBanca(null);
       carregar();
     } catch (e) {
       setErro((e as ErroApi).mensagem || 'Não foi possível formar a banca.');
@@ -218,8 +225,13 @@ export function TccDetalheCoordenador() {
               ))}
             </div>
           )}
+          <label className="campo" style={{ marginTop: 16 }}>
+            <span>Documento para avaliação (PDF)</span>
+            <input type="file" accept="application/pdf" onChange={(e) => setArquivoBanca(e.target.files?.[0] ?? null)} />
+            <small className="legenda">A banca avaliará este documento (ex.: versão anônima da monografia). Obrigatório para formar a banca.</small>
+          </label>
           <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" disabled={enviando || selecionados.length !== 2} onClick={formarBanca}>
+            <button className="botao" disabled={enviando || selecionados.length !== 2 || !arquivoBanca} onClick={formarBanca}>
               {enviando ? 'Formando…' : `Formar banca (${selecionados.length}/2)`}
             </button>
           </div>
