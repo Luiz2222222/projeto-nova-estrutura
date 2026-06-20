@@ -9,7 +9,8 @@ import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
-import type { DadosAbrirTcc } from '@tcc/compartilhado';
+import { FASES } from '@tcc/compartilhado';
+import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
 function semestreAtual(): string {
   const d = new Date();
@@ -48,6 +49,100 @@ export class TccsService {
       select: { id: true, nomeCompleto: true, tratamento: true, papel: true },
       orderBy: { nomeCompleto: 'asc' },
     });
+  }
+
+  // Edição administrativa do TCC pelo coordenador (atualização parcial). Valida papéis
+  // dos usuários e a unique (alunoId, semestre). NÃO mexe em bancas, documentos,
+  // solicitações ou avaliações; salva a fase escolhida sem criar/apagar banca.
+  async editarTcc(tccId: string, dados: DadosEditarTcc) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException();
+
+    const data: Record<string, unknown> = {};
+    if (dados.titulo !== undefined) data.titulo = dados.titulo;
+    if (dados.semestre !== undefined) data.semestre = dados.semestre;
+    if (dados.faseAtual !== undefined) {
+      if (!(FASES as readonly string[]).includes(dados.faseAtual)) {
+        throw new BadRequestException({ mensagem: 'Fase inválida.' });
+      }
+      data.faseAtual = dados.faseAtual;
+    }
+    if (dados.monografiaAprovada !== undefined) data.monografiaAprovada = dados.monografiaAprovada;
+    if (dados.continuidadeConfirmada !== undefined) data.continuidadeConfirmada = dados.continuidadeConfirmada;
+    if (dados.parecerContinuidade !== undefined) data.parecerContinuidade = dados.parecerContinuidade || null;
+    if (dados.nf1 !== undefined) data.nf1 = dados.nf1;
+    if (dados.nf2 !== undefined) data.nf2 = dados.nf2;
+    if (dados.nf !== undefined) data.nf = dados.nf;
+    if (dados.resultado !== undefined) {
+      const r = dados.resultado || null;
+      if (r && !['APROVADO', 'REPROVADO'].includes(r)) {
+        throw new BadRequestException({ mensagem: 'Resultado inválido.' });
+      }
+      data.resultado = r;
+    }
+
+    if (dados.alunoId !== undefined) {
+      const aluno = await this.prisma.usuario.findUnique({ where: { id: dados.alunoId } });
+      if (!aluno || aluno.papel !== 'ALUNO') {
+        throw new BadRequestException({ mensagem: 'Aluno inválido (precisa ser um usuário do tipo aluno).' });
+      }
+      data.alunoId = dados.alunoId;
+    }
+    if (dados.orientadorId !== undefined) {
+      if (!dados.orientadorId) data.orientadorId = null;
+      else {
+        const o = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
+        if (!o || !['PROFESSOR', 'COORDENADOR'].includes(o.papel)) {
+          throw new BadRequestException({ mensagem: 'Orientador inválido (precisa ser professor ou coordenador).' });
+        }
+        data.orientadorId = dados.orientadorId;
+      }
+    }
+    if (dados.coorientadorId !== undefined) {
+      if (!dados.coorientadorId) data.coorientadorId = null;
+      else {
+        const co = await this.prisma.usuario.findUnique({ where: { id: dados.coorientadorId } });
+        if (!co || !['PROFESSOR', 'AVALIADOR', 'COORDENADOR'].includes(co.papel)) {
+          throw new BadRequestException({ mensagem: 'Coorientador inválido.' });
+        }
+        data.coorientadorId = dados.coorientadorId;
+      }
+    }
+    for (const k of ['coorientadorNome', 'coorientadorTitulacao', 'coorientadorAfiliacao', 'coorientadorLattes'] as const) {
+      if (dados[k] !== undefined) data[k] = dados[k] || null;
+    }
+
+    // Orientador e coorientador interno não podem ser a mesma pessoa.
+    const novoOrient = data.orientadorId !== undefined ? (data.orientadorId as string | null) : tcc.orientadorId;
+    const novoCoor = data.coorientadorId !== undefined ? (data.coorientadorId as string | null) : tcc.coorientadorId;
+    if (novoOrient && novoCoor && novoOrient === novoCoor) {
+      throw new BadRequestException({ mensagem: 'O coorientador deve ser diferente do orientador.' });
+    }
+
+    // Respeita a unique (alunoId, semestre).
+    const novoAluno = (data.alunoId as string) ?? tcc.alunoId;
+    const novoSem = (data.semestre as string) ?? tcc.semestre;
+    if (novoAluno !== tcc.alunoId || novoSem !== tcc.semestre) {
+      const conflito = await this.prisma.tcc.findFirst({
+        where: { alunoId: novoAluno, semestre: novoSem, NOT: { id: tccId } },
+      });
+      if (conflito) throw new BadRequestException({ mensagem: 'Já existe um TCC para este aluno neste semestre.' });
+    }
+
+    return this.prisma.tcc.update({ where: { id: tccId }, data });
+  }
+
+  // Edita metadados de um documento do TCC (não substitui o arquivo). Coordenador.
+  async editarDocumento(docId: string, dados: DadosEditarDocumento) {
+    const doc = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
+    if (!doc) throw new NotFoundException();
+    const data: Record<string, unknown> = {};
+    if (dados.tipo !== undefined) data.tipo = dados.tipo;
+    if (dados.status !== undefined) data.status = dados.status;
+    if (dados.parecer !== undefined) data.parecer = dados.parecer || null;
+    if (dados.versao !== undefined) data.versao = dados.versao;
+    if (dados.nomeArquivo !== undefined) data.nomeArquivo = dados.nomeArquivo;
+    return this.prisma.documentoTcc.update({ where: { id: docId }, data });
   }
 
   async abrir(alunoId: string, dados: DadosAbrirTcc) {

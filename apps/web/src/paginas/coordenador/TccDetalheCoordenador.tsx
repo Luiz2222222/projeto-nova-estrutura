@@ -11,6 +11,8 @@ import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
+import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
+import { ModalEditarDocumento } from '../../componentes/ModalEditarDocumento';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -23,6 +25,7 @@ const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M1
 const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
 const icoDoc = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
 const icoBanca = ic('M12 2l9 4.5-9 4.5-9-4.5L12 2z|M3 12l9 4.5 9-4.5');
+const icoLapis = ic('M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z');
 
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
 const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
@@ -66,6 +69,8 @@ export function TccDetalheCoordenador() {
   const [resultado, setResultado] = useState<any | null>(null);
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [editando, setEditando] = useState(false);
+  const [editandoDoc, setEditandoDoc] = useState<any | null>(null);
 
   function carregar() {
     setCarregando(true);
@@ -157,11 +162,16 @@ export function TccDetalheCoordenador() {
       <div className="det-cabecalho">
         <button className="det-voltar" onClick={() => navigate('/coordenador/tccs')}>{icoVoltar} Voltar para lista de TCCs</button>
         <div className="det-titulo-area">
-          <h1>{tcc.titulo}</h1>
-          <div className="det-badges">
-            <span className="badge-papel">{ROTULO_FASE[fase] ?? fase}</span>
-            <span className={`status-pill ${status.classe}`}>{status.rotulo}</span>
+          <div style={{ minWidth: 0 }}>
+            <h1>{tcc.titulo}</h1>
+            <div className="det-badges">
+              <span className="badge-papel">{ROTULO_FASE[fase] ?? fase}</span>
+              <span className={`status-pill ${status.classe}`}>{status.rotulo}</span>
+            </div>
           </div>
+          <button className="botao" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }} onClick={() => setEditando(true)}>
+            {icoLapis} Editar informações
+          </button>
         </div>
       </div>
 
@@ -320,6 +330,7 @@ export function TccDetalheCoordenador() {
                     </div>
                   </div>
                   <span className="acoes-doc">
+                    <button className="botao-icone" title="Editar documento" onClick={() => setEditandoDoc(d)}>{icoLapis}</button>
                     {d.tipo !== 'MONOGRAFIA' && d.tipo !== 'VERSAO_FINAL' && (
                       <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
                     )}
@@ -352,6 +363,13 @@ export function TccDetalheCoordenador() {
           </section>
         </div>
       </div>
+
+      {editando && (
+        <ModalEditarTcc tcc={tcc} aoFechar={() => setEditando(false)} aoSalvo={carregar} />
+      )}
+      {editandoDoc && (
+        <ModalEditarDocumento doc={editandoDoc} aoFechar={() => setEditandoDoc(null)} aoSalvo={carregar} />
+      )}
     </>
   );
 }

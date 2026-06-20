@@ -210,6 +210,40 @@ export const esquemaContinuidade = z
   });
 export type DadosContinuidade = z.infer<typeof esquemaContinuidade>;
 
+// ---------- Edição administrativa do TCC (coordenador) ----------
+// Tudo opcional (atualização parcial). faseAtual/resultado são validados no backend
+// contra as listas válidas. Números aceitam null (campo vazio limpa a nota).
+export const esquemaEditarTcc = z.object({
+  titulo: z.string().trim().min(1, 'Informe o título').optional(),
+  semestre: z.string().trim().min(1, 'Informe o semestre').optional(),
+  faseAtual: z.string().trim().min(1).optional(),
+  monografiaAprovada: z.boolean().optional(),
+  continuidadeConfirmada: z.boolean().optional(),
+  parecerContinuidade: z.string().trim().nullable().optional(),
+  nf1: z.coerce.number().min(0).max(10).nullable().optional(),
+  nf2: z.coerce.number().min(0).max(10).nullable().optional(),
+  nf: z.coerce.number().min(0).max(10).nullable().optional(),
+  resultado: z.string().trim().nullable().optional(),
+  alunoId: z.string().min(1).optional(),
+  orientadorId: z.string().min(1).nullable().optional(),
+  coorientadorId: z.string().min(1).nullable().optional(),
+  coorientadorNome: z.string().trim().nullable().optional(),
+  coorientadorTitulacao: z.string().trim().nullable().optional(),
+  coorientadorAfiliacao: z.string().trim().nullable().optional(),
+  coorientadorLattes: z.string().trim().nullable().optional(),
+});
+export type DadosEditarTcc = z.infer<typeof esquemaEditarTcc>;
+
+// Edição de metadados de um documento do TCC (não troca o arquivo em si).
+export const esquemaEditarDocumento = z.object({
+  tipo: z.string().trim().min(1).optional(),
+  status: z.string().trim().min(1).optional(),
+  parecer: z.string().trim().nullable().optional(),
+  versao: z.coerce.number().int().min(1).optional(),
+  nomeArquivo: z.string().trim().min(1).optional(),
+});
+export type DadosEditarDocumento = z.infer<typeof esquemaEditarDocumento>;
+
 // ---------- Banca / Fase I ----------
 
 export const esquemaFormarBanca = z.object({

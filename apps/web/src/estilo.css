@@ -1025,6 +1025,7 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .det-voltar svg { width: 16px; height: 16px; }
 .det-titulo-area { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
 .det-titulo-area h1 { margin: 0 0 8px; }
+.det-titulo-area .botao svg { width: 16px; height: 16px; }
 .det-badges { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .status-pill { font-family: var(--sans); font-size: 12px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid transparent; }
 .status-normal { color: var(--aprovado); background: var(--aprovado-suave); border-color: var(--aprovado-suave); }

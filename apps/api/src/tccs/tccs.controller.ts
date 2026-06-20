@@ -7,6 +7,7 @@ import {
   NotFoundException,
   Param,
   Post,
+  Put,
   Req,
   Res,
   UploadedFile,
@@ -27,11 +28,15 @@ import {
   esquemaAvaliarMonografia,
   esquemaContinuidade,
   esquemaAnaliseFinal,
+  esquemaEditarTcc,
+  esquemaEditarDocumento,
   type DadosAbrirTcc,
   type DadosRecusarAbertura,
   type DadosAvaliarMonografia,
   type DadosContinuidade,
   type DadosAnaliseFinal,
+  type DadosEditarTcc,
+  type DadosEditarDocumento,
 } from '@tcc/compartilhado';
 
 // Aceita só PDF nos uploads de documentos do TCC.
@@ -214,5 +219,21 @@ export class TccsController {
     @Body(new ZodValidacaoPipe(esquemaRecusarAbertura)) dados: DadosRecusarAbertura,
   ) {
     return this.tccs.recusar(id, dados.parecer);
+  }
+
+  // Edição administrativa do TCC (só coordenador).
+  @Put('tccs/:id')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editar(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaEditarTcc)) dados: DadosEditarTcc) {
+    return this.tccs.editarTcc(id, dados);
+  }
+
+  // Edição de metadados de um documento do TCC (só coordenador).
+  @Put('tccs/documentos/:docId')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editarDocumento(@Param('docId') docId: string, @Body(new ZodValidacaoPipe(esquemaEditarDocumento)) dados: DadosEditarDocumento) {
+    return this.tccs.editarDocumento(docId, dados);
   }
 }
