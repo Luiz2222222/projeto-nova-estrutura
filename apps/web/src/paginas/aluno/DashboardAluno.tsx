@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc } from '../../utils/fases';
 import { prazoEncerrado } from '../../utils/prazos';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
@@ -295,7 +295,7 @@ export function DashboardAluno() {
             {idx === null ? (
               <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
             ) : (
-              <TrilhaFases atual={idx} />
+              <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} notas={notasTrilhaTcc(tcc, false)} />
             )}
           </section>
 

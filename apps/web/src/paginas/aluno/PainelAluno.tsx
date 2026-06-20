@@ -4,7 +4,7 @@ import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, mostrarVersaoFinal } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc } from '../../utils/fases';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
@@ -125,7 +125,7 @@ export function PainelAluno() {
         ) : idx === null ? (
           <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
         ) : (
-          <TrilhaFases atual={idx} />
+          <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} notas={notasTrilhaTcc(tcc, false)} />
         )}
         <p className="nota-vazio" style={{ marginTop: 14 }}>
           Etapa atual: <strong>{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</strong>

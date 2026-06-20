@@ -5,7 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api';
-import { ROTULO_FASE, faseParaIndice } from '../../utils/fases';
+import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 
@@ -132,7 +132,7 @@ export function TccsCoordenador() {
                     </div>
                     <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
                   </div>
-                  <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} /></div>
+                  <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} sub={subfaseTcc(t)} notas={notasTrilhaTcc(t, true)} /></div>
                 </section>
               ))}
             </div>

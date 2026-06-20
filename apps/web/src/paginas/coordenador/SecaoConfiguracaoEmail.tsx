@@ -89,21 +89,41 @@ export function SecaoConfiguracaoEmail() {
         <p className="nota-vazio">Carregando…</p>
       ) : (
         <>
-          <div className="config-grupo">
-            <label className="linha-check linha-toggle">
-              <input type="checkbox" checked={!!cfg.recuperacaoSenhaAtiva} disabled={salvando} onChange={() => alternar('recuperacaoSenhaAtiva')} />
-              <span>
-                <strong>Enviar e-mails de recuperação de senha</strong>
-                <span className="legenda">Quando desligado, o "Esqueci minha senha" continua respondendo, mas nenhum e-mail é enviado.</span>
-              </span>
-            </label>
-            <label className="linha-check linha-toggle">
-              <input type="checkbox" checked={!!cfg.fluxoTccAtivo} disabled={salvando} onChange={() => alternar('fluxoTccAtivo')} />
-              <span>
-                <strong>Enviar e-mails do fluxo do TCC</strong>
-                <span className="legenda">Notificações de solicitações, monografia, banca, fases e versão final. As preferências individuais de cada usuário ainda valem.</span>
-              </span>
-            </label>
+          <div className="config-grupo pref-lista">
+            <div className="pref-item">
+              <div className="pref-texto">
+                <span className="pref-rotulo">Enviar e-mails de recuperação de senha</span>
+                <span className="pref-desc">Quando desligado, o "Esqueci minha senha" continua respondendo, mas nenhum e-mail é enviado.</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!cfg.recuperacaoSenhaAtiva}
+                aria-label="Enviar e-mails de recuperação de senha"
+                disabled={salvando}
+                className={`pref-switch${cfg.recuperacaoSenhaAtiva ? ' on' : ''}`}
+                onClick={() => alternar('recuperacaoSenhaAtiva')}
+              >
+                <span className="pref-switch-bolinha" aria-hidden="true" />
+              </button>
+            </div>
+            <div className="pref-item">
+              <div className="pref-texto">
+                <span className="pref-rotulo">Enviar e-mails do fluxo do TCC</span>
+                <span className="pref-desc">Notificações de solicitações, monografia, banca, fases e versão final. As preferências individuais de cada usuário ainda valem.</span>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!cfg.fluxoTccAtivo}
+                aria-label="Enviar e-mails do fluxo do TCC"
+                disabled={salvando}
+                className={`pref-switch${cfg.fluxoTccAtivo ? ' on' : ''}`}
+                onClick={() => alternar('fluxoTccAtivo')}
+              >
+                <span className="pref-switch-bolinha" aria-hidden="true" />
+              </button>
+            </div>
           </div>
 
           <div className="config-grupo">

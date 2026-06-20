@@ -264,6 +264,9 @@ a:hover { color: var(--azul-escuro); }
 .trilha-horizontal .fase:first-child::before { display: none; }
 .trilha-horizontal .no { position: relative; z-index: 1; margin: 0 auto; }
 .trilha-horizontal .rotulo { display: block; margin-top: 10px; font-size: 11.5px; color: var(--tinta-3); }
+.trilha-horizontal .fase-sub-trilha { display: block; margin-top: 3px; padding: 0 2px; font-size: 10.5px; font-weight: 600; line-height: 1.25; color: var(--azul-forte); }
+.trilha-horizontal .trilha-nota { display: inline-block; margin-top: 5px; padding: 1px 7px; font-size: 11px; font-weight: 700; color: var(--azul-forte); background: var(--azul-suave); border-radius: 999px; }
+.trilha-horizontal .fase-atual .rotulo { color: var(--tinta-1); font-weight: 600; }
 .no { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--canvas); border: 2px solid var(--borda-forte); box-sizing: border-box; }
 .fase-concluida .no { background: var(--azul); border-color: var(--azul); }
 .fase-concluida::before { background: var(--azul) !important; }
@@ -933,7 +936,10 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .config-grupo > p { margin: 0 0 14px; color: var(--tinta-3); font-size: 13px; }
 
 /* Cartões de tema (com amostra de cores) */
-.tema-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
+.tema-grid { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; }
+.tema-grid .tema-card { flex: 0 1 150px; }
+/* Cards de Aparência (tema) e Fonte centralizados, como no layout antigo */
+.config-grupo .opcoes { justify-content: center; }
 .tema-card {
   position: relative; display: flex; flex-direction: column; align-items: center; gap: 10px;
   padding: 16px 12px; cursor: pointer; font: inherit;
