@@ -4,7 +4,7 @@
 // a página interna de detalhe (/coordenador/tccs/:id), não um modal.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet } from '../../api';
+import { apiGet, URL_API } from '../../api';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
@@ -16,8 +16,17 @@ const ic = (d: string) => (
 );
 const icoBusca = ic('M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M21 21l-4.35-4.35');
 const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
+const icoLapis = ic('M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z');
+const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
 
 const nomeCurto = (p?: any) => p?.nomeCompleto ?? '—';
+
+// Documento principal para download: versão final (mais recente) ou, na falta, a monografia.
+function docPrincipal(t: any): any | null {
+  const docs: any[] = t.documentos ?? [];
+  const ultima = (tipo: string) => docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
+  return ultima('VERSAO_FINAL') ?? ultima('MONOGRAFIA') ?? null;
+}
 
 export function TccsCoordenador() {
   const navigate = useNavigate();
@@ -130,7 +139,21 @@ export function TccsCoordenador() {
                         )}
                       </p>
                     </div>
-                    <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
+                    <div className="card-tcc-lado">
+                      <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
+                      <div className="card-tcc-acoes">
+                        <button className="card-tcc-btn" title="Editar / gerenciar" onClick={(e) => { e.stopPropagation(); navigate(`/coordenador/tccs/${t.id}`); }}>{icoLapis} Editar</button>
+                        {(() => {
+                          const doc = docPrincipal(t);
+                          return doc ? (
+                            <a className="card-tcc-btn" href={`${URL_API}/tccs/documentos/${doc.id}/baixar`} target="_blank" rel="noreferrer"
+                              title={`Baixar ${doc.tipo === 'VERSAO_FINAL' ? 'versão final' : 'monografia'}`} onClick={(e) => e.stopPropagation()}>{icoBaixar} Download</a>
+                          ) : (
+                            <button className="card-tcc-btn" disabled title="Sem documento para baixar">{icoBaixar} Download</button>
+                          );
+                        })()}
+                      </div>
+                    </div>
                   </div>
                   <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} sub={subfaseTcc(t)} notas={notasTrilhaTcc(t, true)} /></div>
                 </section>

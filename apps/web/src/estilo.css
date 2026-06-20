@@ -992,6 +992,16 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .card-tcc-pessoa { display: inline-flex; align-items: center; gap: 6px; }
 .card-tcc-pessoa svg { width: 15px; height: 15px; color: var(--tinta-4); }
 .card-tcc-co { color: var(--tinta-4); }
+.card-tcc-lado { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; flex-shrink: 0; }
+.card-tcc-acoes { display: inline-flex; gap: 6px; }
+.card-tcc-btn {
+  display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: 12px; font-weight: 600;
+  color: var(--tinta-3); background: transparent; border: 1px solid var(--borda); border-radius: var(--raio-1);
+  padding: 4px 9px; cursor: pointer; text-decoration: none; transition: color .15s, border-color .15s, background .15s;
+}
+.card-tcc-btn:hover { color: var(--azul-forte); border-color: var(--azul); background: var(--azul-suave); }
+.card-tcc-btn:disabled { opacity: .5; cursor: default; }
+.card-tcc-btn svg { width: 14px; height: 14px; }
 .card-tcc .tcc-trilha { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--borda-suave); }
 
 /* ----- Detalhe interno ----- */
