@@ -45,8 +45,14 @@ const ic = (d: string) => (
 const icoRelogio = ic('M12 7v5l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0');
 const icoCalendario = ic('M16 2v4M8 2v4M3 10h18|M5 4h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2');
 const icoAtividade = ic('M22 12h-4l-3 9L9 3l-3 9H2');
-// Alerta (estado vazio da Ação pendente, igual ao antigo).
-const icoAlerta = ic('M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z|M12 9v4|M12 17h.01');
+// Estado vazio da "Ação pendente": exclamação dentro de um círculo, em cinza (como no antigo).
+const icoAlertaCirculo = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
+  </svg>
+);
 
 // Quebra o ROTULO_FASE em fase macro + status/subfase (duas linhas no card "Fase atual").
 function faseMacroSub(tcc: any): { macro: string; sub: string } {
@@ -240,9 +246,10 @@ export function DashboardAluno() {
             <div className="card-status">
               <div className="card-status-topo">
                 <span className="card-status-titulo">Ação pendente</span>
-                {acao.botao ? icoRelogio : icoAlerta}
+                {acao.botao ? icoRelogio : null}
               </div>
               <div className="card-status-corpo">
+                {!acao.botao && <span className="card-status-vazio-ico">{icoAlertaCirculo}</span>}
                 <span className="forte">{acao.titulo}</span>
                 <span className="sub">{acao.desc}</span>
                 {acao.parecer && <span className="sub"><strong>Devolutiva:</strong> {acao.parecer}</span>}

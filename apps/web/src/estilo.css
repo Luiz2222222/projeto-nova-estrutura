@@ -275,6 +275,9 @@ a:hover { color: var(--azul-escuro); }
 .trilha-chip.alerta { color: var(--reprovado); background: var(--reprovado-suave); }
 .card-status-corpo .fase-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
 .card-status-corpo .fase-chips .trilha-chip { font-size: 11px; }
+/* Ícone do estado vazio da "Ação pendente": exclamação circular cinza acima do texto */
+.card-status-vazio-ico { display: block; margin-bottom: 6px; color: var(--tinta-4); }
+.card-status-vazio-ico svg { width: 38px; height: 38px; }
 .no { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--canvas); border: 2px solid var(--borda-forte); box-sizing: border-box; }
 .fase-concluida .no { background: var(--azul); border-color: var(--azul); }
 .fase-concluida::before { background: var(--azul) !important; }
