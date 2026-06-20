@@ -26,6 +26,9 @@ const icoBanca = ic('M12 2l9 4.5-9 4.5-9-4.5L12 2z|M3 12l9 4.5 9-4.5');
 
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
 const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+// Rótulo do candidato no dropdown: nome (com tratamento) + tipo/afiliação.
+const rotuloCandidato = (c: any) =>
+  `${c.tratamento ? c.tratamento + ' ' : ''}${c.nomeCompleto}${c.papel === 'AVALIADOR' ? ` (Externo${c.afiliacao ? ' · ' + c.afiliacao : ''})` : ' (Professor)'}`;
 const fmtNota = (v: any) => (v != null ? Number(v).toFixed(1).replace('.', ',') : '—');
 
 const ROTULO_DOC: Record<string, string> = {
@@ -57,7 +60,8 @@ export function TccDetalheCoordenador() {
   const [carregando, setCarregando] = useState(true);
 
   const [candidatos, setCandidatos] = useState<any[]>([]);
-  const [selecionados, setSelecionados] = useState<string[]>([]);
+  const [avaliador1, setAvaliador1] = useState('');
+  const [avaliador2, setAvaliador2] = useState('');
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
   const [erro, setErro] = useState('');
@@ -102,21 +106,19 @@ export function TccDetalheCoordenador() {
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
   const concluido = fase === 'CONCLUIDO';
 
-  function toggle(idCand: string) {
-    setSelecionados((s) => (s.includes(idCand) ? s.filter((x) => x !== idCand) : s.length < 2 ? [...s, idCand] : s));
-  }
-
   async function formarBanca() {
     setErro('');
-    if (selecionados.length !== 2) return setErro('Selecione exatamente 2 avaliadores.');
+    if (!avaliador1 || !avaliador2) return setErro('Escolha o Avaliador 1 e o Avaliador 2.');
+    if (avaliador1 === avaliador2) return setErro('Os dois avaliadores devem ser pessoas diferentes.');
     if (!arquivoBanca) return setErro('Envie o documento para avaliação da banca.');
     setEnviando(true);
     try {
       const form = new FormData();
       form.append('arquivo', arquivoBanca);
-      form.append('avaliadorIds', JSON.stringify(selecionados));
+      form.append('avaliadorIds', JSON.stringify([avaliador1, avaliador2]));
       await apiUpload(`/tccs/${tcc.id}/banca`, form);
-      setSelecionados([]);
+      setAvaliador1('');
+      setAvaliador2('');
       setArquivoBanca(null);
       carregar();
     } catch (e) {
@@ -213,16 +215,25 @@ export function TccDetalheCoordenador() {
           {candidatos.length === 0 ? (
             <p className="nota-vazio">Nenhum avaliador disponível (cadastre professores/avaliadores).</p>
           ) : (
-            <div className="opcoes" style={{ flexDirection: 'column' }}>
-              {candidatos.map((c) => (
-                <label key={c.id} className={`opcao${selecionados.includes(c.id) ? ' sel' : ''}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 10, width: '100%' }}>
-                  <input type="checkbox" checked={selecionados.includes(c.id)} onChange={() => toggle(c.id)} />
-                  <span style={{ flex: 1, minWidth: 0 }}>
-                    <span className="opcao-titulo">{c.tratamento ? c.tratamento + ' ' : ''}{c.nomeCompleto}</span>
-                    <span className="opcao-desc">{c.papel === 'AVALIADOR' ? `Externo${c.afiliacao ? ' · ' + c.afiliacao : ''}` : 'Professor'}</span>
-                  </span>
-                </label>
-              ))}
+            <div className="grade-2">
+              <label className="campo">
+                <span>Avaliador 1</span>
+                <select value={avaliador1} onChange={(e) => setAvaliador1(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {candidatos.filter((c) => c.id !== avaliador2).map((c) => (
+                    <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="campo">
+                <span>Avaliador 2</span>
+                <select value={avaliador2} onChange={(e) => setAvaliador2(e.target.value)}>
+                  <option value="">Selecione…</option>
+                  {candidatos.filter((c) => c.id !== avaliador1).map((c) => (
+                    <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
+                  ))}
+                </select>
+              </label>
             </div>
           )}
           <label className="campo" style={{ marginTop: 16 }}>
@@ -231,8 +242,8 @@ export function TccDetalheCoordenador() {
             <small className="legenda">A banca avaliará este documento (ex.: versão anônima da monografia). Obrigatório para formar a banca.</small>
           </label>
           <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" disabled={enviando || selecionados.length !== 2 || !arquivoBanca} onClick={formarBanca}>
-              {enviando ? 'Formando…' : `Formar banca (${selecionados.length}/2)`}
+            <button className="botao" disabled={enviando || !avaliador1 || !avaliador2 || avaliador1 === avaliador2 || !arquivoBanca} onClick={formarBanca}>
+              {enviando ? 'Formando…' : 'Formar banca'}
             </button>
           </div>
         </section>

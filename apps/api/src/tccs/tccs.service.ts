@@ -298,7 +298,8 @@ export class TccsService {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
-        documentos: { orderBy: { criadoEm: 'desc' } },
+        // Documento interno da banca não aparece como metadado para o orientador.
+        documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } }, orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },
     });
@@ -311,7 +312,8 @@ export class TccsService {
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
-        documentos: { orderBy: { criadoEm: 'desc' } },
+        // Documento interno da banca não aparece como metadado para o coorientador.
+        documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } }, orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },
     });
