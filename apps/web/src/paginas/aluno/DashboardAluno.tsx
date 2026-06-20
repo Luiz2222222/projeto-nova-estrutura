@@ -187,7 +187,13 @@ export function DashboardAluno() {
     return semAcao('Sem solicitação pendente', 'Nenhuma solicitação aguardando ação');
   }
 
-  const acao = acaoPendente();
+  const acaoBruta = acaoPendente();
+  // Sem botão = não há ação real para o aluno fazer: mostra o estado vazio.
+  // (Estados informativos como "Aguardando aprovação/avaliação/validação" já
+  // aparecem no card "Fase atual", então não substituem o texto deste card.)
+  const acao: Acao = acaoBruta.botao
+    ? acaoBruta
+    : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
   const recusada = solic?.status === 'RECUSADA' && solic.parecer;
 
   // Versão final só aparece depois da Fase II aprovada (AGUARDANDO_AJUSTES_FINAIS),
