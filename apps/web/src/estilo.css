@@ -1116,3 +1116,53 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
   background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.18s ease;
 }
 .pref-switch.on .pref-switch-bolinha { transform: translateX(18px); }
+
+/* ============================================================
+   Participações em bancas (lista por TCC + botões de fase)
+   ============================================================ */
+.banca-card-topo { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.banca-card-topo h2 { margin: 0; font-size: 17px; }
+.banca-card-topo .botao svg { width: 16px; height: 16px; }
+
+.fase-botoes { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+.fase-coluna { display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 640px) { .fase-botoes { grid-template-columns: 1fr; } }
+
+.fase-btn {
+  display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%;
+  padding: 26px 16px; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
+  background: transparent; border: 2px solid var(--borda-forte); border-radius: var(--raio-2);
+  color: var(--tinta-2); transition: background .15s, border-color .15s, color .15s;
+}
+.fase-btn svg { width: 20px; height: 20px; }
+.fase-btn.disponivel { border-color: var(--azul); color: var(--azul-forte); }
+.fase-btn.disponivel:hover { background: var(--azul-suave); }
+.fase-btn.feito { border-color: var(--aprovado); background: var(--aprovado-suave); color: var(--aprovado); }
+.fase-btn.aguardando { border-color: var(--borda-forte); color: var(--tinta-3); }
+.fase-btn.aguardando:hover { background: var(--papel-2); }
+.fase-btn:disabled { opacity: .55; cursor: default; }
+.fase-status { font-size: 12px; text-align: center; color: var(--tinta-3); }
+.fase-status.disponivel { color: var(--azul-forte); font-weight: 600; }
+.fase-status.feito { color: var(--aprovado); font-weight: 600; }
+.fase-status.indisponivel { color: var(--tinta-4); }
+
+/* ----- Formulário de avaliação por critérios ----- */
+.criterios-lista { display: grid; gap: 12px; }
+.criterio-card { display: flex; gap: 12px; padding: 14px 16px; background: var(--papel-2); border: 1px solid var(--borda); border-radius: var(--raio-1); }
+.criterio-num { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; color: #fff; font-size: 14px; font-weight: 700; display: inline-grid; place-items: center; margin-top: 2px; }
+.criterio-corpo { flex: 1; min-width: 0; }
+.criterio-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.criterio-titulo { font-size: 14px; font-weight: 600; color: var(--tinta-1); }
+.criterio-nota { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.criterio-nota input { width: 58px; text-align: center; padding: 6px 8px; font-weight: 600; }
+.criterio-peso { font-size: 12px; color: var(--tinta-3); white-space: nowrap; }
+.criterio-desc { margin: 4px 0 8px; font-size: 12.5px; color: var(--tinta-3); font-style: italic; line-height: 1.4; }
+.criterio-comentario { width: 100%; font: inherit; resize: vertical; }
+
+.nota-total-box {
+  display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 16px; padding: 14px; border-radius: var(--raio-1);
+  background: var(--azul-suave); border: 1px solid var(--azul-anel); color: var(--tinta-1); font-size: 15px;
+}
+.nota-total-box strong { font-size: 26px; font-weight: 700; color: var(--azul-forte); }
+.nota-total-box .nota-total-max { color: var(--tinta-3); }

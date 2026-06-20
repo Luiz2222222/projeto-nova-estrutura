@@ -26,6 +26,7 @@ import { DetalheOrientando } from './paginas/professor/DetalheOrientando';
 import { DashboardAvaliador } from './paginas/avaliador/DashboardAvaliador';
 import { Coorientacoes } from './paginas/Coorientacoes';
 import { MinhasBancas } from './paginas/MinhasBancas';
+import { AvaliarBanca } from './paginas/AvaliarBanca';
 import { Configuracoes } from './paginas/Configuracoes';
 import { Perfil } from './paginas/Perfil';
 import { Relatorios } from './paginas/coordenador/Relatorios';
@@ -98,9 +99,15 @@ export function App() {
               <Route path="/avaliador" element={<DashboardAvaliador />} />
             </Route>
 
-            {/* Bancas e coorientações — professor e avaliador são membros de banca/coorientadores */}
+            {/* Bancas e coorientações — professor e avaliador são membros de banca/coorientadores.
+                Lista + página interna de avaliação, com aliases por papel e compat /bancas. */}
             <Route element={<ExigePapel papeis={['PROFESSOR', 'AVALIADOR']} />}>
               <Route path="/bancas" element={<MinhasBancas />} />
+              <Route path="/bancas/:membroId" element={<AvaliarBanca />} />
+              <Route path="/professor/bancas" element={<MinhasBancas />} />
+              <Route path="/professor/bancas/:membroId" element={<AvaliarBanca />} />
+              <Route path="/avaliador/bancas" element={<MinhasBancas />} />
+              <Route path="/avaliador/bancas/:membroId" element={<AvaliarBanca />} />
               <Route path="/coorientacoes" element={<Coorientacoes />} />
             </Route>
 
