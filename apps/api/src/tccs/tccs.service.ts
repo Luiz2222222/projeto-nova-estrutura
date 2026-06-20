@@ -136,6 +136,14 @@ export class TccsService {
   async editarDocumento(docId: string, dados: DadosEditarDocumento) {
     const doc = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException();
+    const TIPOS_DOC = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
+    const STATUS_DOC = ['PENDENTE', 'EM_ANALISE', 'APROVADO', 'REJEITADO', 'SUBSTITUIDA'];
+    if (dados.tipo !== undefined && !TIPOS_DOC.includes(dados.tipo)) {
+      throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
+    }
+    if (dados.status !== undefined && !STATUS_DOC.includes(dados.status)) {
+      throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
+    }
     const data: Record<string, unknown> = {};
     if (dados.tipo !== undefined) data.tipo = dados.tipo;
     if (dados.status !== undefined) data.status = dados.status;
