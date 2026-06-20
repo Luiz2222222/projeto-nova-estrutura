@@ -30,7 +30,9 @@ const icoBanca = ic('M12 2l9 4.5-9 4.5-9-4.5L12 2z|M3 12l9 4.5 9-4.5');
 const icoCheck = ic('M22 11.08V12a10 10 0 1 1-5.93-9.14|M22 4 12 14.01l-3-3');
 
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
+const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 const fmtNota = (v: any) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
+const fmtNota1 = (v: any) => (v != null ? Number(v).toFixed(1).replace('.', ',') : '—');
 const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
   const [a, m, d] = iso.split('T')[0].split('-');
@@ -133,14 +135,17 @@ export function DetalheOrientando() {
 
   const fase = tcc.faseAtual as string;
   const emDesenvolvimento = fase === 'DESENVOLVIMENTO';
-  const coorient = tcc.coorientadorNome
-    ? `${tcc.coorientadorTitulacao ? tcc.coorientadorTitulacao + ' ' : ''}${tcc.coorientadorNome}${tcc.coorientadorAfiliacao ? ' · ' + tcc.coorientadorAfiliacao : ''}`
-    : null;
+  const coorient = tcc.coorientador
+    ? `${nomeComTrat(tcc.coorientador)}${tcc.coorientador.afiliacao ? ' · ' + tcc.coorientador.afiliacao : ''}`
+    : tcc.coorientadorNome
+      ? `${tcc.coorientadorTitulacao ? tcc.coorientadorTitulacao + ' ' : ''}${tcc.coorientadorNome}${tcc.coorientadorAfiliacao ? ' · ' + tcc.coorientadorAfiliacao : ''}`
+      : null;
   const descricao = tcc.resumo || tcc.descricao || null;
   const monografias = docsDe(tcc.documentos, 'MONOGRAFIA');
   const ultimaMono = monografias[0] ?? null;
   const iniciais = [...docsDe(tcc.documentos, 'PLANO_DESENVOLVIMENTO'), ...docsDe(tcc.documentos, 'TERMO_ACEITE')];
   const versaoFinal = docsDe(tcc.documentos, 'VERSAO_FINAL')[0] ?? null;
+  const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
   const temNotas = tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null;
 
   return (
@@ -258,15 +263,34 @@ export function DetalheOrientando() {
             )}
           </section>
 
-          {temNotas && (
+          {(bancas.length > 0 || temNotas) && (
             <section className="cartao-secao">
               <h2>{icoBanca} Banca e notas</h2>
-              <dl className="dados">
-                {tcc.nf1 != null && <div><dt>NF1 (Fase I)</dt><dd>{fmtNota(tcc.nf1)}</dd></div>}
-                {tcc.nf2 != null && <div><dt>NF2 (Fase II)</dt><dd>{fmtNota(tcc.nf2)}</dd></div>}
-                {tcc.nf != null && <div><dt>Nota final (NF)</dt><dd><strong>{fmtNota(tcc.nf)}</strong></dd></div>}
-                {tcc.resultado && <div><dt>Resultado</dt><dd>{tcc.resultado}</dd></div>}
-              </dl>
+              {bancas.length === 0 ? (
+                <p className="nota-vazio">Banca ainda não formada.</p>
+              ) : (
+                bancas.map((b: any) => (
+                  <div key={b.id} className="trilha-bloco">
+                    <div className="trilha-titulo"><strong>{b.fase === 'FASE_1' ? 'Fase I' : 'Fase II'}</strong></div>
+                    <dl className="dados">
+                      {(b.membros ?? []).map((m: any) => (
+                        <div key={m.id}>
+                          <dt>{nomeComTrat(m.avaliador)}</dt>
+                          <dd>{fmtNota1(m.nota)}{m.parecer ? ` · ${m.parecer}` : ''}</dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))
+              )}
+              {temNotas && (
+                <dl className="dados" style={{ marginTop: 12 }}>
+                  {tcc.nf1 != null && <div><dt>NF1 (Fase I)</dt><dd>{fmtNota(tcc.nf1)}</dd></div>}
+                  {tcc.nf2 != null && <div><dt>NF2 (Fase II)</dt><dd>{fmtNota(tcc.nf2)}</dd></div>}
+                  {tcc.nf != null && <div><dt>Nota final (NF)</dt><dd><strong>{fmtNota(tcc.nf)}</strong></dd></div>}
+                  {tcc.resultado && <div><dt>Resultado</dt><dd>{tcc.resultado}</dd></div>}
+                </dl>
+              )}
             </section>
           )}
         </div>

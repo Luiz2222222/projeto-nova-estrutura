@@ -286,6 +286,8 @@ export class TccsService {
       where: { orientadorId: professorId },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
+        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
         documentos: { orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },

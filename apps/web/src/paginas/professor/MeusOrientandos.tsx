@@ -17,6 +17,7 @@ const icoUsers = ic('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2|M9 11a4 4 0 1 0 0
 const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
 const icoDoc = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
 const icoSeta = ic('M5 12h14|M12 5l7 7-7 7');
+const icoRelogio = ic('M12 7v5l3 2|M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0');
 
 type Doc = { tipo: string; status: string; versao: number };
 function monoPendente(t: any): boolean {
@@ -53,6 +54,9 @@ export function MeusOrientandos() {
   }, []);
 
   const pendentes = useMemo(() => tccs.filter(monoPendente), [tccs]);
+  // INICIALIZACAO = convite encaminhado, aguardando o coordenador aprovar (separado dos ativos).
+  const convites = useMemo(() => tccs.filter((t) => t.faseAtual === 'INICIALIZACAO'), [tccs]);
+  const ativos = useMemo(() => tccs.filter((t) => t.faseAtual !== 'INICIALIZACAO'), [tccs]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
@@ -72,11 +76,33 @@ export function MeusOrientandos() {
         </div>
       )}
 
+      {/* Convites encaminhados ao coordenador (TCCs em inicialização, aguardando aprovação) */}
+      {convites.length > 0 && (
+        <section className="cartao-secao bloco">
+          <h2 className="h2-icone"><span className="h2-ico">{icoRelogio}</span>Convites encaminhados ao coordenador</h2>
+          <div className="convites-lista">
+            {convites.map((t) => (
+              <div key={t.id} className="convite-item">
+                <div className="card-tcc-info">
+                  <h3>{t.titulo}</h3>
+                  <p className="card-tcc-pessoas">
+                    <span className="card-tcc-pessoa">{icoUser}<span><strong>Aluno:</strong> {t.aluno?.nomeCompleto ?? '—'}</span></span>
+                  </p>
+                </div>
+                <span className="status-pill status-atencao">Aguardando coordenador</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       {tccs.length === 0 ? (
         <section className="cartao-secao bloco"><p className="nota-vazio">Você ainda não tem orientandos.</p></section>
+      ) : ativos.length === 0 ? (
+        <section className="cartao-secao bloco"><p className="nota-vazio">Nenhum orientando ativo no momento.</p></section>
       ) : (
         <div className="lista bloco">
-          {tccs.map((t) => {
+          {ativos.map((t) => {
             const sf = statusFinal(t.faseAtual);
             const co = t.coorientador?.nomeCompleto || t.coorientadorNome;
             return (
