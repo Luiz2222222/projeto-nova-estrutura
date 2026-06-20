@@ -27,6 +27,21 @@ const parseBR = (v: string): number | null => {
   const n = parseFloat(v.replace(',', '.'));
   return Number.isFinite(n) ? n : null;
 };
+// Máscara/clamp das notas (igual ao antigo): remove letras/símbolos, ponto vira
+// vírgula, só uma vírgula, até 2 casas decimais, mantém estado intermediário ("1,")
+// e mantém a nota entre 0 e o peso do critério (acima do peso → vira o peso).
+function clampScore(raw: string, max: number, atual: string): string {
+  if (raw === '') return '';
+  const limpo = raw.replace(/[^\d,.]/g, '').replace(/\./g, ',');
+  if ((limpo.match(/,/g) || []).length > 1) return atual; // mais de uma vírgula
+  if (!/^\d{0,2}(,\d{0,2})?$/.test(limpo)) return atual; // até 2 inteiros + 2 decimais
+  const num = parseBR(limpo);
+  if (num !== null && !limpo.endsWith(',')) {
+    const clamped = Math.max(0, Math.min(num, max));
+    return String(clamped).replace('.', ',');
+  }
+  return limpo; // estado intermediário válido (ex.: "1,")
+}
 const numToStr = (v: any) => (v == null ? '' : String(v).replace('.', ','));
 
 // Parecer estruturado: "=== Rótulo ===\ncomentário" por critério + "=== Parecer geral ===".
@@ -207,7 +222,7 @@ export function AvaliarBanca() {
                       inputMode="decimal"
                       value={notas[c.chave] ?? ''}
                       disabled={leitura || enviando}
-                      onChange={(e) => setNotas((v) => ({ ...v, [c.chave]: e.target.value }))}
+                      onChange={(e) => setNotas((v) => ({ ...v, [c.chave]: clampScore(e.target.value, peso(c), v[c.chave] ?? '') }))}
                       placeholder="–"
                     />
                     <span className="criterio-peso">/ {fmt(Number(peso(c).toFixed(1)))}</span>

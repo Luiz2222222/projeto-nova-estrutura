@@ -23,11 +23,13 @@ const ultimaMonografia = (docs: any[] = []) => docs.filter((d) => d.tipo === 'MO
 type Grupo = { tcc: any; fase1?: any; fase2?: any };
 
 // Estado de uma fase para o card (cor do botão + texto de status + se abre a página).
+// Sem fase ainda formada (ou fase não liberada) → texto neutro "Aguardando liberação",
+// nunca "você não participa" (o membro participa da banca quando ela existir).
 function estadoFase(membro: any, tcc: any, faseAval: string) {
-  if (!membro) return { classe: 'indisponivel', status: 'Você não participa desta fase', clicavel: false, feito: false };
+  if (!membro) return { classe: 'indisponivel', status: 'Aguardando liberação', clicavel: false, feito: false };
   if (membro.nota != null) return { classe: 'feito', status: 'Avaliação enviada', clicavel: true, feito: true };
   if (tcc.faseAtual === faseAval) return { classe: 'disponivel', status: 'Avaliação pendente', clicavel: true, feito: false };
-  return { classe: 'aguardando', status: 'Aguardando o momento de avaliação', clicavel: true, feito: false };
+  return { classe: 'aguardando', status: 'Aguardando liberação', clicavel: true, feito: false };
 }
 
 export function MinhasBancas() {
