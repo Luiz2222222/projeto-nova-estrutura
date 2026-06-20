@@ -60,6 +60,13 @@ const ETAPAS = [
 const FASES_AVALIACAO = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1', 'AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'];
 const FASES_FINAL = ['AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO'];
 
+// Pendência de banca: só conta quando o TCC está na fase de avaliação correspondente
+// e ainda não lancei minha nota (mesma regra de MinhasBancas / DashboardAvaliador).
+function bancaPendente(m: any): boolean {
+  const faseAval = m.banca?.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+  return m.banca?.tcc?.faseAtual === faseAval && m.nota === null;
+}
+
 export function DashboardProfessor() {
   const navegar = useNavigate();
   const { usuario, atualizarUsuario } = useAuth();
@@ -110,9 +117,10 @@ export function DashboardProfessor() {
         items.push({ id: 'vf' + t.id, cor: 'verde', titulo: 'Validar versão final', sub: `${nome(t)} · ${t.titulo}`, link: '/professor/orientandos' });
       }
     });
-    // Bancas em que sou membro e ainda não lancei minha nota (Fase I ou Fase II — esta como orientador).
+    // Bancas em que sou membro: só é pendência quando o TCC está na fase de avaliação
+    // correspondente e eu ainda não lancei a nota (Fase II surge para o orientador).
     bancas.forEach((m: any) => {
-      if (m.nota == null) {
+      if (bancaPendente(m)) {
         const t = m.banca?.tcc;
         const ehF2 = m.banca?.fase === 'FASE_2';
         items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${nome(t)} · ${t?.titulo ?? ''}`, link: '/bancas' });
