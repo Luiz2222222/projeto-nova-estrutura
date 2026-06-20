@@ -9,10 +9,13 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
-import { ROTULO_CURSO } from '@tcc/compartilhado';
+import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
+import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalEditarDocumento } from '../../componentes/ModalEditarDocumento';
+import { ModalEditarAvaliacao } from '../../componentes/ModalEditarAvaliacao';
+import { ModalTrocarAvaliadores } from '../../componentes/ModalTrocarAvaliadores';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -71,6 +74,9 @@ export function TccDetalheCoordenador() {
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [editandoDoc, setEditandoDoc] = useState<any | null>(null);
+  const [editandoAval, setEditandoAval] = useState<{ membro: any; fase: string } | null>(null);
+  const [trocandoAvaliadores, setTrocandoAvaliadores] = useState<any | null>(null);
+  const [pesos, setPesos] = useState<any | null>(null);
 
   function carregar() {
     setCarregando(true);
@@ -88,6 +94,11 @@ export function TccDetalheCoordenador() {
       apiGet(`/tccs/${tccId}/banca/candidatos`).then(setCandidatos).catch(() => setCandidatos([]));
     }
   }, [tccId, tccFase]);
+
+  // Pesos do calendário do semestre do TCC (para a área de banca/notas).
+  useEffect(() => {
+    if (tccId) apiGet(`/tccs/${tccId}/banca/pesos`).then(setPesos).catch(() => setPesos(null));
+  }, [tccId]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
@@ -308,7 +319,65 @@ export function TccDetalheCoordenador() {
         </section>
       )}
 
-      {/* Conteúdo inferior: trilha do fluxo + documentos e banca */}
+      {/* Banca e notas — área administrativa completa (por critério, por avaliador) */}
+      <section className="cartao-secao bloco">
+        <h2>{icoBanca} Banca e notas</h2>
+        {bancas.length === 0 ? (
+          <p className="nota-vazio">Banca ainda não formada.</p>
+        ) : (
+          bancas.map((b: any) => {
+            const ehF2 = b.fase === 'FASE_2';
+            const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
+            const membros = b.membros ?? [];
+            return (
+              <div key={b.id} className="banca-fase">
+                <div className="banca-fase-cab">
+                  <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
+                  {!ehF2 && membros.length > 0 && (
+                    <button className="botao botao-secundario" onClick={() => setTrocandoAvaliadores(b)}>Editar avaliadores</button>
+                  )}
+                </div>
+                {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
+                {membros.length === 0 ? (
+                  <p className="nota-vazio">Sem membros nesta banca.</p>
+                ) : (
+                  membros.map((m: any) => {
+                    const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+                    const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
+                    return (
+                      <div key={m.id} className="aval-card">
+                        <div className="aval-card-top">
+                          <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
+                          <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
+                        </div>
+                        <div className="aval-criterios">
+                          {criterios.map((c) => {
+                            const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                            return (
+                              <div key={c.chave} className="aval-criterio">
+                                <span className="aval-criterio-rot">{c.rotulo}</span>
+                                <span className="aval-criterio-nota">{fmtNotaAv(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
+                                {com && <span className="aval-criterio-com">{com}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                        <div className="aval-rodape">
+                          <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
+                          <button className="botao botao-secundario" onClick={() => setEditandoAval({ membro: m, fase: b.fase })}>Editar avaliação</button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            );
+          })
+        )}
+      </section>
+
+      {/* Conteúdo inferior: trilha do fluxo + documentos */}
       <div className="grade-detalhe-inferior bloco">
         <section className="cartao-secao">
           <h2>Fluxo do TCC</h2>
@@ -340,27 +409,6 @@ export function TccDetalheCoordenador() {
               ))
             )}
           </section>
-
-          <section className="cartao-secao">
-            <h2>{icoBanca} Banca e notas</h2>
-            {bancas.length === 0 ? (
-              <p className="nota-vazio">Banca ainda não formada.</p>
-            ) : (
-              bancas.map((b: any) => (
-                <div key={b.id} className="trilha-bloco">
-                  <div className="trilha-titulo"><strong>{b.fase === 'FASE_1' ? 'Fase I' : 'Fase II'}</strong></div>
-                  <dl className="dados">
-                    {(b.membros ?? []).map((m: any) => (
-                      <div key={m.id}>
-                        <dt>{nomeComTrat(m.avaliador)}</dt>
-                        <dd>{fmtNota(m.nota)}{m.parecer ? ` · ${m.parecer}` : ''}</dd>
-                      </div>
-                    ))}
-                  </dl>
-                </div>
-              ))
-            )}
-          </section>
         </div>
       </div>
 
@@ -369,6 +417,12 @@ export function TccDetalheCoordenador() {
       )}
       {editandoDoc && (
         <ModalEditarDocumento doc={editandoDoc} aoFechar={() => setEditandoDoc(null)} aoSalvo={carregar} />
+      )}
+      {editandoAval && (
+        <ModalEditarAvaliacao membro={editandoAval.membro} fase={editandoAval.fase} pesos={pesos} aoFechar={() => setEditandoAval(null)} aoSalvo={carregar} />
+      )}
+      {trocandoAvaliadores && (
+        <ModalTrocarAvaliadores tccId={tcc.id} membrosFase1={trocandoAvaliadores.membros ?? []} aoFechar={() => setTrocandoAvaliadores(null)} aoSalvo={carregar} />
       )}
     </>
   );

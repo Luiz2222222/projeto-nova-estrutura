@@ -265,6 +265,21 @@ export const esquemaAvaliarBanca = z.object({
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
 
+// Edição administrativa de uma avaliação de membro pelo COORDENADOR (notas por
+// critério + parecer estruturado + status). Notas parciais só com status PENDENTE.
+export const esquemaEditarAvaliacaoMembro = z.object({
+  notas: z.record(z.coerce.number()),
+  parecer: z.string().trim().optional(),
+  status: z.enum(['PENDENTE', 'ENVIADO', 'BLOQUEADO', 'CONCLUIDO']),
+});
+export type DadosEditarAvaliacaoMembro = z.infer<typeof esquemaEditarAvaliacaoMembro>;
+
+// Troca dos 2 avaliadores da banca da Fase I (coordenador).
+export const esquemaTrocarAvaliadores = z.object({
+  avaliadorIds: z.array(z.string().min(1)).length(2, 'A banca da Fase I deve ter exatamente 2 avaliadores'),
+});
+export type DadosTrocarAvaliadores = z.infer<typeof esquemaTrocarAvaliadores>;
+
 // ---------- Conclusão (validação da versão final pelo orientador) ----------
 
 export const esquemaAnaliseFinal = z

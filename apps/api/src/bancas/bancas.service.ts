@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
@@ -252,6 +253,136 @@ export class BancasService {
       }
     });
     return { ok: true, status: 'PENDENTE' };
+  }
+
+  // ----- Edição administrativa da banca pelo coordenador -----
+
+  // Pesos do calendário do SEMESTRE do TCC (ou null → o front usa os defaults dos critérios).
+  async pesosDaBanca(tccId: string) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException();
+    return this.prisma.calendario.findUnique({ where: { semestre: tcc.semestre } });
+  }
+
+  // Ajusta a fase entre AVALIACAO_* e VALIDACAO_* conforme os status dos membros da banca.
+  // Não mexe em fases terminais/concluídas (só atua quando o TCC está na própria fase).
+  private async ajustarFasePorBanca(
+    tx: Prisma.TransactionClient,
+    banca: { id: string; fase: string },
+    tcc: { id: string; faseAtual: string },
+  ) {
+    const ehF1 = banca.fase === 'FASE_1';
+    const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+    const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+    if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseValid) return;
+    const membros = await tx.membroBanca.findMany({ where: { bancaId: banca.id } });
+    if (membros.length === 0) return;
+    const todosEnviaram = membros.every((m) => ['ENVIADO', 'BLOQUEADO', 'CONCLUIDO'].includes(m.status));
+    if (tcc.faseAtual === faseAval && todosEnviaram) {
+      await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseValid } });
+    } else if (tcc.faseAtual === faseValid && !todosEnviaram) {
+      await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAval } });
+    }
+  }
+
+  // Coordenador edita a avaliação de um membro: notas por critério (capadas no peso),
+  // parecer e status. Status ENVIADO/BLOQUEADO/CONCLUIDO exige todas as notas; PENDENTE
+  // aceita parcial (nota total null se incompleto). Ajusta a fase ao final. Não recalcula
+  // NF1/NF2/NF (isso é feito na validação da coordenação).
+  async editarAvaliacaoMembro(membroId: string, notas: Record<string, number>, parecer: string | undefined, status: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const membro = await tx.membroBanca.findUnique({
+        where: { id: membroId },
+        include: { banca: { include: { tcc: true } } },
+      });
+      if (!membro) throw new NotFoundException();
+      const tcc = membro.banca.tcc;
+      const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
+      const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
+      const exigeCompleto = status === 'ENVIADO' || status === 'BLOQUEADO' || status === 'CONCLUIDO';
+
+      const data: Record<string, number | string | Date | null> = {};
+      const valores: number[] = [];
+      let faltam = false;
+      for (const c of criterios) {
+        const peso = calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao;
+        const bruto = notas?.[c.chave];
+        if (bruto === undefined || bruto === null || Number.isNaN(Number(bruto))) {
+          data[colunaNota(c.chave)] = null;
+          faltam = true;
+          continue;
+        }
+        const nota = Number(bruto);
+        if (!Number.isFinite(nota) || nota < 0 || nota > peso) {
+          throw new BadRequestException({ mensagem: `Nota de "${c.rotulo}" deve estar entre 0 e ${peso}.` });
+        }
+        data[colunaNota(c.chave)] = nota;
+        valores.push(nota);
+      }
+      if (exigeCompleto && faltam) {
+        throw new BadRequestException({ mensagem: 'Para este status, preencha todas as notas dos critérios.' });
+      }
+      data.parecer = parecer ?? null;
+      data.status = status;
+      data.nota = faltam ? null : soma(valores);
+      data.avaliadoEm = exigeCompleto ? new Date() : null;
+
+      await tx.membroBanca.update({ where: { id: membroId }, data });
+      await this.ajustarFasePorBanca(tx, membro.banca, { id: tcc.id, faseAtual: tcc.faseAtual });
+    });
+    return { ok: true };
+  }
+
+  // Coordenador troca os 2 avaliadores da banca da Fase I. Preserva os que continuarem;
+  // remove quem saiu; novos entram PENDENTE/sem notas. Sincroniza a Fase II (se existir)
+  // para continuar sendo orientador + os 2 avaliadores atuais da Fase I.
+  async editarAvaliadoresFase1(tccId: string, avaliadorIds: string[]) {
+    const ids = [...new Set(avaliadorIds)];
+    if (ids.length !== 2) {
+      throw new BadRequestException({ mensagem: 'A banca da Fase I deve ter exatamente 2 avaliadores distintos.' });
+    }
+    await this.prisma.$transaction(async (tx) => {
+      const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
+      if (!tcc) throw new NotFoundException();
+      const bancaF1 = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase: 'FASE_1' } }, include: { membros: true } });
+      if (!bancaF1) throw new BadRequestException({ mensagem: 'A banca da Fase I ainda não foi formada.' });
+
+      const proibidos = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
+      if (ids.some((id) => proibidos.includes(id))) {
+        throw new BadRequestException({ mensagem: 'Aluno, orientador e coorientador não podem ser avaliadores.' });
+      }
+      const validos = await tx.usuario.count({ where: { id: { in: ids }, papel: { in: ['PROFESSOR', 'AVALIADOR'] } } });
+      if (validos !== ids.length) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
+
+      // Fase I: remove quem saiu, adiciona quem entrou (PENDENTE), mantém quem ficou.
+      const atuaisF1 = bancaF1.membros.map((m) => m.avaliadorId);
+      const removerF1 = bancaF1.membros.filter((m) => !ids.includes(m.avaliadorId)).map((m) => m.id);
+      const adicionarF1 = ids.filter((id) => !atuaisF1.includes(id));
+      if (removerF1.length) await tx.membroBanca.deleteMany({ where: { id: { in: removerF1 } } });
+      for (const id of adicionarF1) await tx.membroBanca.create({ data: { bancaId: bancaF1.id, avaliadorId: id } });
+
+      // Fase II (se já existe) = orientador + os 2 avaliadores da Fase I.
+      const bancaF2 = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase: 'FASE_2' } }, include: { membros: true } });
+      if (bancaF2) {
+        const desejadosF2 = [tcc.orientadorId, ...ids].filter((x): x is string => !!x);
+        const atuaisF2 = bancaF2.membros.map((m) => m.avaliadorId);
+        const removerF2 = bancaF2.membros.filter((m) => !desejadosF2.includes(m.avaliadorId)).map((m) => m.id);
+        const adicionarF2 = desejadosF2.filter((id) => !atuaisF2.includes(id));
+        if (removerF2.length) await tx.membroBanca.deleteMany({ where: { id: { in: removerF2 } } });
+        for (const id of adicionarF2) await tx.membroBanca.create({ data: { bancaId: bancaF2.id, avaliadorId: id } });
+      }
+
+      // Reavalia a transição de fase (um novo membro PENDENTE pode reverter VALIDACAO→AVALIACAO).
+      const atual = await tx.tcc.findUnique({ where: { id: tccId } });
+      if (atual) {
+        await this.ajustarFasePorBanca(tx, { id: bancaF1.id, fase: 'FASE_1' }, { id: tccId, faseAtual: atual.faseAtual });
+        if (bancaF2) {
+          const atual2 = await tx.tcc.findUnique({ where: { id: tccId } });
+          if (atual2) await this.ajustarFasePorBanca(tx, { id: bancaF2.id, fase: 'FASE_2' }, { id: tccId, faseAtual: atual2.faseAtual });
+        }
+      }
+    });
+    return { ok: true };
   }
 
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,

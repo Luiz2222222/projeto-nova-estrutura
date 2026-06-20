@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Post,
+  Put,
   Req,
   UploadedFile,
   UseGuards,
@@ -19,7 +20,11 @@ import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
 import {
   esquemaFormarBanca,
   esquemaAvaliarBanca,
+  esquemaEditarAvaliacaoMembro,
+  esquemaTrocarAvaliadores,
   type DadosAvaliarBanca,
+  type DadosEditarAvaliacaoMembro,
+  type DadosTrocarAvaliadores,
 } from '@tcc/compartilhado';
 
 // Aceita só PDF no documento de avaliação da banca (mesmo padrão dos uploads de TCC).
@@ -98,5 +103,37 @@ export class BancasController {
   @Papeis('COORDENADOR')
   validar(@Param('id') id: string) {
     return this.bancas.validar(id);
+  }
+
+  // ----- Edição administrativa da banca (só coordenador) -----
+
+  // Pesos do calendário do semestre do TCC (para a tela de banca do coordenador).
+  @Get('tccs/:id/banca/pesos')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  pesos(@Param('id') id: string) {
+    return this.bancas.pesosDaBanca(id);
+  }
+
+  // Edita a avaliação de um membro da banca (notas/comentários/parecer/status).
+  @Put('bancas/membros/:membroId/avaliacao')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  editarAvaliacao(
+    @Param('membroId') membroId: string,
+    @Body(new ZodValidacaoPipe(esquemaEditarAvaliacaoMembro)) dados: DadosEditarAvaliacaoMembro,
+  ) {
+    return this.bancas.editarAvaliacaoMembro(membroId, dados.notas, dados.parecer, dados.status);
+  }
+
+  // Troca os 2 avaliadores da banca da Fase I (sincroniza a Fase II).
+  @Put('tccs/:id/banca/avaliadores')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  trocarAvaliadores(
+    @Param('id') id: string,
+    @Body(new ZodValidacaoPipe(esquemaTrocarAvaliadores)) dados: DadosTrocarAvaliadores,
+  ) {
+    return this.bancas.editarAvaliadoresFase1(id, dados.avaliadorIds);
   }
 }
