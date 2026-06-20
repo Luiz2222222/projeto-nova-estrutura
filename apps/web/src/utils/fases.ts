@@ -28,24 +28,46 @@ export function mostrarVersaoFinal(faseAtual?: string | null, temDocVersaoFinal 
   return temDocVersaoFinal || (!!faseAtual && FASES_VERSAO_FINAL.includes(faseAtual));
 }
 
+// Chip de status paralelo (usado no Desenvolvimento: monografia + continuidade).
+export type EstadoChip = 'ok' | 'pendente' | 'alerta';
+export interface Chip { texto: string; estado: EstadoChip }
+
+// Última monografia enviada (maior versão).
+function ultimaMono(tcc: any): any | null {
+  return [...(tcc?.documentos ?? [])]
+    .filter((d: any) => d.tipo === 'MONOGRAFIA')
+    .sort((a: any, b: any) => b.versao - a.versao)[0] ?? null;
+}
+
+// Estado da monografia dentro do Desenvolvimento (chip).
+function chipMonografia(tcc: any): Chip {
+  const mono = ultimaMono(tcc);
+  if (tcc?.monografiaAprovada) return { texto: 'Monografia aprovada', estado: 'ok' };
+  if (mono?.status === 'PENDENTE') return { texto: 'Monografia em análise', estado: 'pendente' };
+  if (mono?.status === 'REJEITADO') return { texto: 'Ajustes na monografia', estado: 'alerta' };
+  return { texto: 'Monografia pendente', estado: 'pendente' };
+}
+
 // Status/subfase do TCC para a timeline horizontal (fase + status, como no antigo).
 // Mesmo texto usado no card "Fase atual" do dashboard do aluno.
+// No Desenvolvimento o status é COMPOSTO: monografia e continuidade são trilhas
+// paralelas; o TCC só avança quando as duas concluem (regra do backend, intocada).
 export function subfaseTcc(tcc: any): string {
   const f = tcc?.faseAtual;
   const solic = tcc?.solicitacoes?.[0];
-  const mono = [...(tcc?.documentos ?? [])]
-    .filter((d: any) => d.tipo === 'MONOGRAFIA')
-    .sort((a: any, b: any) => b.versao - a.versao)[0];
   switch (f) {
     case 'INICIALIZACAO':
       return solic?.status === 'RECUSADA' ? 'Abertura recusada'
         : solic?.status === 'PENDENTE' ? 'Aguardando aprovação do coordenador'
         : 'Aguardando aceite/aprovação';
-    case 'DESENVOLVIMENTO':
-      return tcc?.monografiaAprovada ? 'Monografia aprovada'
-        : mono?.status === 'PENDENTE' ? 'Monografia em análise'
-        : mono?.status === 'REJEITADO' ? 'Ajustes na monografia'
-        : 'Aguardando envio da monografia';
+    case 'DESENVOLVIMENTO': {
+      const aprov = !!tcc?.monografiaAprovada;
+      const cont = !!tcc?.continuidadeConfirmada;
+      if (aprov && cont) return 'Pronto para a Fase I';
+      if (aprov && !cont) return 'Aguardando confirmação de continuidade';
+      if (cont && !aprov) return 'Aguardando aprovação da monografia';
+      return 'Aguardando monografia e continuidade';
+    }
     case 'FORMACAO_BANCA_FASE_1': return 'Formação da banca';
     case 'AVALIACAO_FASE_1': return 'Avaliação da banca';
     case 'VALIDACAO_FASE_1': return 'Validação da Fase I';
@@ -59,6 +81,16 @@ export function subfaseTcc(tcc: any): string {
     case 'DESCONTINUADO': return 'Descontinuado';
     default: return '';
   }
+}
+
+// Chips de status paralelos do TCC. Hoje só o Desenvolvimento tem trilhas
+// paralelas (monografia + continuidade); nas demais fases não há chips.
+export function chipsTrilha(tcc: any): Chip[] {
+  if (tcc?.faseAtual !== 'DESENVOLVIMENTO') return [];
+  const continuidade: Chip = tcc?.continuidadeConfirmada
+    ? { texto: 'Continuidade confirmada', estado: 'ok' }
+    : { texto: 'Continuidade pendente', estado: 'pendente' };
+  return [chipMonografia(tcc), continuidade];
 }
 
 export interface NotasTrilha { fase1?: number | null; fase2?: number | null; final?: number | null }

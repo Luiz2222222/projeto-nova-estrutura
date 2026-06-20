@@ -2,7 +2,7 @@
 // Nós alcançados acendem em cobre. `atual = null` mostra o mapa (sem progresso).
 // No modo horizontal pode mostrar o status/subfase sob o nó atual e as notas
 // (Fase I / Fase II / final) sob os nós correspondentes, como no projeto antigo.
-import type { NotasTrilha } from '../utils/fases';
+import type { Chip, NotasTrilha } from '../utils/fases';
 
 export const FASES_MACRO = ['Solicitação', 'Desenvolvimento', 'Fase I', 'Fase II', 'Concluído'];
 
@@ -13,13 +13,14 @@ interface Props {
   atual?: number | null;
   orientacao?: 'horizontal' | 'vertical';
   sub?: string; // status/subfase mostrado sob o nó atual (só horizontal)
+  chips?: Chip[]; // status paralelos sob o nó atual (ex.: monografia + continuidade)
   notas?: NotasTrilha; // notas sob os nós de Fase I (2), Fase II (3) e Concluído (4)
 }
 
 const fmtNota = (v?: number | null) =>
   v == null ? null : Number(v).toFixed(1).replace('.', ',');
 
-export function TrilhaFases({ fases = FASES_MACRO, atual = null, orientacao = 'horizontal', sub, notas }: Props) {
+export function TrilhaFases({ fases = FASES_MACRO, atual = null, orientacao = 'horizontal', sub, chips, notas }: Props) {
   function estado(i: number): Estado {
     if (atual === null) return 'mapa';
     if (i < atual) return 'concluida';
@@ -47,6 +48,11 @@ export function TrilhaFases({ fases = FASES_MACRO, atual = null, orientacao = 'h
             <span className="no" aria-hidden="true" />
             <span className="rotulo">{f}</span>
             {horizontal && sub && i === atual && <span className="fase-sub-trilha">{sub}</span>}
+            {horizontal && chips && chips.length > 0 && i === atual && (
+              <span className="trilha-chips">
+                {chips.map((c) => <span key={c.texto} className={`trilha-chip ${c.estado}`}>{c.texto}</span>)}
+              </span>
+            )}
             {nota && <span className="trilha-nota">Nota {nota}</span>}
           </li>
         );

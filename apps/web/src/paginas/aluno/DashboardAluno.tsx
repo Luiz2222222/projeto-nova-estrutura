@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { prazoEncerrado } from '../../utils/prazos';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
@@ -61,14 +61,14 @@ function faseMacroSub(tcc: any): { macro: string; sub: string } {
           : 'Aguardando aceite/aprovação',
       };
     case 'DESENVOLVIMENTO': {
-      const mono = ultimoDoc(tcc?.documentos, 'MONOGRAFIA');
-      return {
-        macro: 'Desenvolvimento',
-        sub: tcc?.monografiaAprovada ? 'Monografia aprovada'
-          : mono?.status === 'PENDENTE' ? 'Monografia em análise'
-          : mono?.status === 'REJEITADO' ? 'Ajustes na monografia'
-          : 'Aguardando envio da monografia',
-      };
+      // Status composto: monografia e continuidade são trilhas paralelas.
+      const aprov = !!tcc?.monografiaAprovada;
+      const cont = !!tcc?.continuidadeConfirmada;
+      const sub = aprov && cont ? 'Pronto para a Fase I'
+        : aprov ? 'Aguardando confirmação de continuidade'
+        : cont ? 'Aguardando aprovação da monografia'
+        : 'Aguardando monografia e continuidade';
+      return { macro: 'Desenvolvimento', sub };
     }
     case 'FORMACAO_BANCA_FASE_1': return { macro: 'Fase I', sub: 'Formação da banca' };
     case 'AVALIACAO_FASE_1': return { macro: 'Fase I', sub: 'Avaliação da banca' };
@@ -277,10 +277,16 @@ export function DashboardAluno() {
               <div className="card-status-corpo">
                 {(() => {
                   const fs = faseMacroSub(tcc);
+                  const chips = chipsTrilha(tcc);
                   return (
                     <>
                       <span className="fase">{fs.macro}</span>
                       {fs.sub && <span className="fase-sub">{fs.sub}</span>}
+                      {chips.length > 0 && (
+                        <span className="fase-chips">
+                          {chips.map((c) => <span key={c.texto} className={`trilha-chip ${c.estado}`}>{c.texto}</span>)}
+                        </span>
+                      )}
                     </>
                   );
                 })()}
@@ -295,7 +301,7 @@ export function DashboardAluno() {
             {idx === null ? (
               <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
             ) : (
-              <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} notas={notasTrilhaTcc(tcc, false)} />
+              <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} chips={chipsTrilha(tcc)} notas={notasTrilhaTcc(tcc, false)} />
             )}
           </section>
 

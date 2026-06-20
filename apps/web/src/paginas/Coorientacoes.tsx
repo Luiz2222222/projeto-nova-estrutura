@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { apiGet, URL_API } from '../api';
-import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc } from '../utils/fases';
+import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../utils/fases';
 import { TrilhaFases } from '../componentes/TrilhaFases';
 
 const icoBaixar = (
@@ -60,7 +60,7 @@ export function Coorientacoes() {
                 </p>
 
                 {/* Mesma regra de notas do aluno/orientador: coorientador não é coordenador (false). */}
-                <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} sub={subfaseTcc(t)} notas={notasTrilhaTcc(t, false)} /></div>
+                <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} sub={subfaseTcc(t)} chips={chipsTrilha(t)} notas={notasTrilhaTcc(t, false)} /></div>
 
                 {(mono || vf) ? (
                   <div className="trilha-bloco">

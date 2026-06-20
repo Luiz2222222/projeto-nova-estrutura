@@ -267,6 +267,14 @@ a:hover { color: var(--azul-escuro); }
 .trilha-horizontal .fase-sub-trilha { display: block; margin-top: 3px; padding: 0 2px; font-size: 10.5px; font-weight: 600; line-height: 1.25; color: var(--azul-forte); }
 .trilha-horizontal .trilha-nota { display: inline-block; margin-top: 5px; padding: 1px 7px; font-size: 11px; font-weight: 700; color: var(--azul-forte); background: var(--azul-suave); border-radius: 999px; }
 .trilha-horizontal .fase-atual .rotulo { color: var(--tinta-1); font-weight: 600; }
+.trilha-horizontal .trilha-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px; margin-top: 5px; }
+/* Chips de status paralelo (monografia + continuidade no Desenvolvimento) */
+.trilha-chip { display: inline-block; font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+.trilha-chip.ok { color: var(--aprovado); background: var(--aprovado-suave); }
+.trilha-chip.pendente { color: #b45309; background: rgba(245, 158, 11, 0.14); }
+.trilha-chip.alerta { color: var(--reprovado); background: var(--reprovado-suave); }
+.card-status-corpo .fase-chips { display: flex; flex-wrap: wrap; justify-content: center; gap: 6px; margin-top: 6px; }
+.card-status-corpo .fase-chips .trilha-chip { font-size: 11px; }
 .no { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--canvas); border: 2px solid var(--borda-forte); box-sizing: border-box; }
 .fase-concluida .no { background: var(--azul); border-color: var(--azul); }
 .fase-concluida::before { background: var(--azul) !important; }
