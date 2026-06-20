@@ -85,6 +85,14 @@ export class BancasController {
     return this.bancas.avaliar(req.usuario.sub, bancaId, dados.notas, dados.parecer, dados.finalizar);
   }
 
+  // Reabre a própria avaliação enviada (ENVIADO → PENDENTE) para editar de novo.
+  @Post('bancas/:bancaId/reabrir')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR', 'AVALIADOR')
+  reabrir(@Req() req: Req, @Param('bancaId') bancaId: string) {
+    return this.bancas.reabrir(req.usuario.sub, bancaId);
+  }
+
   @Post('tccs/:id/banca/validar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')

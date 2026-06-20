@@ -82,9 +82,11 @@ export function AvaliarBanca() {
   const faseAtual: string | undefined = m?.banca?.tcc?.faseAtual;
   const emAvaliacao = faseAtual === faseAval;
   const emValidacao = faseAtual === faseValid;
-  // Editável enquanto não bloqueada/concluída e dentro da janela (avaliação ou validação).
-  const editavel = !!m && (status === 'PENDENTE' || status === 'ENVIADO') && (emAvaliacao || emValidacao);
-  const podeRascunho = editavel && emAvaliacao; // rascunho (des-enviar) só durante a avaliação
+  // Só PENDENTE é editável. ENVIADO fica em leitura e só mostra "Reabrir para Edição"
+  // (como no antigo). BLOQUEADO/CONCLUIDO seguem somente leitura, sem reabrir.
+  const editavel = !!m && status === 'PENDENTE' && (emAvaliacao || emValidacao);
+  const podeRascunho = editavel && emAvaliacao; // rascunho só durante a avaliação
+  const podeReabrir = !!m && status === 'ENVIADO' && (emAvaliacao || emValidacao);
   const leitura = !editavel;
 
   // Carrega o que estiver salvo (rascunho ou avaliação enviada).
@@ -155,6 +157,22 @@ export function AvaliarBanca() {
     }
   }
 
+  // Reabre a avaliação enviada para edição (ENVIADO → PENDENTE), preservando os dados.
+  async function reabrir() {
+    setErro('');
+    setMensagem('');
+    setEnviando(true);
+    try {
+      await apiPost(`/bancas/${m.bancaId}/reabrir`, {});
+      await recarregar();
+      setMensagem('Avaliação reaberta para edição.');
+    } catch (e) {
+      setErro((e as ErroApi).mensagem || 'Não foi possível reabrir a avaliação.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
   if (!m) {
@@ -179,7 +197,6 @@ export function AvaliarBanca() {
   };
   const statusRotulo = status === 'PENDENTE' ? (temRascunhoSalvo ? 'Rascunho' : 'Pendente') : STATUS_INFO[status]?.rotulo ?? status;
   const statusClasse = status === 'PENDENTE' ? 'status-atencao' : STATUS_INFO[status]?.classe ?? 'status-atencao';
-  const rotuloEnviar = status === 'ENVIADO' ? 'Reenviar avaliação' : 'Enviar avaliação';
 
   return (
     <>
@@ -227,11 +244,13 @@ export function AvaliarBanca() {
         {mensagem && <div className="alerta" style={{ background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginBottom: 14 }}>{mensagem}</div>}
         {leitura && (
           <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
-            {status === 'BLOQUEADO'
-              ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
-              : status === 'CONCLUIDO'
-                ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
-                : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
+            {status === 'ENVIADO'
+              ? 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Reabrir para Edição".'
+              : status === 'BLOQUEADO'
+                ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
+                : status === 'CONCLUIDO'
+                  ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
+                  : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
           </div>
         )}
         <div className="criterios-lista">
@@ -286,7 +305,12 @@ export function AvaliarBanca() {
           )}
           {editavel && (
             <button className="botao" disabled={enviando || total == null} onClick={() => salvar(true)}>
-              {enviando ? 'Enviando…' : rotuloEnviar}
+              {enviando ? 'Enviando…' : 'Enviar avaliação'}
+            </button>
+          )}
+          {podeReabrir && (
+            <button className="botao" disabled={enviando} onClick={reabrir}>
+              {enviando ? 'Reabrindo…' : 'Reabrir para Edição'}
             </button>
           )}
         </div>

@@ -220,6 +220,40 @@ export class BancasService {
     return { ok: true, status: res.finalizar ? 'ENVIADO' : 'PENDENTE' };
   }
 
+  // Reabre a própria avaliação ENVIADO → PENDENTE (preserva notas/parecer; a nota total
+  // volta a null). Se a fase já estava em VALIDACAO_* (todos enviaram), volta para
+  // AVALIACAO_* para o coordenador não validar com avaliação pendente. Só enquanto a
+  // avaliação não estiver BLOQUEADO/CONCLUIDO.
+  async reabrir(avaliadorId: string, bancaId: string) {
+    await this.prisma.$transaction(async (tx) => {
+      const membro = await tx.membroBanca.findFirst({
+        where: { bancaId, avaliadorId },
+        include: { banca: { include: { tcc: true } } },
+      });
+      if (!membro) throw new ForbiddenException();
+      if (membro.status !== 'ENVIADO') {
+        throw new BadRequestException({ mensagem: 'Só é possível reabrir uma avaliação enviada.' });
+      }
+      const tcc = membro.banca.tcc;
+      const ehF1 = membro.banca.fase === 'FASE_1';
+      const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+      const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+      if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseValid) {
+        throw new BadRequestException({ mensagem: 'Esta fase não está mais aberta para edição.' });
+      }
+      const atualizado = await tx.membroBanca.updateMany({
+        where: { id: membro.id, status: 'ENVIADO' },
+        data: { status: 'PENDENTE', nota: null, avaliadoEm: null },
+      });
+      if (atualizado.count !== 1) throw new BadRequestException({ mensagem: 'Não foi possível reabrir a avaliação.' });
+      // Banca estava completa (em validação) → volta para avaliação.
+      if (tcc.faseAtual === faseValid) {
+        await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAval } });
+      }
+    });
+    return { ok: true, status: 'PENDENTE' };
+  }
+
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
   // depois a nota final NF = 0,6·NF1 + 0,4·NF2, ≥7 → concluído.
   async validar(tccId: string) {
