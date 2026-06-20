@@ -113,7 +113,8 @@ export class TccsService {
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
         coorientador: { select: { id: true, nomeCompleto: true } },
         solicitacoes: { orderBy: { criadoEm: 'desc' } },
-        documentos: true,
+        // O documento interno da banca (AVALIACAO_BANCA) não aparece para o aluno.
+        documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } } },
       },
     });
   }
@@ -214,7 +215,7 @@ export class TccsService {
             alunoId: true,
             orientadorId: true,
             coorientadorId: true,
-            bancas: { select: { membros: { select: { avaliadorId: true } } } },
+            bancas: { select: { documentoAvaliacaoId: true, membros: { select: { avaliadorId: true } } } },
           },
         },
       },
@@ -222,14 +223,22 @@ export class TccsService {
     if (!doc) return null;
     if (usuario.papel === 'COORDENADOR') return doc;
     const t = doc.tcc;
+
+    // Documento interno da banca: só o coordenador (acima) e os membros da banca que
+    // avalia este documento. Nem o aluno dono, nem orientador/coorientador acessam por
+    // serem "donos" do TCC — apenas por serem membros da banca correspondente.
+    if (doc.tipo === 'AVALIACAO_BANCA') {
+      const banca = t.bancas.find((b) => b.documentoAvaliacaoId === doc.id);
+      return banca && banca.membros.some((m) => m.avaliadorId === usuario.sub) ? doc : null;
+    }
+
     const ehDono =
       t.alunoId === usuario.sub ||
       t.orientadorId === usuario.sub ||
       t.coorientadorId === usuario.sub;
-    // Membro de banca acessa a monografia/versão final e o documento de avaliação
-    // enviado pelo coordenador (não os documentos de abertura).
+    // Membro de banca acessa a monografia/versão final (não os documentos de abertura).
     const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
-    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'].includes(doc.tipo);
+    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL'].includes(doc.tipo);
     return ehDono || acessoBanca ? doc : null;
   }
 
