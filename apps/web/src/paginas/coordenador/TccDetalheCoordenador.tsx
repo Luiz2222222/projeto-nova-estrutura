@@ -8,9 +8,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
-import { ROTULO_FASE, faseParaIndice } from '../../utils/fases';
+import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
-import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -279,7 +279,7 @@ export function TccDetalheCoordenador() {
       <div className="grade-detalhe-inferior bloco">
         <section className="cartao-secao">
           <h2>Fluxo do TCC</h2>
-          <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(fase)} orientacao="vertical" /></div>
+          <TimelineVerticalDetalhada tcc={tcc} />
         </section>
         <div className="det-coluna">
           <section className="cartao-secao">
