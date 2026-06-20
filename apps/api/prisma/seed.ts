@@ -43,22 +43,11 @@ async function main() {
         curso: 'ENGENHARIA_ELETRICA',
       },
     });
-    await prisma.usuario.upsert({
-      where: { email: 'avaliador' },
-      update: { senhaHash: await bcrypt.hash('avaliador', 10), papel: 'AVALIADOR' },
-      create: {
-        nomeCompleto: 'Avaliador Externo de Teste',
-        email: 'avaliador',
-        senhaHash: await bcrypt.hash('avaliador', 10),
-        papel: 'AVALIADOR',
-        afiliacao: 'Externo',
-      },
-    });
   }
 
   console.log('Seed concluído.');
   console.log('Códigos:', codigos.map((c) => `${c.papel}=${c.codigo}`).join('  '));
-  console.log(ehProducao ? 'Produção: usuários de teste NÃO criados.' : 'Logins de teste: adm/adm · aluno/aluno · avaliador/avaliador');
+  console.log(ehProducao ? 'Produção: usuários de teste NÃO criados.' : 'Logins de teste: adm/adm · aluno/aluno');
 }
 
 main()
