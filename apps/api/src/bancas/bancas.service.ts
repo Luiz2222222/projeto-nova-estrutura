@@ -128,63 +128,87 @@ export class BancasService {
     return membros.map((m) => ({ ...m, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null }));
   }
 
-  // Avaliador pontua os 5 critérios da fase (cada nota capada no peso do critério).
-  // A nota total do membro = soma dos critérios. Quando todos avaliarem → VALIDACAO.
-  async avaliar(avaliadorId: string, bancaId: string, notas: Record<string, number>, parecer?: string) {
-    // Tudo numa transação: lê o membro, valida e grava sem janela de corrida entre
-    // duas requisições simultâneas do mesmo avaliador.
+  // Avaliador pontua os critérios da fase. finalizar=false → salva RASCUNHO (notas
+  // parciais; status PENDENTE; não conta como avaliação final). finalizar=true → ENVIA
+  // (exige todas as notas; status ENVIADO). Edição liberada enquanto status ∈ {PENDENTE,
+  // ENVIADO}; BLOQUEADO/CONCLUIDO travam. A fase só avança para VALIDACAO quando TODOS
+  // os membros estão ENVIADO+ (rascunho não dispara). Rascunho só durante AVALIACAO_*.
+  async avaliar(avaliadorId: string, bancaId: string, notas: Record<string, number>, parecer?: string, finalizar = true) {
     const res = await this.prisma.$transaction(async (tx) => {
       const membro = await tx.membroBanca.findFirst({
         where: { bancaId, avaliadorId },
         include: { banca: { include: { tcc: true } } },
       });
       if (!membro) throw new ForbiddenException();
-      if (membro.nota !== null) {
-        throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
+      if (membro.status === 'BLOQUEADO' || membro.status === 'CONCLUIDO') {
+        throw new BadRequestException({ mensagem: 'Esta avaliação foi bloqueada/concluída e não pode mais ser editada.' });
       }
       const tcc = membro.banca.tcc;
-      const faseEsperada = membro.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
-      if (tcc.faseAtual !== faseEsperada) {
+      const ehF1 = membro.banca.fase === 'FASE_1';
+      const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+      const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+      const emAvaliacao = tcc.faseAtual === faseAval;
+      const emValidacao = tcc.faseAtual === faseValid;
+      if (!emAvaliacao && !emValidacao) {
         throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
+      }
+      if (!finalizar && !emAvaliacao) {
+        throw new BadRequestException({ mensagem: 'A avaliação já foi enviada por todos; não é possível voltar para rascunho.' });
       }
 
       // Pesos: do Calendário do semestre; se não houver, usa os defaults dos critérios.
-      const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
+      const criterios = ehF1 ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
       const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
       const data: Record<string, number | string | Date | null> = {};
       const valores: number[] = [];
+      let faltam = false;
       for (const c of criterios) {
         const peso = calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao;
-        const nota = Number(notas?.[c.chave]);
+        const bruto = notas?.[c.chave];
+        if (bruto === undefined || bruto === null || Number.isNaN(Number(bruto))) {
+          data[colunaNota(c.chave)] = null; // ausente: ok no rascunho; erro no envio (abaixo)
+          faltam = true;
+          continue;
+        }
+        const nota = Number(bruto);
         if (!Number.isFinite(nota) || nota < 0 || nota > peso) {
-          throw new BadRequestException({
-            mensagem: `Nota de "${c.rotulo}" deve estar entre 0 e ${peso}.`,
-          });
+          throw new BadRequestException({ mensagem: `Nota de "${c.rotulo}" deve estar entre 0 e ${peso}.` });
         }
         data[colunaNota(c.chave)] = nota;
         valores.push(nota);
       }
-      data.nota = soma(valores); // total do membro (0–10)
       data.parecer = parecer ?? null;
-      data.avaliadoEm = new Date();
 
-      // Update CONDICIONAL (só se a nota ainda for null) + checagem de 1 linha: barra a corrida
-      // mesmo em bancos com isolamento mais frouxo (ex.: Postgres em produção).
+      if (finalizar) {
+        if (faltam) throw new BadRequestException({ mensagem: 'Para enviar, preencha todas as notas dos critérios.' });
+        data.nota = soma(valores); // total do membro (0–10)
+        data.status = 'ENVIADO';
+        data.avaliadoEm = new Date();
+      } else {
+        data.nota = null; // rascunho NÃO conta como avaliação final
+        data.status = 'PENDENTE';
+        data.avaliadoEm = null;
+      }
+
+      // Update CONDICIONAL: só se ainda editável (barra corrida e edição de travada).
       const atualizado = await tx.membroBanca.updateMany({
-        where: { id: membro.id, nota: null },
+        where: { id: membro.id, status: { notIn: ['BLOQUEADO', 'CONCLUIDO'] } },
         data,
       });
       if (atualizado.count !== 1) {
-        throw new BadRequestException({ mensagem: 'Você já avaliou este TCC.' });
+        throw new BadRequestException({ mensagem: 'Não foi possível salvar — a avaliação foi bloqueada.' });
       }
-      const membros = await tx.membroBanca.findMany({ where: { bancaId } });
+
+      // A fase só avança quando TODOS enviaram (ENVIADO ou superior). Rascunho não conta.
       let completou = false;
-      if (membros.every((m) => m.nota !== null)) {
-        const proxima = membro.banca.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
-        await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: proxima } });
-        completou = true;
+      if (finalizar && emAvaliacao) {
+        const membros = await tx.membroBanca.findMany({ where: { bancaId } });
+        if (membros.every((mm) => ['ENVIADO', 'BLOQUEADO', 'CONCLUIDO'].includes(mm.status))) {
+          await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseValid } });
+          completou = true;
+        }
       }
-      return { completou, fase: membro.banca.fase, titulo: tcc.titulo };
+      return { completou, fase: membro.banca.fase, titulo: tcc.titulo, finalizar };
     });
 
     // Quando a fase fecha (todos avaliaram), avisa a coordenação para validar.
@@ -193,7 +217,7 @@ export class BancasService {
       const evento = res.fase === 'FASE_1' ? 'coord_validar_fase1' : 'coord_validar_fase2';
       await this.eventos.emitirParaCoordenadores(evento, `Avaliações da ${faseNome} completas`, `Todas as avaliações da ${faseNome} do TCC "${res.titulo}" foram enviadas — é preciso validar.`);
     }
-    return { ok: true };
+    return { ok: true, status: res.finalizar ? 'ENVIADO' : 'PENDENTE' };
   }
 
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
@@ -214,6 +238,8 @@ export class BancasService {
     if (!banca || banca.membros.length === 0 || banca.membros.some((m) => m.nota === null)) {
       throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
     }
+    // Ao validar, trava as avaliações desta banca (não podem mais ser editadas).
+    await this.prisma.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO' } });
     const media = mediaNotas(banca.membros.map((m) => m.nota ?? 0));
 
     if (fase === 'FASE_1') {

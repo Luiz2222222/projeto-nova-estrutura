@@ -227,7 +227,11 @@ model MembroBanca {
   bancaId     String
   avaliador   Usuario  @relation(fields: [avaliadorId], references: [id])
   avaliadorId String
-  nota        Float? // total (soma dos critérios), 0–10, null até avaliar
+  nota        Float? // total (soma dos critérios), 0–10, null em rascunho/não enviada
+
+  // Status da avaliação: PENDENTE (rascunho/não enviada) | ENVIADO (enviada, ainda
+  // editável até a coordenação validar) | BLOQUEADO | CONCLUIDO (travada, sem edição).
+  status      String @default("PENDENTE")
 
   // Notas por critério (Fase I usa os 5 primeiros; Fase II usa os 5 últimos).
   notaResumo          Float?

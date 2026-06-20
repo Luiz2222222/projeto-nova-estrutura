@@ -217,10 +217,17 @@ export const esquemaFormarBanca = z.object({
 });
 export type DadosFormarBanca = z.infer<typeof esquemaFormarBanca>;
 
+// Status da avaliação de cada membro da banca.
+export const STATUS_MEMBRO_BANCA = ['PENDENTE', 'ENVIADO', 'BLOQUEADO', 'CONCLUIDO'] as const;
+export type StatusMembroBanca = (typeof STATUS_MEMBRO_BANCA)[number];
+
 // Avaliação por critério: notas[chaveDoCriterio] = nota (cada uma capada no peso do critério).
+// finalizar=false → salva rascunho (notas parciais permitidas); finalizar=true → envia
+// (exige todas as notas). Default true mantém compatibilidade com chamadas antigas.
 export const esquemaAvaliarBanca = z.object({
   notas: z.record(z.coerce.number()),
   parecer: z.string().trim().optional(),
+  finalizar: z.boolean().optional().default(true),
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
 

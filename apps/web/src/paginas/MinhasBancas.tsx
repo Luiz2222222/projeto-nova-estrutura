@@ -22,14 +22,23 @@ const ultimaMonografia = (docs: any[] = []) => docs.filter((d) => d.tipo === 'MO
 
 type Grupo = { tcc: any; fase1?: any; fase2?: any };
 
+// Colunas de nota por critério (Fase I usa as 5 primeiras; Fase II as 5 últimas).
+const NOTA_COLS = ['notaResumo', 'notaIntroducao', 'notaRevisao', 'notaDesenvolvimento', 'notaConclusoes', 'notaCoerencia', 'notaQualidade', 'notaDominio', 'notaClareza', 'notaObservancia'];
+const temRascunho = (m: any) => !!m && (NOTA_COLS.some((k) => m[k] != null) || !!m.parecer);
+
 // Estado de uma fase para o card (cor do botão + texto de status + se abre a página).
-// Quando a fase ainda não chegou/não está liberada, o botão fica indisponível/aguardando
-// SEM nenhuma frase abaixo (status vazio). Só há texto para enviada/pendente.
+// Usa o status do membro: PENDENTE (com rascunho → "Rascunho salvo") / ENVIADO / BLOQUEADO
+// / CONCLUIDO. Fase ainda não chegada/sem membro fica sem texto e com o botão indisponível.
 function estadoFase(membro: any, tcc: any, faseAval: string) {
   if (!membro) return { classe: 'indisponivel', status: '', clicavel: false, feito: false };
-  if (membro.nota != null) return { classe: 'feito', status: 'Avaliação enviada', clicavel: true, feito: true };
+  const st = membro.status;
+  if (st === 'CONCLUIDO') return { classe: 'feito', status: 'Concluída', clicavel: true, feito: true };
+  if (st === 'BLOQUEADO') return { classe: 'feito', status: 'Bloqueada', clicavel: true, feito: true };
+  if (st === 'ENVIADO') return { classe: 'feito', status: 'Avaliação enviada', clicavel: true, feito: true };
+  // PENDENTE
+  if (temRascunho(membro)) return { classe: 'disponivel', status: 'Rascunho salvo', clicavel: true, feito: false };
   if (tcc.faseAtual === faseAval) return { classe: 'disponivel', status: 'Avaliação pendente', clicavel: true, feito: false };
-  return { classe: 'aguardando', status: '', clicavel: true, feito: false };
+  return { classe: 'aguardando', status: '', clicavel: false, feito: false };
 }
 
 export function MinhasBancas() {

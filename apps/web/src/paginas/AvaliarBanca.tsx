@@ -63,6 +63,7 @@ export function AvaliarBanca() {
   const [comentarios, setComentarios] = useState<Record<string, string>>({});
   const [parecerGeral, setParecerGeral] = useState('');
   const [erro, setErro] = useState('');
+  const [mensagem, setMensagem] = useState('');
   const [enviando, setEnviando] = useState(false);
 
   const prefixoLista = usuario?.papel === 'AVALIADOR' ? '/avaliador/bancas' : usuario?.papel === 'PROFESSOR' ? '/professor/bancas' : '/bancas';
@@ -75,25 +76,29 @@ export function AvaliarBanca() {
   const fase: string | undefined = m?.banca?.fase;
   const ehF2 = fase === 'FASE_2';
   const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
-  const jaAvaliou = m?.nota != null;
+  const status: string = m?.status ?? 'PENDENTE';
   const faseAval = ehF2 ? 'AVALIACAO_FASE_2' : 'AVALIACAO_FASE_1';
-  const podeAvaliar = !!m && m.banca?.tcc?.faseAtual === faseAval && !jaAvaliou;
-  const leitura = !podeAvaliar;
+  const faseValid = ehF2 ? 'VALIDACAO_FASE_2' : 'VALIDACAO_FASE_1';
+  const faseAtual: string | undefined = m?.banca?.tcc?.faseAtual;
+  const emAvaliacao = faseAtual === faseAval;
+  const emValidacao = faseAtual === faseValid;
+  // Editável enquanto não bloqueada/concluída e dentro da janela (avaliação ou validação).
+  const editavel = !!m && (status === 'PENDENTE' || status === 'ENVIADO') && (emAvaliacao || emValidacao);
+  const podeRascunho = editavel && emAvaliacao; // rascunho (des-enviar) só durante a avaliação
+  const leitura = !editavel;
 
-  // Pré-preenche em modo leitura (notas/comentários salvos).
+  // Carrega o que estiver salvo (rascunho ou avaliação enviada).
   useEffect(() => {
     if (!m) return;
-    if (m.nota != null) {
-      const ns: Record<string, string> = {};
-      const cs: Record<string, string> = {};
-      for (const c of criterios) {
-        ns[c.chave] = numToStr(m[colunaNota(c.chave)]);
-        cs[c.chave] = extrairSecao(m.parecer ?? '', c.rotulo);
-      }
-      setNotas(ns);
-      setComentarios(cs);
-      setParecerGeral(extrairSecao(m.parecer ?? '', 'Parecer geral'));
+    const ns: Record<string, string> = {};
+    const cs: Record<string, string> = {};
+    for (const c of criterios) {
+      ns[c.chave] = numToStr(m[colunaNota(c.chave)]);
+      cs[c.chave] = extrairSecao(m.parecer ?? '', c.rotulo);
     }
+    setNotas(ns);
+    setComentarios(cs);
+    setParecerGeral(extrairSecao(m.parecer ?? '', 'Parecer geral'));
   }, [m?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const peso = (c: Criterio) => Number(m?.pesos?.[colunaPeso(c.chave)] ?? c.pesoPadrao);
@@ -119,22 +124,32 @@ export function AvaliarBanca() {
     return partes.join('\n\n');
   }
 
-  async function enviar() {
+  async function recarregar() {
+    const r = await apiGet('/bancas/minhas').catch(() => null);
+    if (r) setItens(r as any[]);
+  }
+
+  // finalizar=false → salva rascunho (notas parciais); finalizar=true → envia (exige todas).
+  async function salvar(finalizar: boolean) {
     setErro('');
+    setMensagem('');
     const corpo: Record<string, number> = {};
     for (const c of criterios) {
       const n = parseBR(notas[c.chave] ?? '');
-      if (n == null || n < 0 || n > peso(c)) {
-        return setErro(`A nota de "${c.rotulo}" deve estar entre 0 e ${fmt(peso(c))}.`);
+      if (n == null) {
+        if (finalizar) return setErro(`Preencha a nota de "${c.rotulo}" para enviar.`);
+        continue; // rascunho: pula nota vazia
       }
+      if (n < 0 || n > peso(c)) return setErro(`A nota de "${c.rotulo}" deve estar entre 0 e ${fmt(peso(c))}.`);
       corpo[c.chave] = n;
     }
     setEnviando(true);
     try {
-      await apiPost(`/bancas/${m.bancaId}/avaliar`, { notas: corpo, parecer: construirParecer() || undefined });
-      navigate(prefixoLista);
+      await apiPost(`/bancas/${m.bancaId}/avaliar`, { notas: corpo, parecer: construirParecer() || undefined, finalizar });
+      await recarregar();
+      setMensagem(finalizar ? 'Avaliação enviada.' : 'Rascunho salvo.');
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível enviar a avaliação.');
+      setErro((e as ErroApi).mensagem || 'Não foi possível salvar.');
     } finally {
       setEnviando(false);
     }
@@ -156,6 +171,16 @@ export function AvaliarBanca() {
   const ehDocBanca = !!m.banca.documentoAvaliacao;
   const numCor = ehF2 ? 'var(--roxo)' : 'var(--azul-forte)';
 
+  const temRascunhoSalvo = criterios.some((c) => m[colunaNota(c.chave)] != null) || !!m.parecer;
+  const STATUS_INFO: Record<string, { rotulo: string; classe: string }> = {
+    ENVIADO: { rotulo: 'Enviada', classe: 'status-normal' },
+    BLOQUEADO: { rotulo: 'Bloqueada', classe: 'status-urgente' },
+    CONCLUIDO: { rotulo: 'Concluída', classe: 'status-normal' },
+  };
+  const statusRotulo = status === 'PENDENTE' ? (temRascunhoSalvo ? 'Rascunho' : 'Pendente') : STATUS_INFO[status]?.rotulo ?? status;
+  const statusClasse = status === 'PENDENTE' ? 'status-atencao' : STATUS_INFO[status]?.classe ?? 'status-atencao';
+  const rotuloEnviar = status === 'ENVIADO' ? 'Reenviar avaliação' : 'Enviar avaliação';
+
   return (
     <>
       {/* Cabeçalho */}
@@ -165,13 +190,7 @@ export function AvaliarBanca() {
           <h1>{tcc.titulo}</h1>
           <div className="det-badges">
             <span className="badge-papel">{ehF2 ? 'Fase II' : 'Fase I'}</span>
-            {jaAvaliou ? (
-              <span className="status-pill status-normal">Avaliação enviada</span>
-            ) : podeAvaliar ? (
-              <span className="status-pill status-atencao">Aguardando sua avaliação</span>
-            ) : (
-              <span className="status-pill status-atencao">Indisponível no momento</span>
-            )}
+            <span className={`status-pill ${statusClasse}`}>{statusRotulo}</span>
           </div>
         </div>
       </div>
@@ -205,9 +224,14 @@ export function AvaliarBanca() {
       {/* Formulário por critérios */}
       <section className="cartao-secao bloco">
         {erro && <div className="erro-geral">{erro}</div>}
-        {leitura && !jaAvaliou && (
+        {mensagem && <div className="alerta" style={{ background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginBottom: 14 }}>{mensagem}</div>}
+        {leitura && (
           <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
-            Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.
+            {status === 'BLOQUEADO'
+              ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
+              : status === 'CONCLUIDO'
+                ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
+                : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
           </div>
         )}
         <div className="criterios-lista">
@@ -255,9 +279,14 @@ export function AvaliarBanca() {
 
         <div className="acoes" style={{ justifyContent: 'flex-start' }}>
           <button className="botao botao-secundario" disabled={enviando} onClick={() => navigate(prefixoLista)}>Voltar</button>
-          {podeAvaliar && (
-            <button className="botao" disabled={enviando || total == null} onClick={enviar}>
-              {enviando ? 'Enviando…' : 'Enviar avaliação'}
+          {podeRascunho && (
+            <button className="botao botao-secundario" disabled={enviando} onClick={() => salvar(false)}>
+              {enviando ? 'Salvando…' : 'Salvar rascunho'}
+            </button>
+          )}
+          {editavel && (
+            <button className="botao" disabled={enviando || total == null} onClick={() => salvar(true)}>
+              {enviando ? 'Enviando…' : rotuloEnviar}
             </button>
           )}
         </div>
