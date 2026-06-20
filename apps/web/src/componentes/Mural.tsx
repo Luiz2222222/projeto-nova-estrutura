@@ -163,7 +163,7 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
             </p>
           </div>
         </div>
-        {podeGerenciar && <button className="botao" onClick={abrirNovo}>Novo aviso</button>}
+        {podeGerenciar && <button className="botao" onClick={abrirNovo}>+ Novo aviso</button>}
       </div>
 
       {avisos.length === 0 ? (

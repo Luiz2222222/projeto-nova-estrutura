@@ -181,7 +181,8 @@ export function DashboardAluno() {
     }
     if (tcc.faseAtual === 'VALIDACAO_VERSAO_FINAL') return semAcao('Aguardando validação', 'Versão final enviada — aguardando a validação do orientador.');
     if (tcc.faseAtual === 'CONCLUIDO') return semAcao('TCC concluído 🎉', 'Parabéns! Seu TCC foi aprovado e concluído.');
-    if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO')) return semAcao('—', 'TCC encerrado.');
+    if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO'))
+      return semAcao('TCC encerrado', tcc.faseAtual === 'DESCONTINUADO' ? 'O TCC foi descontinuado.' : 'O TCC foi reprovado.');
 
     return semAcao('Sem solicitação pendente', 'Nenhuma solicitação aguardando ação');
   }

@@ -3,6 +3,38 @@ import { useAuth } from '../autenticacao/contexto';
 import { apiGet, apiPut } from '../api';
 import { EVENTOS_EMAIL, type Papel } from '@tcc/compartilhado';
 
+// Descrição curta por evento (só apresentação — não muda evento/lógica/backend).
+const DESC_EVENTO: Record<string, string> = {
+  aluno_solicitacao_enviada: 'Confirmação de que sua solicitação de orientação foi enviada.',
+  aluno_solicitacao_aprovada: 'Quando o coordenador aprovar a abertura do seu TCC.',
+  aluno_solicitacao_recusada: 'Quando a abertura do seu TCC for recusada.',
+  aluno_monografia_rejeitada: 'Quando o orientador pedir ajustes na sua monografia.',
+  aluno_monografia_aprovada: 'Quando o orientador aprovar a sua monografia.',
+  aluno_continuidade_rejeitada: 'Quando o orientador não confirmar a continuidade do TCC.',
+  aluno_banca_fase1_formada: 'Quando a banca da Fase I do seu TCC for formada.',
+  aluno_resultado_fase1: 'Quando o resultado da Fase I for validado.',
+  aluno_resultado_fase2: 'Quando o resultado da Fase II for validado.',
+  aluno_versao_final_solicitada: 'Quando for solicitado o envio da versão final.',
+  aluno_versao_final_rejeitada: 'Quando o orientador pedir ajustes na versão final.',
+  aluno_tcc_concluido: 'Quando o seu TCC for concluído e aprovado.',
+  orientador_definido: 'Quando você for definido como orientador de um TCC aprovado.',
+  orientador_monografia_enviada: 'Quando um orientando enviar ou reenviar a monografia.',
+  orientador_confirmar_continuidade: 'Lembrete para confirmar a continuidade de um orientando.',
+  orientador_versao_final_enviada: 'Quando um orientando enviar a versão final.',
+  orientador_versao_final_reenviada: 'Quando a versão final for reenviada após ajustes.',
+  orientador_tcc_concluido: 'Quando o TCC de um orientando for concluído.',
+  coord_nova_solicitacao: 'Quando houver uma nova solicitação aguardando análise.',
+  coord_formar_banca_fase1: 'Quando um TCC estiver pronto para formar a banca da Fase I.',
+  coord_validar_fase1: 'Quando as notas da Fase I estiverem completas para validação.',
+  coord_validar_fase2: 'Quando as notas da Fase II estiverem completas para validação.',
+  avaliador_adicionado_fase1: 'Quando você for adicionado a uma banca da Fase I.',
+  avaliador_fase1_liberada: 'Quando a avaliação da Fase I for liberada para você.',
+  avaliador_adicionado_fase2: 'Quando você for adicionado a uma banca da Fase II.',
+  avaliador_fase2_liberada: 'Quando a avaliação da Fase II for liberada para você.',
+  coorientador_indicado: 'Quando você for indicado como coorientador de um TCC.',
+  coorientador_mudanca_fase: 'Quando houver uma mudança de fase importante no TCC.',
+};
+
 // Preferências de e-mail do próprio usuário: toggles por evento relevante ao papel.
 // Recuperação de senha NÃO entra aqui (é controle global do coordenador).
 export function PreferenciasEmail() {
@@ -60,12 +92,29 @@ export function PreferenciasEmail() {
         grupos.map(([grupo, lista]) => (
           <div key={grupo} className="config-grupo">
             <h3>{grupo}</h3>
-            {lista.map((ev) => (
-              <label key={ev.chave} className="linha-check linha-toggle">
-                <input type="checkbox" checked={estaAtivo(ev.chave)} onChange={() => alternar(ev.chave)} />
-                <span>{ev.rotulo}</span>
-              </label>
-            ))}
+            <div className="pref-lista">
+              {lista.map((ev) => {
+                const ativo = estaAtivo(ev.chave);
+                return (
+                  <div key={ev.chave} className="pref-item">
+                    <div className="pref-texto">
+                      <span className="pref-rotulo">{ev.rotulo}</span>
+                      <span className="pref-desc">{DESC_EVENTO[ev.chave] ?? 'Receber e-mail quando este evento acontecer.'}</span>
+                    </div>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={ativo}
+                      aria-label={ev.rotulo}
+                      className={`pref-switch${ativo ? ' on' : ''}`}
+                      onClick={() => alternar(ev.chave)}
+                    >
+                      <span className="pref-switch-bolinha" aria-hidden="true" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
           </div>
         ))
       )}
