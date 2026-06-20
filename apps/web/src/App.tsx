@@ -22,6 +22,7 @@ import { TccDetalheCoordenador } from './paginas/coordenador/TccDetalheCoordenad
 import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
+import { DetalheOrientando } from './paginas/professor/DetalheOrientando';
 import { DashboardAvaliador } from './paginas/avaliador/DashboardAvaliador';
 import { Coorientacoes } from './paginas/Coorientacoes';
 import { MinhasBancas } from './paginas/MinhasBancas';
@@ -89,6 +90,7 @@ export function App() {
             <Route element={<ExigePapel papeis={['PROFESSOR']} />}>
               <Route path="/professor" element={<DashboardProfessor />} />
               <Route path="/professor/orientandos" element={<MeusOrientandos />} />
+              <Route path="/professor/orientandos/:id" element={<DetalheOrientando />} />
             </Route>
 
             {/* Rotas do avaliador */}

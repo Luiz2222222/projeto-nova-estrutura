@@ -1,230 +1,104 @@
-import { useEffect, useState } from 'react';
-import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
-import { Modal } from '../../componentes/Modal';
-import { ROTULO_FASE } from '../../utils/fases';
+// Lista de orientandos do professor — espelha o projeto antigo:
+// header com ícone, banner de monografias aguardando avaliação, e cards
+// CLICÁVEIS (sem ações abertas na listagem). As ações de cada fase ficam na
+// página interna /professor/orientandos/:id.
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { apiGet } from '../../api';
+import { ROTULO_FASE, faseParaIndice } from '../../utils/fases';
+import { TrilhaFases } from '../../componentes/TrilhaFases';
 
-const icoBaixar = (
+const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><path d="M7 10l5 5 5-5" /><path d="M12 15V3" />
+    {d.split('|').map((p, i) => <path key={i} d={p} />)}
   </svg>
 );
+const icoUsers = ic('M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2|M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8|M22 21v-2a4 4 0 0 0-3-3.87|M16 3.13a4 4 0 0 1 0 7.75');
+const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
+const icoDoc = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
+const icoSeta = ic('M5 12h14|M12 5l7 7-7 7');
 
-type Doc = { id: string; tipo: string; status: string; versao: number; parecer?: string | null; nomeArquivo: string };
+type Doc = { tipo: string; status: string; versao: number };
+function monoPendente(t: any): boolean {
+  if (t.faseAtual !== 'DESENVOLVIMENTO') return false;
+  const mono = (t.documentos ?? []).filter((d: Doc) => d.tipo === 'MONOGRAFIA').sort((a: Doc, b: Doc) => b.versao - a.versao)[0];
+  return !!mono && mono.status === 'PENDENTE';
+}
 
-function ultimaMonografia(docs: Doc[] = []): Doc | null {
-  const m = docs.filter((d) => d.tipo === 'MONOGRAFIA').sort((a, b) => b.versao - a.versao);
-  return m[0] ?? null;
+// Status final do TCC (aprovado/reprovado/descontinuado), como no antigo.
+function statusFinal(fase: string): { rotulo: string; classe: string } | null {
+  switch (fase) {
+    case 'CONCLUIDO': return { rotulo: 'Aprovado', classe: 'status-normal' };
+    case 'REPROVADO_FASE_1': return { rotulo: 'Reprovado na Fase I', classe: 'status-urgente' };
+    case 'REPROVADO_FASE_2': return { rotulo: 'Reprovado na Fase II', classe: 'status-urgente' };
+    case 'DESCONTINUADO': return { rotulo: 'Descontinuado', classe: 'status-atencao' };
+    default: return null;
+  }
 }
-function ultimaVF(docs: Doc[] = []): Doc | null {
-  const m = docs.filter((d) => d.tipo === 'VERSAO_FINAL').sort((a, b) => b.versao - a.versao);
-  return m[0] ?? null;
-}
+
+const fmtData = (iso?: string | null) => {
+  if (!iso) return '—';
+  const [a, m, d] = iso.split('T')[0].split('-');
+  return a && m && d ? `${d}/${m}/${a}` : '—';
+};
 
 export function MeusOrientandos() {
+  const navigate = useNavigate();
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
-  // modal de parecer (rejeitar monografia ou rejeitar continuidade)
-  const [recusa, setRecusa] = useState<{ tccId: string; tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
-  const [parecer, setParecer] = useState('');
-  const [erro, setErro] = useState('');
-  const [enviando, setEnviando] = useState(false);
 
-  function carregar() {
+  useEffect(() => {
     setCarregando(true);
-    apiGet('/tccs/orientando')
-      .then(setTccs)
-      .catch(() => setTccs([]))
-      .finally(() => setCarregando(false));
-  }
-  useEffect(carregar, []);
+    apiGet('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+  }, []);
 
-  async function acao(fn: () => Promise<unknown>) {
-    try {
-      await fn();
-      carregar();
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível concluir a ação.');
-    }
-  }
-
-  const aprovarMono = (id: string) =>
-    acao(() => apiPost(`/tccs/${id}/monografia/avaliar`, { decisao: 'APROVAR' }));
-  const confirmarCont = (id: string) =>
-    acao(() => apiPost(`/tccs/${id}/continuidade`, { decisao: 'CONFIRMAR' }));
-  const concluirVF = (id: string) =>
-    acao(() => apiPost(`/tccs/${id}/validar-versao-final`, { decisao: 'CONCLUIR' }));
-
-  async function confirmarRecusa() {
-    if (!recusa) return;
-    setErro('');
-    setEnviando(true);
-    try {
-      if (recusa.tipo === 'monografia') {
-        await apiPost(`/tccs/${recusa.tccId}/monografia/avaliar`, { decisao: 'REJEITAR', parecer });
-      } else if (recusa.tipo === 'versaofinal') {
-        await apiPost(`/tccs/${recusa.tccId}/validar-versao-final`, { decisao: 'AJUSTES', parecer });
-      } else {
-        await apiPost(`/tccs/${recusa.tccId}/continuidade`, { decisao: 'REJEITAR', parecer });
-      }
-      setRecusa(null);
-      setParecer('');
-      carregar();
-    } catch (e) {
-      const er = e as ErroApi;
-      setErro(er.erros?.[0]?.mensagem || er.mensagem || 'Não foi possível concluir.');
-    } finally {
-      setEnviando(false);
-    }
-  }
+  const pendentes = useMemo(() => tccs.filter(monoPendente), [tccs]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
   return (
     <>
-      <h1>Meus orientandos</h1>
-      <p className="legenda">TCCs sob sua orientação e as ações de cada fase.</p>
+      <h1 className="h1-icone"><span className="h1-ico">{icoUsers}</span>Meus orientandos</h1>
+
+      {/* Banner: monografias aguardando avaliação */}
+      {pendentes.length > 0 && (
+        <div className="banner-aviso bloco">
+          <span className="banner-ico">{icoDoc}</span>
+          <div className="banner-texto">
+            <strong>Monografias aguardando avaliação</strong>
+            <span>{pendentes.length} {pendentes.length === 1 ? 'orientando precisa' : 'orientandos precisam'} de avaliação</span>
+          </div>
+          <button className="botao" onClick={() => navigate(`/professor/orientandos/${pendentes[0].id}`)}>Avaliar primeiro {icoSeta}</button>
+        </div>
+      )}
 
       {tccs.length === 0 ? (
-        <section className="cartao-secao bloco">
-          <p className="nota-vazio">Você ainda não tem orientandos.</p>
-        </section>
+        <section className="cartao-secao bloco"><p className="nota-vazio">Você ainda não tem orientandos.</p></section>
       ) : (
         <div className="lista bloco">
           {tccs.map((t) => {
-            const mono = ultimaMonografia(t.documentos);
-            const vf = ultimaVF(t.documentos);
-            const emDesenvolvimento = t.faseAtual === 'DESENVOLVIMENTO';
+            const sf = statusFinal(t.faseAtual);
+            const co = t.coorientador?.nomeCompleto || t.coorientadorNome;
             return (
-              <section key={t.id} className="cartao-secao">
-                <div className="aviso-cabecalho">
-                  <h2>{t.titulo}</h2>
-                  <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
-                </div>
-                <p className="nota-vazio" style={{ margin: '4px 0 16px' }}>
-                  {t.aluno?.nomeCompleto}
-                </p>
-
-                {/* Trilha A — monografia */}
-                <div className="trilha-bloco">
-                  <div className="trilha-titulo">
-                    <strong>Monografia</strong>
-                    {t.monografiaAprovada && <span className="selo selo-ok">Aprovada</span>}
+              <section key={t.id} className="cartao-secao card-tcc" onClick={() => navigate(`/professor/orientandos/${t.id}`)} role="button" tabIndex={0}
+                onKeyDown={(e) => { if (e.key === 'Enter') navigate(`/professor/orientandos/${t.id}`); }}>
+                <div className="card-tcc-cabecalho">
+                  <div className="card-tcc-info">
+                    <h2>{t.titulo}</h2>
+                    <p className="card-tcc-pessoas">
+                      <span className="card-tcc-pessoa">{icoUser}<span><strong>Aluno:</strong> {t.aluno?.nomeCompleto ?? '—'}</span></span>
+                      {co && <span className="card-tcc-pessoa">{icoUser}<span><strong>Coorientador:</strong> {co}</span></span>}
+                    </p>
                   </div>
-                  {mono ? (
-                    <div className="item-arquivo">
-                      <div className="item-arquivo-info">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                          <polyline points="14 2 14 8 20 8" />
-                        </svg>
-                        <div>
-                          <span className="nome">{mono.nomeArquivo}</span>
-                          <span className="meta">Versão {mono.versao} · {statusDoc(mono.status)}</span>
-                        </div>
-                      </div>
-                      <span className="acoes-doc">
-                        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${mono.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
-                      </span>
-                    </div>
-                  ) : (
-                    <p className="nota-vazio">Aguardando o aluno enviar a monografia.</p>
-                  )}
-                  {emDesenvolvimento && mono?.status === 'PENDENTE' && (
-                    <div className="acoes" style={{ marginTop: 12 }}>
-                      <button className="botao botao-secundario" onClick={() => { setRecusa({ tccId: t.id, tipo: 'monografia' }); setParecer(''); setErro(''); }}>
-                        Pedir ajustes
-                      </button>
-                      <button className="botao" onClick={() => aprovarMono(t.id)}>Aprovar monografia</button>
-                    </div>
-                  )}
+                  {sf ? <span className={`status-pill ${sf.classe}`}>{sf.rotulo}</span> : <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>}
                 </div>
-
-                {/* Trilha B — continuidade */}
-                <div className="trilha-bloco">
-                  <div className="trilha-titulo">
-                    <strong>Continuidade</strong>
-                    {t.continuidadeConfirmada && <span className="selo selo-ok">Confirmada</span>}
-                  </div>
-                  {emDesenvolvimento && !t.continuidadeConfirmada ? (
-                    <div className="acoes" style={{ marginTop: 4 }}>
-                      <button className="botao botao-secundario" onClick={() => { setRecusa({ tccId: t.id, tipo: 'continuidade' }); setParecer(''); setErro(''); }}>
-                        Descontinuar
-                      </button>
-                      <button className="botao" onClick={() => confirmarCont(t.id)}>Confirmar continuidade</button>
-                    </div>
-                  ) : (
-                    !t.continuidadeConfirmada && <p className="nota-vazio">—</p>
-                  )}
-                </div>
-
-                {/* Trilha C — versão final (validada pelo orientador) */}
-                {(t.faseAtual === 'VALIDACAO_VERSAO_FINAL' || vf) && (
-                  <div className="trilha-bloco">
-                    <div className="trilha-titulo">
-                      <strong>Versão final</strong>
-                      {t.faseAtual === 'CONCLUIDO' && <span className="selo selo-ok">Concluído</span>}
-                    </div>
-                    {vf ? (
-                      <div className="item-arquivo">
-                        <div className="item-arquivo-info">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
-                            <polyline points="14 2 14 8 20 8" />
-                          </svg>
-                          <div>
-                            <span className="nome">{vf.nomeArquivo}</span>
-                            <span className="meta">Versão {vf.versao}</span>
-                          </div>
-                        </div>
-                        <span className="acoes-doc"><a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${vf.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a></span>
-                      </div>
-                    ) : (
-                      <p className="nota-vazio">Aguardando o aluno enviar a versão final.</p>
-                    )}
-                    {vf?.status === 'REJEITADO' && vf.parecer && (
-                      <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {vf.parecer}</div>
-                    )}
-                    {t.faseAtual === 'VALIDACAO_VERSAO_FINAL' && (
-                      <div className="acoes" style={{ marginTop: 12 }}>
-                        <button className="botao botao-secundario" onClick={() => { setRecusa({ tccId: t.id, tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-                        <button className="botao" onClick={() => concluirVF(t.id)}>Aprovar e concluir</button>
-                      </div>
-                    )}
-                  </div>
-                )}
+                <div className="tcc-trilha"><TrilhaFases atual={faseParaIndice(t.faseAtual)} /></div>
+                <p className="card-tcc-datas">Criado em {fmtData(t.criadoEm)}{t.atualizadoEm ? ` · Atualizado em ${fmtData(t.atualizadoEm)}` : ''}</p>
               </section>
             );
           })}
         </div>
       )}
-
-      {recusa && (() => {
-        const txt =
-          recusa.tipo === 'monografia'
-            ? { titulo: 'Pedir ajustes na monografia', sub: 'O aluno poderá reenviar uma nova versão.', label: 'O que precisa ser ajustado' }
-            : recusa.tipo === 'versaofinal'
-              ? { titulo: 'Pedir ajustes na versão final', sub: 'O aluno poderá reenviar a versão final corrigida.', label: 'O que precisa ser ajustado' }
-              : { titulo: 'Descontinuar o TCC', sub: 'Atenção: isso encerra o TCC como descontinuado.', label: 'Motivo da descontinuação' };
-        return (
-          <Modal titulo={txt.titulo} subtitulo={txt.sub} aoFechar={() => !enviando && setRecusa(null)}>
-            {erro && <div className="erro-geral">{erro}</div>}
-            <label className="campo">
-              <span>{txt.label}</span>
-              <textarea rows={4} value={parecer} onChange={(e) => setParecer(e.target.value)} placeholder="Escreva uma devolutiva para o aluno…" />
-            </label>
-            <div className="acoes">
-              <button className="botao botao-secundario" disabled={enviando} onClick={() => setRecusa(null)}>Voltar</button>
-              <button className="botao" disabled={enviando} onClick={confirmarRecusa}>
-                {enviando ? 'Enviando…' : 'Confirmar'}
-              </button>
-            </div>
-          </Modal>
-        );
-      })()}
     </>
   );
-}
-
-function statusDoc(s: string): string {
-  return s === 'APROVADO' ? 'aprovada' : s === 'REJEITADO' ? 'rejeitada (aguardando reenvio)' : 'aguardando avaliação';
 }

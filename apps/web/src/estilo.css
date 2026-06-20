@@ -1031,3 +1031,25 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .nota-box.nota-aprovado .nota-num { color: var(--aprovado); }
 .nota-box.nota-reprovado { background: var(--reprovado-suave); }
 .nota-box.nota-reprovado .nota-num { color: var(--reprovado); }
+
+/* Header com ícone (Meus orientandos) */
+.h1-icone { display: flex; align-items: center; gap: 12px; }
+.h1-ico { display: inline-grid; place-items: center; color: var(--azul-forte); }
+.h1-ico svg { width: 30px; height: 30px; }
+
+/* Banner de aviso (monografias aguardando avaliação) */
+.banner-aviso {
+  display: flex; align-items: center; gap: 16px;
+  background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.28);
+  border-left: 4px solid #f59e0b; border-radius: var(--raio-1); padding: 14px 18px;
+}
+.banner-ico { display: inline-grid; place-items: center; color: #b45309; flex-shrink: 0; }
+.banner-ico svg { width: 24px; height: 24px; }
+.banner-texto { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.banner-texto strong { color: #b45309; font-size: 15px; }
+.banner-texto span { color: #b45309; opacity: 0.85; font-size: 13px; }
+.banner-aviso .botao { display: inline-flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.banner-aviso .botao svg { width: 16px; height: 16px; }
+
+/* Data no rodapé do card de orientando */
+.card-tcc-datas { margin: 14px 0 0; padding-top: 12px; border-top: 1px solid var(--borda-suave); font-size: 12px; color: var(--tinta-4); }
