@@ -13,9 +13,6 @@ import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criter
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
-import { ModalEditarDocumento } from '../../componentes/ModalEditarDocumento';
-import { ModalEditarAvaliacao } from '../../componentes/ModalEditarAvaliacao';
-import { ModalTrocarAvaliadores } from '../../componentes/ModalTrocarAvaliadores';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -73,9 +70,6 @@ export function TccDetalheCoordenador() {
   const [erro, setErro] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
-  const [editandoDoc, setEditandoDoc] = useState<any | null>(null);
-  const [editandoAval, setEditandoAval] = useState<{ membro: any; fase: string } | null>(null);
-  const [trocandoAvaliadores, setTrocandoAvaliadores] = useState<any | null>(null);
   const [pesos, setPesos] = useState<any | null>(null);
 
   function carregar() {
@@ -113,12 +107,6 @@ export function TccDetalheCoordenador() {
 
   const fase = tcc.faseAtual as string;
   const status = statusDe(fase);
-  // Edição administrativa da banca só antes da fase ser validada/concluída (preserva NF).
-  const podeEditarBanca = (bancaFase: string) =>
-    bancaFase === 'FASE_1'
-      ? ['AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase)
-      : ['AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'].includes(fase);
-  const podeTrocarAvaliadores = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase);
   const coorient = tcc.coorientador
     ? nomeComTrat(tcc.coorientador)
     : tcc.coorientadorNome
@@ -325,9 +313,12 @@ export function TccDetalheCoordenador() {
         </section>
       )}
 
-      {/* Banca e notas — área administrativa completa (por critério, por avaliador) */}
+      {/* Banca e notas — visão (a edição fica no modal "Editar TCC" → aba Banca) */}
       <section className="cartao-secao bloco">
         <h2>{icoBanca} Banca e notas</h2>
+        {bancas.length > 0 && (
+          <p className="legenda" style={{ marginTop: 0 }}>Para editar notas, comentários, status ou trocar avaliadores, use <strong>Editar informações</strong> → aba <strong>Banca e notas</strong>.</p>
+        )}
         {bancas.length === 0 ? (
           <p className="nota-vazio">Banca ainda não formada.</p>
         ) : (
@@ -335,19 +326,12 @@ export function TccDetalheCoordenador() {
             const ehF2 = b.fase === 'FASE_2';
             const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
             const membros = b.membros ?? [];
-            const editavelB = podeEditarBanca(b.fase);
             return (
               <div key={b.id} className="banca-fase">
                 <div className="banca-fase-cab">
                   <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
-                  {!ehF2 && membros.length > 0 && podeTrocarAvaliadores && (
-                    <button className="botao botao-secundario" onClick={() => setTrocandoAvaliadores(b)}>Editar avaliadores</button>
-                  )}
                 </div>
                 {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
-                {!editavelB && membros.length > 0 && (
-                  <p className="legenda" style={{ marginTop: 0 }}>Fase já validada — edição administrativa bloqueada para preservar as notas finais.</p>
-                )}
                 {membros.length === 0 ? (
                   <p className="nota-vazio">Sem membros nesta banca.</p>
                 ) : (
@@ -375,9 +359,6 @@ export function TccDetalheCoordenador() {
                         {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
                         <div className="aval-rodape">
                           <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
-                          {editavelB && (
-                            <button className="botao botao-secundario" onClick={() => setEditandoAval({ membro: m, fase: b.fase })}>Editar avaliação</button>
-                          )}
                         </div>
                       </div>
                     );
@@ -411,7 +392,6 @@ export function TccDetalheCoordenador() {
                     </div>
                   </div>
                   <span className="acoes-doc">
-                    <button className="botao-icone" title="Editar documento" onClick={() => setEditandoDoc(d)}>{icoLapis}</button>
                     {d.tipo !== 'MONOGRAFIA' && d.tipo !== 'VERSAO_FINAL' && (
                       <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
                     )}
@@ -425,16 +405,7 @@ export function TccDetalheCoordenador() {
       </div>
 
       {editando && (
-        <ModalEditarTcc tcc={tcc} aoFechar={() => setEditando(false)} aoSalvo={carregar} />
-      )}
-      {editandoDoc && (
-        <ModalEditarDocumento doc={editandoDoc} aoFechar={() => setEditandoDoc(null)} aoSalvo={carregar} />
-      )}
-      {editandoAval && (
-        <ModalEditarAvaliacao membro={editandoAval.membro} fase={editandoAval.fase} pesos={pesos} aoFechar={() => setEditandoAval(null)} aoSalvo={carregar} />
-      )}
-      {trocandoAvaliadores && (
-        <ModalTrocarAvaliadores tccId={tcc.id} membrosFase1={trocandoAvaliadores.membros ?? []} aoFechar={() => setTrocandoAvaliadores(null)} aoSalvo={carregar} />
+        <ModalEditarTcc tcc={tcc} pesos={pesos} aoFechar={() => setEditando(false)} aoSalvo={carregar} />
       )}
     </>
   );
