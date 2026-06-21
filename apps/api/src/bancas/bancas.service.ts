@@ -297,6 +297,17 @@ export class BancasService {
       });
       if (!membro) throw new NotFoundException();
       const tcc = membro.banca.tcc;
+      // Só permite editar enquanto a fase NÃO foi validada/concluída — senão mexer nas
+      // notas deixaria NF1/NF2/NF/resultado inconsistentes (recálculo não é feito aqui).
+      const ehF1banca = membro.banca.fase === 'FASE_1';
+      const fasesEditaveis = ehF1banca ? ['AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'] : ['AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'];
+      if (!fasesEditaveis.includes(tcc.faseAtual)) {
+        throw new BadRequestException({
+          mensagem: ehF1banca
+            ? 'A Fase I já foi validada — editar a avaliação exigiria recalcular NF1/NF2/NF. Edição administrativa bloqueada.'
+            : 'A Fase II já foi validada — editar a avaliação exigiria recalcular NF2/NF e o resultado. Edição administrativa bloqueada.',
+        });
+      }
       const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
       const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
       const exigeCompleto = status === 'ENVIADO' || status === 'BLOQUEADO' || status === 'CONCLUIDO';
@@ -344,6 +355,13 @@ export class BancasService {
     await this.prisma.$transaction(async (tx) => {
       const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
       if (!tcc) throw new NotFoundException();
+      // Só dá para trocar os avaliadores da Fase I ANTES de a Fase I ser validada — depois
+      // disso a NF1 já foi calculada e trocar avaliadores deixaria histórico/nota inconsistentes.
+      if (!['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(tcc.faseAtual)) {
+        throw new BadRequestException({
+          mensagem: 'A Fase I já foi validada — não é possível trocar os avaliadores depois que a NF1 foi calculada.',
+        });
+      }
       const bancaF1 = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase: 'FASE_1' } }, include: { membros: true } });
       if (!bancaF1) throw new BadRequestException({ mensagem: 'A banca da Fase I ainda não foi formada.' });
 

@@ -113,6 +113,12 @@ export function TccDetalheCoordenador() {
 
   const fase = tcc.faseAtual as string;
   const status = statusDe(fase);
+  // Edição administrativa da banca só antes da fase ser validada/concluída (preserva NF).
+  const podeEditarBanca = (bancaFase: string) =>
+    bancaFase === 'FASE_1'
+      ? ['AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase)
+      : ['AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'].includes(fase);
+  const podeTrocarAvaliadores = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase);
   const coorient = tcc.coorientador
     ? nomeComTrat(tcc.coorientador)
     : tcc.coorientadorNome
@@ -329,15 +335,19 @@ export function TccDetalheCoordenador() {
             const ehF2 = b.fase === 'FASE_2';
             const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
             const membros = b.membros ?? [];
+            const editavelB = podeEditarBanca(b.fase);
             return (
               <div key={b.id} className="banca-fase">
                 <div className="banca-fase-cab">
                   <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
-                  {!ehF2 && membros.length > 0 && (
+                  {!ehF2 && membros.length > 0 && podeTrocarAvaliadores && (
                     <button className="botao botao-secundario" onClick={() => setTrocandoAvaliadores(b)}>Editar avaliadores</button>
                   )}
                 </div>
                 {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
+                {!editavelB && membros.length > 0 && (
+                  <p className="legenda" style={{ marginTop: 0 }}>Fase já validada — edição administrativa bloqueada para preservar as notas finais.</p>
+                )}
                 {membros.length === 0 ? (
                   <p className="nota-vazio">Sem membros nesta banca.</p>
                 ) : (
@@ -365,7 +375,9 @@ export function TccDetalheCoordenador() {
                         {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
                         <div className="aval-rodape">
                           <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
-                          <button className="botao botao-secundario" onClick={() => setEditandoAval({ membro: m, fase: b.fase })}>Editar avaliação</button>
+                          {editavelB && (
+                            <button className="botao botao-secundario" onClick={() => setEditandoAval({ membro: m, fase: b.fase })}>Editar avaliação</button>
+                          )}
                         </div>
                       </div>
                     );
