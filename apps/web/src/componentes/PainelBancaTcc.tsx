@@ -168,6 +168,14 @@ function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string;
 export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; aoSalvo: () => void }) {
   const [editandoMembro, setEditandoMembro] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
+  const [colapsadas, setColapsadas] = useState<Set<string>>(new Set()); // Fase I/II abertas por padrão.
+  const alternar = (id: string) =>
+    setColapsadas((s) => {
+      const n = new Set(s);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
   const fase = tcc.faseAtual as string;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
 
@@ -186,14 +194,20 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
         const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
         const membros = b.membros ?? [];
         const editavelB = podeEditarBanca(b.fase);
+        const aberta = !colapsadas.has(b.id);
         return (
           <div key={b.id} className="banca-fase">
             <div className="banca-fase-cab">
-              <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
-              {!ehF2 && membros.length > 0 && podeTrocarAvaliadores && (
+              <button type="button" className="banca-fase-toggle" onClick={() => alternar(b.id)} aria-expanded={aberta}>
+                <span className="banca-caret">{aberta ? '▾' : '▸'}</span>
+                <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
+                <span className="banca-fase-contagem">({membros.length} {membros.length === 1 ? 'membro' : 'membros'})</span>
+              </button>
+              {aberta && !ehF2 && membros.length > 0 && podeTrocarAvaliadores && (
                 <button className="botao botao-secundario" onClick={() => setTrocando((v) => !v)}>{trocando ? 'Fechar' : 'Trocar avaliadores'}</button>
               )}
             </div>
+            {aberta && (<>
             {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
             {!editavelB && membros.length > 0 && (
               <p className="legenda" style={{ marginTop: 0 }}>Fase já validada — edição administrativa bloqueada para preservar as notas finais.</p>
@@ -239,6 +253,7 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
                 );
               })
             )}
+            </>)}
           </div>
         );
       })}

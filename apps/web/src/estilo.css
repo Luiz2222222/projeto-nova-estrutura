@@ -1189,10 +1189,15 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .aval-total { font-size: 14px; color: var(--tinta-2); }
 .aval-total strong { font-size: 16px; color: var(--azul-forte); }
 
-/* Abas do modal único "Editar TCC" + formulários inline de edição */
-.abas-edicao { display: flex; gap: 6px; flex-wrap: wrap; margin: -4px 0 16px; border-bottom: 1px solid var(--borda); }
-.aba-edicao { font: inherit; font-size: 14px; font-weight: 600; color: var(--tinta-3); background: none; border: none; border-bottom: 2px solid transparent; padding: 8px 10px; margin-bottom: -1px; cursor: pointer; }
-.aba-edicao:hover { color: var(--tinta-1); }
-.aba-edicao.ativa { color: var(--azul-forte); border-bottom-color: var(--azul); }
+/* Modal único "Editar TCC": seções grandes empilhadas (fiel ao modal antigo) */
+.edicao-tcc { display: flex; flex-direction: column; }
+.edicao-secao { padding: 18px 0; border-top: 1px solid var(--borda); }
+.edicao-secao:first-child { padding-top: 0; border-top: none; }
+
+/* Cabeçalho colapsável de cada fase da banca dentro do modal */
+.banca-fase-toggle { display: flex; align-items: center; gap: 8px; font: inherit; background: none; border: none; padding: 0; cursor: pointer; color: var(--tinta-1); }
+.banca-fase-toggle h3 { margin: 0; font-size: 15px; }
+.banca-caret { font-size: 12px; color: var(--tinta-3); width: 12px; }
+.banca-fase-contagem { font-size: 13px; font-weight: 500; color: var(--tinta-3); }
 .doc-bloco + .doc-bloco { margin-top: 6px; }
 .doc-edit, .aval-edit { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--inset); }

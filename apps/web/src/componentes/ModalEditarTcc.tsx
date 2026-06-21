@@ -1,29 +1,45 @@
-// Modal ÚNICO de edição administrativa do TCC (coordenador), com abas:
-// Dados gerais · Documentos · Banca e notas. Reaproveita os painéis internos.
+// Modal ÚNICO de edição administrativa do TCC (coordenador). Estrutura fiel ao
+// modal antigo: seções grandes empilhadas num scroll só (Dados do trabalho /
+// orientação · Documentos · Avaliações Fase I e Fase II colapsáveis), em vez de abas.
+// Os pesos da banca são buscados aqui mesmo (/tccs/:id/banca/pesos), então o modal
+// funciona tanto pela página interna quanto aberto direto pela lista de TCCs.
 // (Edição de USUÁRIOS não entra aqui — fica na aba Usuários.)
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { apiGet } from '../api';
 import { Modal } from './Modal';
 import { PainelDadosTcc } from './PainelDadosTcc';
 import { PainelDocumentosTcc } from './PainelDocumentosTcc';
 import { PainelBancaTcc } from './PainelBancaTcc';
 
-type Aba = 'gerais' | 'documentos' | 'banca';
+export function ModalEditarTcc({ tcc, pesos, aoFechar, aoSalvo }: { tcc: any; pesos?: any; aoFechar: () => void; aoSalvo: () => void }) {
+  // Usa os pesos vindos por prop (página interna) como valor inicial e, de toda forma,
+  // busca aqui também — assim o modal aberto pela lista de TCCs também os carrega.
+  const [pesosBanca, setPesosBanca] = useState<any>(pesos ?? null);
+  useEffect(() => {
+    apiGet(`/tccs/${tcc.id}/banca/pesos`).then(setPesosBanca).catch(() => {});
+  }, [tcc.id]);
 
-export function ModalEditarTcc({ tcc, pesos, aoFechar, aoSalvo }: { tcc: any; pesos: any; aoFechar: () => void; aoSalvo: () => void }) {
-  const [aba, setAba] = useState<Aba>('gerais');
+  const subtitulo = [tcc.aluno?.nomeCompleto, tcc.titulo].filter(Boolean).join(' — ');
 
   return (
-    <Modal titulo="Editar TCC" subtitulo={tcc.titulo} aoFechar={aoFechar}>
-      <div className="abas-edicao">
-        <button className={`aba-edicao${aba === 'gerais' ? ' ativa' : ''}`} onClick={() => setAba('gerais')}>Dados gerais</button>
-        <button className={`aba-edicao${aba === 'documentos' ? ' ativa' : ''}`} onClick={() => setAba('documentos')}>Documentos</button>
-        <button className={`aba-edicao${aba === 'banca' ? ' ativa' : ''}`} onClick={() => setAba('banca')}>Banca e notas</button>
-      </div>
+    <Modal titulo="Editar TCC" subtitulo={subtitulo} aoFechar={aoFechar}>
+      <div className="edicao-tcc">
+        <section className="edicao-secao">
+          <PainelDadosTcc tcc={tcc} aoSalvo={aoSalvo} />
+        </section>
 
-      {/* Só a aba ativa é montada — assim cada painel reinicia com os dados atuais do TCC. */}
-      {aba === 'gerais' && <PainelDadosTcc tcc={tcc} aoSalvo={aoSalvo} />}
-      {aba === 'documentos' && <PainelDocumentosTcc tcc={tcc} aoSalvo={aoSalvo} />}
-      {aba === 'banca' && <PainelBancaTcc tcc={tcc} pesos={pesos} aoSalvo={aoSalvo} />}
+        <section className="edicao-secao">
+          <PainelDocumentosTcc tcc={tcc} aoSalvo={aoSalvo} />
+        </section>
+
+        <section className="edicao-secao">
+          <h3 className="titulo-bloco">Avaliações da banca</h3>
+          <p className="legenda" style={{ marginTop: 0 }}>
+            Notas por critério, comentários/pareceres e status de cada avaliador — Fase I e Fase II.
+          </p>
+          <PainelBancaTcc tcc={tcc} pesos={pesosBanca} aoSalvo={aoSalvo} />
+        </section>
+      </div>
     </Modal>
   );
 }

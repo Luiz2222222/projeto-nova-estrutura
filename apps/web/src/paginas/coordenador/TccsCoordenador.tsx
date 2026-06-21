@@ -1,13 +1,15 @@
 // Gestão de TCCs do coordenador — lista espelhando o layout do projeto antigo:
 // header "Gestão de TCCs", distribuição por etapa, busca com ícone, filtros de
 // fase e curso, e cards com título/aluno/orientador/badge/timeline. O card abre
-// a página interna de detalhe (/coordenador/tccs/:id), não um modal.
-import { useEffect, useMemo, useState } from 'react';
+// a página interna de detalhe (/coordenador/tccs/:id); o botão "Editar" abre o
+// modal de edição administrativa direto na lista (como no projeto antigo).
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, URL_API } from '../../api';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -36,11 +38,24 @@ export function TccsCoordenador() {
   const [busca, setBusca] = useState('');
   const [filtroFase, setFiltroFase] = useState('TODAS');
   const [filtroCurso, setFiltroCurso] = useState('TODOS');
+  const [tccEditando, setTccEditando] = useState<any | null>(null);
+
+  // Recarrega a lista e, se o modal estiver aberto, sincroniza o TCC em edição com o
+  // dado fresco (mantém o modal aberto após salvar, refletindo as alterações).
+  const carregar = useCallback(async () => {
+    try {
+      const lista: any[] = (await apiGet('/tccs')) ?? [];
+      setTccs(lista);
+      setTccEditando((prev: any) => (prev ? lista.find((x) => x.id === prev.id) ?? prev : prev));
+    } catch {
+      setTccs([]);
+    }
+  }, []);
 
   useEffect(() => {
     setCarregando(true);
-    apiGet('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
-  }, []);
+    carregar().finally(() => setCarregando(false));
+  }, [carregar]);
 
   // Distribuição por etapa: uma "carta" por fase presente, com contagem e barra (como no antigo).
   const distribuicao = useMemo(() => {
@@ -142,7 +157,7 @@ export function TccsCoordenador() {
                     <div className="card-tcc-lado">
                       <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
                       <div className="card-tcc-acoes">
-                        <button className="card-tcc-btn" title="Editar / gerenciar" onClick={(e) => { e.stopPropagation(); navigate(`/coordenador/tccs/${t.id}`); }}>{icoLapis} Editar</button>
+                        <button className="card-tcc-btn" title="Editar (edição administrativa)" onClick={(e) => { e.stopPropagation(); setTccEditando(t); }}>{icoLapis} Editar</button>
                         {(() => {
                           const doc = docPrincipal(t);
                           return doc ? (
@@ -161,6 +176,10 @@ export function TccsCoordenador() {
             </div>
           )}
         </>
+      )}
+
+      {tccEditando && (
+        <ModalEditarTcc tcc={tccEditando} aoFechar={() => setTccEditando(null)} aoSalvo={carregar} />
       )}
     </>
   );
