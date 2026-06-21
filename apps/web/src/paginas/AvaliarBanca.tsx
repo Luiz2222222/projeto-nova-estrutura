@@ -1,8 +1,10 @@
 // Página interna de avaliação da banca (professor/avaliador), espelhando o antigo:
 // header com voltar + fase, dados do TCC, documento e formulário por critério
 // (nota + comentário por critério, parecer geral, nota total ao vivo).
-// O backend atual NÃO tem rascunho/bloqueio: se a avaliação já foi enviada
-// (m.nota !== null) a tela fica em modo LEITURA; senão permite preencher e enviar.
+// Fluxo (backend já suporta rascunho/reabertura): PENDENTE = editável, com
+// "Salvar rascunho" (finalizar=false) e "Enviar" (finalizar=true). ENVIADO = só
+// leitura, com "Salvar rascunho" desativado e botão "Editar" → POST .../reabrir
+// (volta a PENDENTE). BLOQUEADO/CONCLUIDO = leitura sem reabrir.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../api';
@@ -82,8 +84,8 @@ export function AvaliarBanca() {
   const faseAtual: string | undefined = m?.banca?.tcc?.faseAtual;
   const emAvaliacao = faseAtual === faseAval;
   const emValidacao = faseAtual === faseValid;
-  // Só PENDENTE é editável. ENVIADO fica em leitura e só mostra "Reabrir para Edição"
-  // (como no antigo). BLOQUEADO/CONCLUIDO seguem somente leitura, sem reabrir.
+  // Só PENDENTE é editável. ENVIADO fica em leitura e mostra o botão "Editar" (reabre).
+  // BLOQUEADO/CONCLUIDO seguem somente leitura, sem reabrir.
   const editavel = !!m && status === 'PENDENTE' && (emAvaliacao || emValidacao);
   const podeRascunho = editavel && emAvaliacao; // rascunho só durante a avaliação
   const podeReabrir = !!m && status === 'ENVIADO' && (emAvaliacao || emValidacao);
@@ -297,22 +299,20 @@ export function AvaliarBanca() {
         </div>
 
         <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-          <button className="botao botao-secundario" disabled={enviando} onClick={() => navigate(prefixoLista)}>Voltar</button>
-          {podeRascunho && (
-            <button className="botao botao-secundario" disabled={enviando} onClick={() => salvar(false)}>
-              {enviando ? 'Salvando…' : 'Salvar rascunho'}
-            </button>
-          )}
-          {editavel && (
-            <button className="botao" disabled={enviando || total == null} onClick={() => salvar(true)}>
-              {enviando ? 'Enviando…' : 'Enviar avaliação'}
-            </button>
-          )}
-          {podeReabrir && (
+          {/* Rodapé só com ações da avaliação (o "Voltar" fica no cabeçalho da página).
+              "Salvar rascunho" some? Não: fica sempre visível, desativado quando não editável. */}
+          <button className="botao botao-secundario" disabled={!podeRascunho || enviando} onClick={() => salvar(false)}>
+            {enviando ? 'Salvando…' : 'Salvar rascunho'}
+          </button>
+          {podeReabrir ? (
             <button className="botao" disabled={enviando} onClick={reabrir}>
-              {enviando ? 'Reabrindo…' : 'Reabrir para Edição'}
+              {enviando ? 'Editando…' : 'Editar'}
             </button>
-          )}
+          ) : editavel ? (
+            <button className="botao" disabled={enviando || total == null} onClick={() => salvar(true)}>
+              {enviando ? 'Enviando…' : 'Enviar'}
+            </button>
+          ) : null}
         </div>
       </section>
     </>
