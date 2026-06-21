@@ -6,7 +6,7 @@
 > Convenção do projeto: **nomes em português** sempre que possível (arquivos, variáveis,
 > entidades, rotas). Só fica em inglês o que é nativo de framework/lib.
 
-Última atualização: 2026-06-07.
+Última atualização: 2026-06-21.
 
 ---
 
@@ -42,39 +42,61 @@ Projeto/
 4. `npm run api` → API em http://localhost:3000
 5. `npm run web` → tela em http://localhost:5173
 
-### Credenciais / códigos de teste (vêm do seed)
-- Coordenador: **coordenador@dee.br** / senha **coordenador** (coordenador não se cadastra pela tela).
+### Credenciais / códigos de teste
+O **login é o e-mail** do usuário; senhas com bcrypt (não há como recuperar — só resetar).
+- Vêm do **seed** (`prisma db seed`, só fora de produção): Coordenador **adm / adm** · Aluno **aluno / aluno**.
+- O `dev.db` atual também tem usuários criados manualmente/pela tela de cadastro que um seed
+  novo **não** recria: **avaliador / avaliador** (avaliador externo), `prof@dee.br`, etc.
 - Códigos de cadastro: Aluno **ALUNO2026** · Professor **PROF2026** · Avaliador **AVAL2026**.
 
-## 4. O que JÁ está pronto (e testado no navegador)
-- **Fundação:** monorepo, API sobe, web sobe, banco SQLite + Prisma (modelos `Usuario`,
-  `CodigoCadastro`).
-- **Autenticação (backend):** `POST /autenticacao/cadastro`, `POST /autenticacao/login`
-  (cookie JWT; "manter login" = 7 dias, senão sessão), `POST /autenticacao/sair`,
-  `GET /autenticacao/eu` (protegido por `GuardaJwt`). Validação via Zod (`ZodValidacaoPipe`).
-- **Autenticação (web):** tela de **login** (vidro branco + logo DEE), **cadastro em modal de
-  2 passos** (escolher categoria → formulário; campo "Outros" abre campo livre; "Confirmar
-  senha"), home placeholder, `RotaProtegida`, contexto de auth (`autenticacao/contexto.tsx`).
-- **Design:** paleta branca + acento azul-céu (#0EA5E9), logo do DEE (`apps/web/public/Logo.png`;
-  há também Logo2.png e Logo3.png disponíveis). Sistema salvo em `apps/web/.interface-design/system.md`.
+## 4. O que JÁ está pronto
+O **ciclo completo do TCC** está implementado (backend + telas dos 4 papéis), espelhando o
+layout/fluxo do projeto antigo onde fazia sentido. Tudo passa em `build/lint/test/prisma`;
+parte foi conferida no navegador, parte só por build (ver §5).
 
-## 5. O que FALTA (próximos passos, em ordem)
-1. **Domínio do TCC — perfil do ALUNO (fatia: abrir TCC)** ✔ **PRONTO e testado de ponta a ponta.**
-   - Backend: modelos `Tcc` / `SolicitacaoOrientacao` / `DocumentoTcc`; guarda de papéis
-     (`comum/guarda-papeis.ts` + `@Papeis`); módulo `tccs` (professores-disponiveis,
-     coorientadores, criar, meu, cancelar, upload documentos, pendentes, aprovar, recusar,
-     baixar documento). Storage local em `apps/api/uploads/`. Aprovar move INICIALIZACAO → DESENVOLVIMENTO.
-   - Frontend: **roteamento por papel** (`/aluno`, `/coordenador`, `/inicio`), `LayoutApp`
-     (barra + Outlet), `PainelAluno` (abrir/status/jornada/cancelar), `AbrirTcc` (form + upload),
-     `PainelCoordenador` (pendentes + aprovar/recusar com parecer + baixar docs).
-   - Próximo no perfil do aluno: **reenviar/editar após recusa**; depois enviar monografia
-     (fase DESENVOLVIMENTO). Demais perfis (orientador, coordenador completo, avaliador) e fases
-     seguintes pelo fluxo em `docs/ARQUITETURA.md` / `docs/fluxograma-interativo.html`.
-2. **Modo administrador do coordenador** (editar/forçar/ criar/**excluir de vez** TCC) — ver DETALHES §5.
-3. **Recuperação de senha + infraestrutura de e-mail** (ADIADO a pedido do cliente). Link
-   "Esqueci minha senha" já existe no login, porém inerte.
-4. **Criação de coordenador** (decisão adiada — não há admin do Django; definir seed/fluxo).
-5. Trocar SQLite → PostgreSQL quando for publicar (mudar `provider` no `schema.prisma` + `DATABASE_URL`).
+- **Fundação + auth:** monorepo, JWT em cookie httpOnly, cadastro por papel com código,
+  recuperação de senha (e-mail dev/console por padrão, SMTP por `.env` ou pela UI do coordenador),
+  notificações internas (sino), preferências individuais de e-mail.
+- **Aluno:** abrir TCC (form + upload), dashboard com "Ação pendente / Próximo prazo / Fase atual",
+  "Meu TCC" (`PainelAluno`) com timeline vertical/horizontal, Documentos, Informações, Mural.
+  Envia monografia e versão final.
+- **Orientador (professor):** dashboard espelhado, "Meus orientandos" (lista em cards →
+  página interna `DetalheOrientando`): aprova/pede ajustes na monografia, confirma/descontinua
+  continuidade, valida a versão final (a versão final é do **orientador**, não do coordenador).
+- **Coordenador:** dashboard (ações pendentes + datas + TCCs por etapa), aba **TCCs** (lista
+  com distribuição/filtros + cards) e **página interna** `TccDetalheCoordenador`:
+  - **Formar banca da Fase I:** 2 dropdowns de avaliador + upload do **documento de avaliação**
+    (tipo `AVALIACAO_BANCA`, interno da banca) — obrigatório.
+  - **Validar Fase I / Fase II** (NF1 = média; NF = 0,6·NF1 + 0,4·NF2).
+  - **Editar informações do TCC** (`PUT /tccs/:id`): título, semestre, fase, flags, notas,
+    resultado, aluno/orientador/coorientador + coorientador externo (com validação de papéis e
+    unique aluno+semestre). E **editar metadados de documento** (`PUT /tccs/documentos/:docId`).
+  - **Banca e notas (admin):** vê notas por critério/peso/comentário + parecer + status de cada
+    avaliador; **edita avaliação** de um membro e **troca os 2 avaliadores da Fase I** (sincroniza
+    a Fase II). Bloqueado quando a fase já foi validada/concluída (preserva NF — sem recálculo).
+  - Calendário/pesos, usuários (editar/reset senha/excluir), códigos de cadastro, relatórios,
+    lista do período, exportar/resetar, mural com comentários, documentos de referência.
+- **Avaliador externo / membro de banca:** dashboard espelhado; **Participações em bancas**
+  (lista por TCC com botões Fase I/Fase II) → **página interna de avaliação** (`AvaliarBanca`):
+  formulário por critério (nota com máscara/clamp pelo peso, comentário por critério, parecer
+  geral, nota total ao vivo). Fluxo **rascunho → enviar → reabrir/editar**, com status do membro
+  `PENDENTE | ENVIADO | BLOQUEADO | CONCLUIDO`. Coorientações (leitura).
+- **Regras de fase fechadas:** banca da Fase II = **orientador + os 2 avaliadores da Fase I**
+  (sem formação manual); avanço para `VALIDACAO_*` só quando todos enviam; versão final validada
+  pelo orientador; documento `AVALIACAO_BANCA` só visível a coordenador + membros da banca.
+
+## 5. O que FALTA / próximos passos
+1. **Testar no navegador o ciclo completo** (de risco): muita coisa recente foi validada só por
+   `build/lint/test/prisma`, sem clicar na UI. Subir API+web e percorrer abrir → monografia/
+   continuidade → formar banca → avaliar (rascunho/enviar/reabrir) → validar Fase I/II →
+   versão final → concluído, + edições admin de TCC/banca.
+2. **Testes automatizados do backend** (hoje só ~10 testes no `compartilhado`): cobrir transições
+   de fase, guards e cálculo de NF no módulo `bancas`.
+3. **Recálculo de NF/resultado para TCC já concluído** (deferido): a edição admin de banca bloqueia
+   fases validadas justamente para não deixar NF inconsistente. Se for preciso editar nota de TCC
+   concluído, falta um fluxo explícito de recálculo (decidir antes de implementar).
+4. **Trocar SQLite → PostgreSQL** ao publicar (mudar `provider` no `schema.prisma` + `DATABASE_URL`).
+5. **Deploy** (build de produção, variáveis, SMTP real).
 
 ## 6. Armadilhas / decisões que economizam tempo
 - **Avast/SSL:** ver seção 3 (NODE_EXTRA_CA_CERTS).
@@ -90,6 +112,6 @@ Projeto/
 
 ## 7. Documentos de referência
 - `docs/ARQUITETURA.md` — domínio, **fluxo completo do TCC**, regras de nota, modelo de dados, roadmap.
-- `docs/DETALHES.md` — backlog de detalhes por área (cadastro fechado; resto a preencher).
+- `docs/DETALHES.md` — changelog/decisões finas por área (endpoints, migrations, regras de borda).
 - `apps/web/.interface-design/system.md` — sistema de design (cores, componentes, padrões).
 - `docs/fluxograma-interativo.html` — simulador interativo do fluxo do TCC (abrir no navegador). Confere com a seção de fluxo do ARQUITETURA.md.

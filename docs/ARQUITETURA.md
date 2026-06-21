@@ -60,6 +60,13 @@ Mesmo padrão nas duas:
 - **Coordenador valida**: **validar** (→ checagem de nota) ou **voltar pra banca**.
 - Entre as fases: agendamento da defesa.
 
+> **Como está implementado (ver `DETALHES.md` §4 T8):** ao **formar a banca da Fase I** o
+> coordenador escolhe os 2 avaliadores **e envia o documento que a banca avalia** (tipo
+> `AVALIACAO_BANCA`, interno da banca). A **Fase II não é formada manualmente** — ao validar a
+> Fase I ela é criada como **orientador + os 2 avaliadores da Fase I** e segue direto para
+> avaliação (sem etapa de **agendamento da defesa**). Avaliação tem rascunho/envio/reabertura
+> com status por avaliador; o coordenador pode editar avaliações/avaliadores antes da validação.
+
 ### 3.4 Finalização
 Após aprovação na nota final:
 - **Aluno posta a versão final** (pós-correções) → **Orientador aprova a versão final?**

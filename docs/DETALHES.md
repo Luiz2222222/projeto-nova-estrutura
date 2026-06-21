@@ -179,6 +179,39 @@ Modelo de avaliação refeito para bater com o regulamento. O que vale hoje:
   `POST /tccs/:id/validar-versao-final` (PROFESSOR, confere `orientadorId`): CONCLUIR → `CONCLUIDO`,
   AJUSTES → volta para `AGUARDANDO_AJUSTES_FINAIS`. Ação na tela **Meus orientandos**.
 
+### ⚠️ T8 (atualização que SUPERA o que está acima nesta seção) — 2026-06
+Banca refeita para espelhar o antigo, com documento próprio, status por membro e rascunho/edição.
+- **Documento da banca (Fase I):** `POST /tccs/:id/banca` virou **multipart** — `arquivo` (PDF) +
+  `avaliadorIds` (JSON). O coordenador escolhe **2 avaliadores em 2 dropdowns** e **envia o
+  documento que a banca avalia** (obrigatório; sem ele a banca não é formada). Migration
+  `banca_documento_avaliacao` (relação 1:1 `Banca.documentoAvaliacao → DocumentoTcc`, tipo
+  `AVALIACAO_BANCA`). **Interno da banca:** `documentoParaUsuario` libera só coordenador + membros
+  da banca que o avalia; **oculto** do aluno/orientador/coorientador (filtrado em `meu`,
+  `orientandos`, `coorientacoes`). No `MinhasBancas`/`AvaliarBanca` o documento substitui a
+  monografia quando existe.
+- **Status do membro:** migration `banca_status_avaliacao` adiciona `MembroBanca.status`
+  (`PENDENTE | ENVIADO | BLOQUEADO | CONCLUIDO`). `nota` total só conta quando enviado.
+- **Rascunho/editar/reabrir (avaliador):** `POST /bancas/:id/avaliar` aceita **`finalizar`**
+  (false = salva rascunho parcial; true = envia, exige todas as notas). `POST /bancas/:id/reabrir`
+  (ENVIADO → PENDENTE, preserva dados). A fase só avança a `VALIDACAO_*` quando **todos** estão
+  ENVIADO+; volta a `AVALIACAO_*` se alguém reabre. `validar()` marca os membros como `CONCLUIDO`.
+  Tela: **lista por TCC** (`MinhasBancas`) com botões Fase I/Fase II → **página interna**
+  `AvaliarBanca` (form por critério, máscara/clamp, parecer estruturado `=== Rótulo ===`).
+  Rotas `/professor/bancas/:membroId`, `/avaliador/bancas/:membroId`, compat `/bancas/:membroId`.
+- **Edição administrativa (coordenador, na página interna `TccDetalheCoordenador`):**
+  - `PUT /tccs/:id` (editar TCC: título, semestre, fase, flags, NF1/NF2/NF, resultado, aluno/
+    orientador/coorientador + coorientador externo — valida papéis e unique aluno+semestre) e
+    `PUT /tccs/documentos/:docId` (metadados do doc; valida `tipo`/`status` contra listas).
+  - Seção **"Banca e notas"** completa: notas por critério/peso/comentário + parecer + status por
+    avaliador. `PUT /bancas/membros/:membroId/avaliacao` (edita avaliação de um membro),
+    `PUT /tccs/:id/banca/avaliadores` (troca os 2 da Fase I, **sincroniza a Fase II** = orientador +
+    os 2 atuais), `GET /tccs/:id/banca/pesos`. **Guard:** edição bloqueada quando a fase já foi
+    validada/concluída (preserva NF1/NF2/NF/resultado — **recálculo não implementado**, decidir antes).
+- **Schemas (compartilhado):** `esquemaFormarBanca` (length 2), `STATUS_MEMBRO_BANCA`, `finalizar`
+  em `esquemaAvaliarBanca`, `esquemaEditarTcc`, `esquemaEditarDocumento`,
+  `esquemaEditarAvaliacaoMembro`, `esquemaTrocarAvaliadores`. Helpers de avaliação no front em
+  `apps/web/src/utils/avaliacao.ts` (clampScore/parseBR/parecer estruturado/pesos).
+
 ## 5. Coordenador
 
 ### Estrutura + features que alimentam o aluno (FEITO)
@@ -203,6 +236,13 @@ Backend novo: módulo `apps/api/src/coordenacao/` (controller+service+module, re
 ### Modo administrador / rede de segurança (IMPORTANTE — pedido p/ a entrega)
 O coordenador é o "admin" do sistema (substitui o admin do Django). Precisa resolver problemas
 sem depender de dev. Capacidades:
+> **Status (2026-06, ver §4 T8):** já FEITO na página interna `TccDetalheCoordenador` —
+> editar qualquer dado do TCC (`PUT /tccs/:id`: fase, NF1/NF2/NF, resultado, orientador/aluno/
+> coorientador, título, flags), editar metadados de documento (`PUT /tccs/documentos/:docId`),
+> editar avaliações/notas e trocar avaliadores da banca, baixar arquivos. Também há gestão de
+> usuários (editar/reset senha/excluir) e exportar/resetar período no módulo `coordenacao`.
+> **Falta:** **substituir o arquivo** de um documento (hoje só metadados), **criar TCC
+> manualmente** pelo coordenador, **excluir um TCC** (apagar de vez + auditoria).
 - **[AGORA]** Editar **qualquer dado** de qualquer TCC: orientador, título, **fase atual**,
   **notas (NF1/NF2)**, avaliações, banca, datas.
 - **[AGORA]** **Substituir/baixar** arquivos (documentos) de qualquer TCC.
