@@ -6,11 +6,7 @@ import { FASES, ROTULO_FASE } from '@tcc/compartilhado';
 const rotuloUsuario = (u: any) =>
   `${u.tratamento ? u.tratamento + ' ' : ''}${u.nomeCompleto}${u.papel === 'AVALIADOR' ? ' (Externo)' : u.papel === 'COORDENADOR' ? ' (Coordenador)' : u.papel === 'PROFESSOR' ? ' (Professor)' : ''}`;
 const numToStr = (v: any) => (v == null ? '' : String(v).replace('.', ','));
-const parseNota = (s: string): number | null => {
-  const t = s.trim();
-  if (t === '') return null;
-  return Number(t.replace(',', '.'));
-};
+const ROTULO_RESULTADO: Record<string, string> = { APROVADO: 'Aprovado', REPROVADO: 'Reprovado' };
 
 export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void }) {
   const [alunos, setAlunos] = useState<any[]>([]);
@@ -20,10 +16,6 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
   const [titulo, setTitulo] = useState(tcc.titulo ?? '');
   const [semestre, setSemestre] = useState(tcc.semestre ?? '');
   const [faseAtual, setFaseAtual] = useState(tcc.faseAtual ?? '');
-  const [resultado, setResultado] = useState(tcc.resultado ?? '');
-  const [nf1, setNf1] = useState(numToStr(tcc.nf1));
-  const [nf2, setNf2] = useState(numToStr(tcc.nf2));
-  const [nf, setNf] = useState(numToStr(tcc.nf));
   const [monografiaAprovada, setMonografiaAprovada] = useState(!!tcc.monografiaAprovada);
   const [continuidadeConfirmada, setContinuidadeConfirmada] = useState(!!tcc.continuidadeConfirmada);
   const [parecerContinuidade, setParecerContinuidade] = useState(tcc.parecerContinuidade ?? '');
@@ -51,20 +43,13 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
     if (!titulo.trim()) return setErro('Informe o título.');
     if (!semestre.trim()) return setErro('Informe o semestre.');
     if (!alunoId) return setErro('Selecione o aluno.');
-    for (const [rotulo, valor] of [['NF1', nf1], ['NF2', nf2], ['NF', nf]] as const) {
-      const n = parseNota(valor);
-      if (n != null && (!Number.isFinite(n) || n < 0 || n > 10)) return setErro(`${rotulo} deve ser um número entre 0 e 10 (ou vazio).`);
-    }
     setSalvando(true);
     try {
+      // NF1/NF2/NF e Resultado são calculados pelo fluxo (validação das fases) — não enviados aqui.
       await apiPut(`/tccs/${tcc.id}`, {
         titulo: titulo.trim(),
         semestre: semestre.trim(),
         faseAtual,
-        resultado: resultado || null,
-        nf1: parseNota(nf1),
-        nf2: parseNota(nf2),
-        nf: parseNota(nf),
         monografiaAprovada,
         continuidadeConfirmada,
         parecerContinuidade: parecerContinuidade.trim() || null,
@@ -90,35 +75,26 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
     <>
       {erro && <div className="erro-geral">{erro}</div>}
       {msg && <div className="alerta" style={{ background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginBottom: 14 }}>{msg}</div>}
-      <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
-        ⚠ Edição administrativa. Alterar <strong>fase, notas, resultado ou aluno</strong> pode afetar o fluxo do TCC — use com cuidado.
-      </div>
 
       <h3 className="titulo-bloco">Dados gerais</h3>
       <label className="campo"><span>Título</span><input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></label>
       <div className="grade-2">
         <label className="campo"><span>Semestre</span><input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2026.1" /></label>
         <label className="campo">
-          <span>Fase atual ⚠</span>
+          <span>Fase atual</span>
           <select value={faseAtual} onChange={(e) => setFaseAtual(e.target.value)}>
             {FASES.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
           </select>
         </label>
       </div>
 
-      <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Notas e resultado ⚠</h3>
+      <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Notas e resultado</h3>
+      <p className="legenda" style={{ marginTop: 0 }}>Calculados pelo sistema a partir da validação das fases — somente leitura.</p>
       <div className="grade-2">
-        <label className="campo"><span>NF1 (Fase I)</span><input inputMode="decimal" value={nf1} onChange={(e) => setNf1(e.target.value)} placeholder="vazio = sem nota" /></label>
-        <label className="campo"><span>NF2 (Fase II)</span><input inputMode="decimal" value={nf2} onChange={(e) => setNf2(e.target.value)} placeholder="vazio = sem nota" /></label>
-        <label className="campo"><span>NF (final)</span><input inputMode="decimal" value={nf} onChange={(e) => setNf(e.target.value)} placeholder="vazio = sem nota" /></label>
-        <label className="campo">
-          <span>Resultado</span>
-          <select value={resultado} onChange={(e) => setResultado(e.target.value)}>
-            <option value="">— sem resultado —</option>
-            <option value="APROVADO">Aprovado</option>
-            <option value="REPROVADO">Reprovado</option>
-          </select>
-        </label>
+        <div className="campo"><span>NF1 (Fase I)</span><div className="campo-leitura">{numToStr(tcc.nf1) || '—'}</div></div>
+        <div className="campo"><span>NF2 (Fase II)</span><div className="campo-leitura">{numToStr(tcc.nf2) || '—'}</div></div>
+        <div className="campo"><span>NF (final)</span><div className="campo-leitura">{numToStr(tcc.nf) || '—'}</div></div>
+        <div className="campo"><span>Resultado</span><div className="campo-leitura">{ROTULO_RESULTADO[tcc.resultado] ?? '—'}</div></div>
       </div>
 
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Desenvolvimento / continuidade</h3>
@@ -137,7 +113,7 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Pessoas / orientação</h3>
       <div className="grade-2">
         <label className="campo">
-          <span>Aluno ⚠</span>
+          <span>Aluno</span>
           <select value={alunoId} onChange={(e) => setAlunoId(e.target.value)}>
             <option value="">Selecione…</option>
             {alunos.map((a) => <option key={a.id} value={a.id}>{a.nomeCompleto}{a.email ? ` · ${a.email}` : ''}</option>)}

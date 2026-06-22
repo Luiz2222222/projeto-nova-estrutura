@@ -1,7 +1,9 @@
-// Aba "Documentos" do modal único de edição do TCC (coordenador).
-// Lista os documentos do TCC e edita metadados inline (PUT /tccs/documentos/:id).
+// Seção "Documentos" do modal único de edição do TCC (coordenador).
+// Lista os documentos e permite: editar metadados (SEM trocar o tipo), substituir o
+// arquivo (cria nova versão; o antigo vira SUBSTITUIDA) e adicionar um documento novo.
+// Uploads aceitam só PDF e usam o padrão seguro de gravação do backend.
 import { useState } from 'react';
-import { apiPut, URL_API, type ErroApi } from '../api';
+import { apiPut, apiUpload, URL_API, type ErroApi } from '../api';
 
 const TIPOS = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
 const ROTULO_TIPO: Record<string, string> = {
@@ -21,11 +23,17 @@ const ic = (d: string) => (
 const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
 const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
 const icoLapis = ic('M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z');
+const icoTrocar = ic('M21 2v6h-6|M3 12a9 9 0 0 1 15-6.7L21 8|M3 22v-6h6|M21 12a9 9 0 0 1-15 6.7L3 16');
+const icoMais = ic('M12 5v14|M5 12h14');
 
-function FormDoc({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; aoFechar: () => void }) {
-  const [tipo, setTipo] = useState(doc.tipo ?? '');
-  const [status, setStatus] = useState(doc.status ?? '');
-  const [versao, setVersao] = useState(String(doc.versao ?? 1));
+function msgErro(e: unknown, padrao: string) {
+  const er = e as ErroApi;
+  return er.erros?.[0]?.mensagem || er.mensagem || padrao;
+}
+
+// Edição de metadados (sem trocar o tipo do documento existente).
+function FormMeta({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; aoFechar: () => void }) {
+  const [status, setStatus] = useState(doc.status ?? 'PENDENTE');
   const [nomeArquivo, setNomeArquivo] = useState(doc.nomeArquivo ?? '');
   const [parecer, setParecer] = useState(doc.parecer ?? '');
   const [erro, setErro] = useState('');
@@ -33,17 +41,14 @@ function FormDoc({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; ao
 
   async function salvar() {
     setErro('');
-    const v = parseInt(versao, 10);
-    if (!Number.isInteger(v) || v < 1) return setErro('Versão deve ser um número inteiro ≥ 1.');
-    if (!nomeArquivo.trim()) return setErro('Informe o nome do arquivo.');
+    if (!nomeArquivo.trim()) return setErro('Informe o nome exibido do arquivo.');
     setSalvando(true);
     try {
-      await apiPut(`/tccs/documentos/${doc.id}`, { tipo, status, versao: v, nomeArquivo: nomeArquivo.trim(), parecer: parecer.trim() || null });
+      await apiPut(`/tccs/documentos/${doc.id}`, { status, nomeArquivo: nomeArquivo.trim(), parecer: parecer.trim() || null });
       aoSalvo();
       aoFechar();
     } catch (e) {
-      const er = e as ErroApi;
-      setErro(er.erros?.[0]?.mensagem || er.mensagem || 'Não foi possível salvar.');
+      setErro(msgErro(e, 'Não foi possível salvar.'));
     } finally {
       setSalvando(false);
     }
@@ -52,15 +57,12 @@ function FormDoc({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; ao
   return (
     <div className="doc-edit">
       {erro && <div className="erro-geral">{erro}</div>}
+      <p className="legenda" style={{ marginTop: 0 }}>Tipo: <strong>{ROTULO_TIPO[doc.tipo] ?? doc.tipo}</strong> (não editável). Para mudar o arquivo, use “Substituir arquivo”.</p>
       <div className="grade-2">
-        <label className="campo"><span>Tipo</span>
-          <select value={tipo} onChange={(e) => setTipo(e.target.value)}>{TIPOS.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t] ?? t}</option>)}</select>
-        </label>
         <label className="campo"><span>Status</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         </label>
-        <label className="campo"><span>Versão</span><input inputMode="numeric" value={versao} onChange={(e) => setVersao(e.target.value)} /></label>
-        <label className="campo"><span>Nome do arquivo</span><input value={nomeArquivo} onChange={(e) => setNomeArquivo(e.target.value)} /></label>
+        <label className="campo"><span>Nome exibido</span><input value={nomeArquivo} onChange={(e) => setNomeArquivo(e.target.value)} /></label>
       </div>
       <label className="campo" style={{ marginTop: 10 }}><span>Parecer / devolutiva</span><textarea rows={2} value={parecer} onChange={(e) => setParecer(e.target.value)} /></label>
       <div className="acoes" style={{ justifyContent: 'flex-end' }}>
@@ -71,13 +73,121 @@ function FormDoc({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; ao
   );
 }
 
+// Substituição do arquivo de um documento existente (mesmo tipo; cria nova versão).
+function FormSubstituir({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => void; aoFechar: () => void }) {
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [status, setStatus] = useState(doc.status ?? 'PENDENTE');
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    setErro('');
+    if (!arquivo) return setErro('Escolha o novo arquivo PDF.');
+    if (arquivo.type !== 'application/pdf') return setErro('Apenas arquivos PDF são aceitos.');
+    setSalvando(true);
+    try {
+      const form = new FormData();
+      form.append('arquivo', arquivo);
+      form.append('status', status);
+      await apiUpload(`/tccs/documentos/${doc.id}/substituir`, form);
+      aoSalvo();
+      aoFechar();
+    } catch (e) {
+      setErro(msgErro(e, 'Não foi possível substituir o arquivo.'));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="doc-edit">
+      {erro && <div className="erro-geral">{erro}</div>}
+      <p className="legenda" style={{ marginTop: 0 }}>O arquivo atual vira <strong>SUBSTITUIDA</strong> e o novo passa a ser a versão mais recente de <strong>{ROTULO_TIPO[doc.tipo] ?? doc.tipo}</strong>.</p>
+      <div className="grade-2">
+        <label className="campo"><span>Novo arquivo (PDF)</span><input type="file" accept="application/pdf" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
+        <label className="campo"><span>Status do novo</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+        </label>
+      </div>
+      <div className="acoes" style={{ justifyContent: 'flex-end' }}>
+        <button className="botao botao-secundario" disabled={salvando} onClick={aoFechar}>Cancelar</button>
+        <button className="botao" disabled={salvando || !arquivo} onClick={salvar}>{salvando ? 'Enviando…' : 'Substituir arquivo'}</button>
+      </div>
+    </div>
+  );
+}
+
+// Adição de um documento novo ao TCC (aqui o tipo PODE ser escolhido).
+function FormAdicionar({ tccId, aoSalvo, aoFechar }: { tccId: string; aoSalvo: () => void; aoFechar: () => void }) {
+  const [tipo, setTipo] = useState(TIPOS[0]);
+  const [status, setStatus] = useState('PENDENTE');
+  const [parecer, setParecer] = useState('');
+  const [arquivo, setArquivo] = useState<File | null>(null);
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+
+  async function salvar() {
+    setErro('');
+    if (!arquivo) return setErro('Escolha o arquivo PDF.');
+    if (arquivo.type !== 'application/pdf') return setErro('Apenas arquivos PDF são aceitos.');
+    setSalvando(true);
+    try {
+      const form = new FormData();
+      form.append('arquivo', arquivo);
+      form.append('tipo', tipo);
+      form.append('status', status);
+      if (parecer.trim()) form.append('parecer', parecer.trim());
+      await apiUpload(`/tccs/${tccId}/documentos/admin`, form);
+      aoSalvo();
+      aoFechar();
+    } catch (e) {
+      setErro(msgErro(e, 'Não foi possível adicionar o documento.'));
+    } finally {
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="doc-edit">
+      {erro && <div className="erro-geral">{erro}</div>}
+      <p className="legenda" style={{ marginTop: 0 }}>A versão é automática (próxima daquele tipo no TCC). Só PDF.</p>
+      <div className="grade-2">
+        <label className="campo"><span>Tipo</span>
+          <select value={tipo} onChange={(e) => setTipo(e.target.value)}>{TIPOS.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t] ?? t}</option>)}</select>
+        </label>
+        <label className="campo"><span>Status inicial</span>
+          <select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
+        </label>
+        <label className="campo"><span>Arquivo (PDF)</span><input type="file" accept="application/pdf" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
+      </div>
+      <label className="campo" style={{ marginTop: 10 }}><span>Parecer / devolutiva (opcional)</span><textarea rows={2} value={parecer} onChange={(e) => setParecer(e.target.value)} /></label>
+      <div className="acoes" style={{ justifyContent: 'flex-end' }}>
+        <button className="botao botao-secundario" disabled={salvando} onClick={aoFechar}>Cancelar</button>
+        <button className="botao" disabled={salvando || !arquivo} onClick={salvar}>{salvando ? 'Enviando…' : 'Adicionar documento'}</button>
+      </div>
+    </div>
+  );
+}
+
 export function PainelDocumentosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void }) {
   const [editando, setEditando] = useState<string | null>(null);
+  const [substituindo, setSubstituindo] = useState<string | null>(null);
+  const [adicionando, setAdicionando] = useState(false);
   const docs: any[] = tcc.documentos ?? [];
+
+  // Abre uma ação por documento de cada vez (editar metadados OU substituir arquivo).
+  const abrirEdicao = (id: string) => { setSubstituindo(null); setEditando(editando === id ? null : id); };
+  const abrirSubstituir = (id: string) => { setEditando(null); setSubstituindo(substituindo === id ? null : id); };
 
   return (
     <>
-      <h3 className="titulo-bloco">Documentos do TCC</h3>
+      <div className="titulo-bloco-linha">
+        <h3 className="titulo-bloco" style={{ margin: 0 }}>Documentos do TCC</h3>
+        <button className="botao botao-secundario" onClick={() => setAdicionando((v) => !v)}>{icoMais} {adicionando ? 'Fechar' : 'Adicionar documento'}</button>
+      </div>
+
+      {adicionando && <FormAdicionar tccId={tcc.id} aoSalvo={aoSalvo} aoFechar={() => setAdicionando(false)} />}
+
       {docs.length === 0 ? (
         <p className="nota-vazio">Nenhum documento enviado.</p>
       ) : (
@@ -89,12 +199,14 @@ export function PainelDocumentosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () =>
                 <span className="meta">{d.nomeArquivo} · v{d.versao} · {d.status}</span>
               </div>
               <span className="acoes-doc">
-                <button className="botao-icone" title="Editar" onClick={() => setEditando(editando === d.id ? null : d.id)}>{icoLapis}</button>
+                <button className="botao-icone" title="Editar metadados" onClick={() => abrirEdicao(d.id)}>{icoLapis}</button>
+                <button className="botao-icone" title="Substituir arquivo" onClick={() => abrirSubstituir(d.id)}>{icoTrocar}</button>
                 <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
                 <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
               </span>
             </div>
-            {editando === d.id && <FormDoc doc={d} aoSalvo={aoSalvo} aoFechar={() => setEditando(null)} />}
+            {editando === d.id && <FormMeta doc={d} aoSalvo={aoSalvo} aoFechar={() => setEditando(null)} />}
+            {substituindo === d.id && <FormSubstituir doc={d} aoSalvo={aoSalvo} aoFechar={() => setSubstituindo(null)} />}
           </div>
         ))
       )}
