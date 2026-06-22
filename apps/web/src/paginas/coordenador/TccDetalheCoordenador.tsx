@@ -317,7 +317,7 @@ export function TccDetalheCoordenador() {
       <section className="cartao-secao bloco">
         <h2>{icoBanca} Banca e notas</h2>
         {bancas.length > 0 && (
-          <p className="legenda" style={{ marginTop: 0 }}>Para editar notas, comentários, status ou trocar avaliadores, use <strong>Editar informações</strong> → aba <strong>Banca e notas</strong>.</p>
+          <p className="legenda" style={{ marginTop: 0 }}>Para editar notas, comentários, status ou trocar avaliadores, use <strong>Editar informações</strong>.</p>
         )}
         {bancas.length === 0 ? (
           <p className="nota-vazio">Banca ainda não formada.</p>

@@ -247,7 +247,7 @@ export function AvaliarBanca() {
         {leitura && (
           <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
             {status === 'ENVIADO'
-              ? 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Reabrir para Edição".'
+              ? 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Editar".'
               : status === 'BLOQUEADO'
                 ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
                 : status === 'CONCLUIDO'
