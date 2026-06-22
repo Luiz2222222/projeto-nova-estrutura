@@ -153,6 +153,63 @@ export class TccsService {
     return this.prisma.documentoTcc.update({ where: { id: docId }, data });
   }
 
+  private static readonly TIPOS_DOC = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
+  private static readonly STATUS_DOC = ['PENDENTE', 'EM_ANALISE', 'APROVADO', 'REJEITADO', 'SUBSTITUIDA'];
+
+  // Próxima versão de um tipo de documento dentro do TCC (versionamento automático).
+  private async proximaVersao(tccId: string, tipo: string) {
+    return (await this.prisma.documentoTcc.count({ where: { tccId, tipo } })) + 1;
+  }
+
+  // Coordenador adiciona administrativamente um documento ao TCC (upload). Versão automática.
+  // Reaproveita o mesmo padrão seguro de gravação (nome interno aleatório, original como metadado).
+  async adicionarDocumentoAdmin(tccId: string, tipo: string, status: string | undefined, parecer: string | undefined, arquivo: any) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException();
+    if (!TccsService.TIPOS_DOC.includes(tipo)) {
+      throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
+    }
+    const st = status || 'PENDENTE';
+    if (!TccsService.STATUS_DOC.includes(st)) {
+      throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
+    }
+    const arq = await this.gravarArquivo(arquivo);
+    try {
+      const versao = await this.proximaVersao(tccId, tipo);
+      return await this.prisma.documentoTcc.create({
+        data: { tccId, tipo, status: st, parecer: parecer || null, versao, ...arq },
+      });
+    } catch (e) {
+      await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
+      throw e;
+    }
+  }
+
+  // Coordenador substitui o ARQUIVO de um documento existente: o antigo vira SUBSTITUIDA e
+  // cria-se uma nova versão (mesmo tipo) que passa a ser a mais recente. Não apaga o arquivo
+  // físico antigo. O status do novo é o escolhido no formulário, herdando o do antigo por padrão.
+  async substituirArquivoDocumento(docId: string, status: string | undefined, arquivo: any) {
+    const antigo = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
+    if (!antigo) throw new NotFoundException();
+    const st = status || antigo.status;
+    if (!TccsService.STATUS_DOC.includes(st)) {
+      throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
+    }
+    const arq = await this.gravarArquivo(arquivo);
+    try {
+      return await this.prisma.$transaction(async (tx) => {
+        await tx.documentoTcc.update({ where: { id: docId }, data: { status: 'SUBSTITUIDA' } });
+        const versao = (await tx.documentoTcc.count({ where: { tccId: antigo.tccId, tipo: antigo.tipo } })) + 1;
+        return tx.documentoTcc.create({
+          data: { tccId: antigo.tccId, tipo: antigo.tipo, status: st, parecer: antigo.parecer, versao, ...arq },
+        });
+      });
+    } catch (e) {
+      await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
+      throw e;
+    }
+  }
+
   async abrir(alunoId: string, dados: DadosAbrirTcc) {
     const semestre = semestreAtual();
 

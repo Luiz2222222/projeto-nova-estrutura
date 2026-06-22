@@ -236,4 +236,34 @@ export class TccsController {
   editarDocumento(@Param('docId') docId: string, @Body(new ZodValidacaoPipe(esquemaEditarDocumento)) dados: DadosEditarDocumento) {
     return this.tccs.editarDocumento(docId, dados);
   }
+
+  // Coordenador adiciona administrativamente um novo documento ao TCC (upload PDF).
+  @Post('tccs/:id/documentos/admin')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  adicionarDocumentoAdmin(
+    @Param('id') id: string,
+    @Body('tipo') tipo: string,
+    @Body('status') status: string,
+    @Body('parecer') parecer: string,
+    @UploadedFile() arquivo: any,
+  ) {
+    if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
+    return this.tccs.adicionarDocumentoAdmin(id, tipo, status, parecer, arquivo);
+  }
+
+  // Coordenador substitui o arquivo de um documento existente (antigo → SUBSTITUIDA; cria nova versão).
+  @Post('tccs/documentos/:docId/substituir')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  substituirArquivoDocumento(
+    @Param('docId') docId: string,
+    @Body('status') status: string,
+    @UploadedFile() arquivo: any,
+  ) {
+    if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
+    return this.tccs.substituirArquivoDocumento(docId, status, arquivo);
+  }
 }
