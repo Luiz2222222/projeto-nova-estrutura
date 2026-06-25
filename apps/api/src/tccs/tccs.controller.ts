@@ -80,6 +80,14 @@ export class TccsController {
     return this.tccs.meu(req.usuario.sub);
   }
 
+  // Estado do prazo de abertura (ENVIO_DOCUMENTOS) do próprio aluno no semestre atual.
+  @Get('tccs/abertura-prazo')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('ALUNO')
+  aberturaPrazo(@Req() req: Req) {
+    return this.tccs.aberturaPrazo(req.usuario.sub);
+  }
+
   @Delete('tccs/:id')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('ALUNO')

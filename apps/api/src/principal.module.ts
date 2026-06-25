@@ -8,6 +8,7 @@ import { AutenticacaoModule } from './autenticacao/autenticacao.module';
 import { TccsModule } from './tccs/tccs.module';
 import { CoordenacaoModule } from './coordenacao/coordenacao.module';
 import { BancasModule } from './bancas/bancas.module';
+import { PrazosModule } from './prazos/prazos.module';
 import { SaudeController } from './saude/saude.controller';
 
 @Module({
@@ -21,6 +22,7 @@ import { SaudeController } from './saude/saude.controller';
     TccsModule,
     CoordenacaoModule,
     BancasModule,
+    PrazosModule,
   ],
   controllers: [SaudeController],
 })

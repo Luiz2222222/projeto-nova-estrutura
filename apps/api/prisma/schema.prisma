@@ -43,6 +43,8 @@ model Usuario {
   tokensSenha          TokenSenha[]
   preferenciasEmail    PreferenciaEmail[]
   notificacoes         Notificacao[]
+  // Liberações de prazo por aluno+semestre (usadas na abertura, antes de existir TCC).
+  liberacoesPrazo      LiberacaoPrazo[] @relation("LiberacaoAluno")
 
   @@map("usuarios")
 }
@@ -162,9 +164,33 @@ model Tcc {
   solicitacoes SolicitacaoOrientacao[]
   documentos   DocumentoTcc[]
   bancas       Banca[]
+  liberacoesPrazo LiberacaoPrazo[]
 
   @@unique([alunoId, semestre])
   @@map("tccs")
+}
+
+// Liberação individual de prazo dada pela coordenação para um TCC/aluno específico,
+// permitindo uma ação fora do prazo global sem mexer no calendário do semestre.
+// A PRESENÇA da linha = liberado; remover a linha = volta a respeitar o prazo.
+// Escopo por TCC (etapas que já têm TCC) OU por aluno+semestre (ENVIO_DOCUMENTOS,
+// que pode ocorrer antes de o TCC existir). Etapa = chave de ETAPAS_PRAZO.
+model LiberacaoPrazo {
+  id    String @id @default(cuid())
+  etapa String
+
+  tcc   Tcc?    @relation(fields: [tccId], references: [id], onDelete: Cascade)
+  tccId String?
+
+  aluno    Usuario? @relation("LiberacaoAluno", fields: [alunoId], references: [id], onDelete: Cascade)
+  alunoId  String?
+  semestre String?
+
+  criadoEm DateTime @default(now())
+
+  @@unique([tccId, etapa])
+  @@unique([alunoId, semestre, etapa])
+  @@map("liberacoes_prazo")
 }
 
 model SolicitacaoOrientacao {

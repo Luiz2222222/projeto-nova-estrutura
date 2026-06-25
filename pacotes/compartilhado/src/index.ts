@@ -174,15 +174,51 @@ export type MarcoCalendario = (typeof MARCOS_CALENDARIO)[number];
 
 export const ROTULO_MARCO: Record<MarcoCalendario, string> = {
   reuniaoAlunos: 'Reunião com alunos',
-  envioDocumentos: 'Envio de documentos',
+  envioDocumentos: 'Envio de documentos iniciais',
   avaliacaoContinuidade: 'Avaliação de continuidade',
-  submissaoMonografia: 'Submissão de monografia + termo',
+  submissaoMonografia: 'Submissão da monografia',
   preparacaoBancasFase1: 'Preparação das bancas (Fase I)',
   avaliacaoFase1: 'Avaliação - Fase I',
-  preparacaoBancasFase2: 'Preparação para apresentação (Fase II)',
+  preparacaoBancasFase2: 'Agendamento da defesa (Fase II)',
   apresentacaoFase2: 'Apresentação dos trabalhos (Fase II)',
-  ajustesFinais: 'Ajustes finais',
+  ajustesFinais: 'Ajustes finais / versão final',
 };
+
+// ---------- Liberações de prazo individuais (por TCC ou por aluno+semestre) ----------
+// Etapas com PRAZO RESTRITIVO: prazo global vencido bloqueia a ação, a menos que a
+// coordenação tenha dado uma liberação individual. Cada etapa mapeia para um marco do
+// calendário. (reuniaoAlunos, preparacaoBancasFase1 e preparacaoBancasFase2 são apenas
+// informativos — não têm liberação e não bloqueiam ninguém.)
+export const ETAPAS_PRAZO = [
+  'ENVIO_DOCUMENTOS',
+  'AVALIACAO_CONTINUIDADE',
+  'SUBMISSAO_MONOGRAFIA',
+  'AVALIACAO_FASE_1',
+  'APRESENTACAO_FASE_2',
+  'VERSAO_FINAL',
+] as const;
+export type EtapaPrazo = (typeof ETAPAS_PRAZO)[number];
+
+export const CAMPO_CALENDARIO_ETAPA: Record<EtapaPrazo, MarcoCalendario> = {
+  ENVIO_DOCUMENTOS: 'envioDocumentos',
+  AVALIACAO_CONTINUIDADE: 'avaliacaoContinuidade',
+  SUBMISSAO_MONOGRAFIA: 'submissaoMonografia',
+  AVALIACAO_FASE_1: 'avaliacaoFase1',
+  APRESENTACAO_FASE_2: 'apresentacaoFase2',
+  VERSAO_FINAL: 'ajustesFinais',
+};
+
+export const ROTULO_ETAPA_PRAZO: Record<EtapaPrazo, string> = {
+  ENVIO_DOCUMENTOS: 'Envio de documentos iniciais',
+  AVALIACAO_CONTINUIDADE: 'Avaliação de continuidade',
+  SUBMISSAO_MONOGRAFIA: 'Submissão da monografia',
+  AVALIACAO_FASE_1: 'Avaliação — Fase I',
+  APRESENTACAO_FASE_2: 'Apresentação dos trabalhos — Fase II',
+  VERSAO_FINAL: 'Ajustes finais / versão final',
+};
+
+// Marcos do calendário que NÃO bloqueiam (informativos, sem liberar/bloquear).
+export const MARCOS_INFORMATIVOS = ['reuniaoAlunos', 'preparacaoBancasFase1', 'preparacaoBancasFase2'] as const;
 
 // ---------- Desenvolvimento (monografia + continuidade) ----------
 
@@ -298,7 +334,7 @@ export const DESC_MARCO: Record<MarcoCalendario, string> = {
   reuniaoAlunos: 'Orientações gerais sobre o TCC e Regulamento',
   envioDocumentos: 'Prazo para envio do plano e termo',
   avaliacaoContinuidade: 'Prazo para orientador avaliar progresso',
-  submissaoMonografia: 'Entrega da versão final + Termo',
+  submissaoMonografia: 'Entrega da monografia para avaliação',
   preparacaoBancasFase1: 'Período de formação das bancas avaliadoras',
   avaliacaoFase1: 'Prazo final para avaliação pela banca',
   preparacaoBancasFase2: 'Preparação da apresentação; banca composta pelo orientador + 2 avaliadores da Fase I.',

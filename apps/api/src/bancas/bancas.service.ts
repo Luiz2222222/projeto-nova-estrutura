@@ -4,6 +4,7 @@ import { extname, join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
+import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import {
   mediaNotas,
@@ -22,6 +23,7 @@ export class BancasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventos: EventosTccService,
+    private readonly prazos: PrazosService,
   ) {}
 
   // Candidatos a avaliador (professores e avaliadores externos), exceto o aluno e o orientador.
@@ -126,7 +128,19 @@ export class BancasService {
     const semestres = [...new Set(membros.map((m) => m.banca.tcc.semestre))];
     const cals = await this.prisma.calendario.findMany({ where: { semestre: { in: semestres } } });
     const porSemestre = new Map(cals.map((c) => [c.semestre, c]));
-    return membros.map((m) => ({ ...m, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null }));
+    // bloqueado = prazo da avaliação da fase vencido sem liberação (para desabilitar o envio).
+    return Promise.all(
+      membros.map(async (m) => {
+        const etapa = m.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'APRESENTACAO_FASE_2';
+        const bloqueado = await this.prazos.prazoBloqueado({
+          etapa,
+          semestre: m.banca.tcc.semestre,
+          tccId: m.banca.tcc.id,
+          alunoId: m.banca.tcc.alunoId,
+        });
+        return { ...m, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
+      }),
+    );
   }
 
   // Avaliador pontua os critérios da fase. finalizar=false → salva RASCUNHO (notas
@@ -135,6 +149,22 @@ export class BancasService {
   // ENVIADO}; BLOQUEADO/CONCLUIDO travam. A fase só avança para VALIDACAO quando TODOS
   // os membros estão ENVIADO+ (rascunho não dispara). Rascunho só durante AVALIACAO_*.
   async avaliar(avaliadorId: string, bancaId: string, notas: Record<string, number>, parecer?: string, finalizar = true) {
+    // Gate de prazo (fonte real da regra): Fase I usa "Avaliação — Fase I"; Fase II usa
+    // "Apresentação dos trabalhos — Fase II". Vencido sem liberação bloqueia salvar/enviar.
+    const info = await this.prisma.membroBanca.findFirst({
+      where: { bancaId, avaliadorId },
+      include: { banca: { include: { tcc: { select: { id: true, alunoId: true, semestre: true } } } } },
+    });
+    if (info) {
+      const etapa = info.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'APRESENTACAO_FASE_2';
+      await this.prazos.exigirEtapaLiberada({
+        etapa,
+        semestre: info.banca.tcc.semestre,
+        tccId: info.banca.tcc.id,
+        alunoId: info.banca.tcc.alunoId,
+      });
+    }
+
     const res = await this.prisma.$transaction(async (tx) => {
       const membro = await tx.membroBanca.findFirst({
         where: { bancaId, avaliadorId },
@@ -226,6 +256,22 @@ export class BancasService {
   // AVALIACAO_* para o coordenador não validar com avaliação pendente. Só enquanto a
   // avaliação não estiver BLOQUEADO/CONCLUIDO.
   async reabrir(avaliadorId: string, bancaId: string) {
+    // Mesmo gate de prazo do envio: reabrir uma avaliação ENVIADA só vale dentro do prazo
+    // (ou com liberação). Senão o professor zeraria a nota sem poder reenviar — travando o TCC.
+    const info = await this.prisma.membroBanca.findFirst({
+      where: { bancaId, avaliadorId },
+      include: { banca: { include: { tcc: { select: { id: true, alunoId: true, semestre: true } } } } },
+    });
+    if (info) {
+      const etapa = info.banca.fase === 'FASE_1' ? 'AVALIACAO_FASE_1' : 'APRESENTACAO_FASE_2';
+      await this.prazos.exigirEtapaLiberada({
+        etapa,
+        semestre: info.banca.tcc.semestre,
+        tccId: info.banca.tcc.id,
+        alunoId: info.banca.tcc.alunoId,
+      });
+    }
+
     await this.prisma.$transaction(async (tx) => {
       const membro = await tx.membroBanca.findFirst({
         where: { bancaId, avaliadorId },

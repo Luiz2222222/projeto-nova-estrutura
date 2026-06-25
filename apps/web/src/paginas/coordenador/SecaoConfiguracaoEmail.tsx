@@ -148,10 +148,22 @@ export function SecaoConfiguracaoEmail() {
               </label>
               <label className="campo"><span>Servidor (host)</span><input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.seuprovedor.com" /></label>
               <label className="campo"><span>Porta</span><input type="number" value={porta} onChange={(e) => setPorta(e.target.value)} placeholder="587" /></label>
-              <label className="linha-check linha-toggle" style={{ alignSelf: 'end' }}>
-                <input type="checkbox" checked={secure} onChange={(e) => setSecure(e.target.checked)} />
-                <span><strong>Conexão segura (TLS/SSL)</strong><span className="legenda">Marque para porta 465 (SSL). Para 587 (STARTTLS), deixe desmarcado.</span></span>
-              </label>
+              <div className="pref-item pref-item-span">
+                <div className="pref-texto">
+                  <span className="pref-rotulo">Conexão segura (TLS/SSL)</span>
+                  <span className="pref-desc">Marque para porta 465 (SSL). Para 587 (STARTTLS), deixe desmarcado.</span>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={secure}
+                  aria-label="Conexão segura (TLS/SSL)"
+                  className={`pref-switch${secure ? ' on' : ''}`}
+                  onClick={() => setSecure((v) => !v)}
+                >
+                  <span className="pref-switch-bolinha" aria-hidden="true" />
+                </button>
+              </div>
             </div>
             <div className="acoes" style={{ justifyContent: 'flex-start' }}>
               <button className="botao" disabled={salvandoSmtp} onClick={salvarSmtp}>{salvandoSmtp ? 'Salvando…' : 'Salvar servidor'}</button>

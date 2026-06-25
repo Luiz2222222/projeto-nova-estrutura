@@ -4,7 +4,7 @@
 // a página interna de detalhe (/coordenador/tccs/:id); o botão "Editar" abre o
 // modal de edição administrativa direto na lista (como no projeto antigo).
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiGet, URL_API } from '../../api';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
@@ -23,6 +23,43 @@ const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M1
 
 const nomeCurto = (p?: any) => p?.nomeCompleto ?? '—';
 
+// Mesmas 5 etapas macro do Dashboard do coordenador (bucketEtapa) — usadas para
+// aplicar o filtro inicial vindo dos cards/barras do dashboard via ?grupo=.
+function bucketEtapa(f: string): number {
+  switch (f) {
+    case 'INICIALIZACAO': return 0;
+    case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
+    case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
+    case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
+    case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
+    default: return -1;
+  }
+}
+const REPROVADOS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2', 'DESCONTINUADO'];
+const ROTULO_GRUPO: Record<string, string> = {
+  total: 'Todos os TCCs',
+  andamento: 'Em andamento',
+  aprovados: 'Aprovados',
+  reprovados: 'Reprovados',
+  inicial: 'Etapa inicial',
+  desenvolvimento: 'Desenvolvimento',
+  fase1: 'Fase I',
+  fase2: 'Fase II',
+  finalizacao: 'Finalização',
+};
+// Predicados dos grupos vindos do dashboard. Espelham bucketEtapa + stats do DashboardCoordenador.
+const GRUPOS: Record<string, (t: any) => boolean> = {
+  total: () => true,
+  andamento: (t) => t.faseAtual !== 'CONCLUIDO' && !REPROVADOS.includes(t.faseAtual),
+  aprovados: (t) => t.faseAtual === 'CONCLUIDO',
+  reprovados: (t) => REPROVADOS.includes(t.faseAtual),
+  inicial: (t) => bucketEtapa(t.faseAtual) === 0,
+  desenvolvimento: (t) => bucketEtapa(t.faseAtual) === 1,
+  fase1: (t) => bucketEtapa(t.faseAtual) === 2,
+  fase2: (t) => bucketEtapa(t.faseAtual) === 3,
+  finalizacao: (t) => bucketEtapa(t.faseAtual) === 4,
+};
+
 // Documento principal para download: versão final (mais recente) ou, na falta, a monografia.
 function docPrincipal(t: any): any | null {
   const docs: any[] = t.documentos ?? [];
@@ -32,13 +69,24 @@ function docPrincipal(t: any): any | null {
 
 export function TccsCoordenador() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
 
   const [busca, setBusca] = useState('');
   const [filtroFase, setFiltroFase] = useState('TODAS');
   const [filtroCurso, setFiltroCurso] = useState('TODOS');
+  // Filtro inicial vindo do dashboard (cards/barras) via ?grupo=. Some assim que o
+  // usuário mexe no filtro manual de Etapa, sem atrapalhar a filtragem normal.
+  const [grupo, setGrupo] = useState<string | null>(() => {
+    const g = searchParams.get('grupo');
+    return g && GRUPOS[g] ? g : null;
+  });
   const [tccEditando, setTccEditando] = useState<any | null>(null);
+
+  // Ao escolher uma etapa manualmente (select ou cartão de distribuição), o filtro
+  // de grupo do dashboard deixa de valer.
+  const mudarFase = (v: string) => { setGrupo(null); setFiltroFase(v); };
 
   // Recarrega a lista e, se o modal estiver aberto, sincroniza o TCC em edição com o
   // dado fresco (mantém o modal aberto após salvar, refletindo as alterações).
@@ -68,6 +116,7 @@ export function TccsCoordenador() {
   const filtrados = useMemo(() => {
     const termo = busca.trim().toLowerCase();
     return tccs.filter((t) => {
+      if (grupo && !GRUPOS[grupo](t)) return false;
       if (filtroFase !== 'TODAS' && t.faseAtual !== filtroFase) return false;
       if (filtroCurso !== 'TODOS' && t.aluno?.curso !== filtroCurso) return false;
       if (!termo) return true;
@@ -75,7 +124,7 @@ export function TccsCoordenador() {
         (x) => (x ?? '').toLowerCase().includes(termo),
       );
     });
-  }, [tccs, busca, filtroFase, filtroCurso]);
+  }, [tccs, busca, filtroFase, filtroCurso, grupo]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
@@ -93,7 +142,7 @@ export function TccsCoordenador() {
             <h2>Distribuição por etapa</h2>
             <div className="dist-grid">
               {distribuicao.map((d) => (
-                <button key={d.fase} type="button" className={`dist-card${filtroFase === d.fase ? ' ativo' : ''}`} onClick={() => setFiltroFase(filtroFase === d.fase ? 'TODAS' : d.fase)}>
+                <button key={d.fase} type="button" className={`dist-card${!grupo && filtroFase === d.fase ? ' ativo' : ''}`} onClick={() => mudarFase(!grupo && filtroFase === d.fase ? 'TODAS' : d.fase)}>
                   <span className="dist-num">{d.count}</span>
                   <span className="dist-nome">{ROTULO_FASE[d.fase] ?? d.fase}</span>
                   <span className="dist-barra"><span className="dist-barra-preenchida" style={{ width: `${(d.count / tccs.length) * 100}%` }} /></span>
@@ -114,7 +163,7 @@ export function TccsCoordenador() {
               </label>
               <label className="campo">
                 <span>Etapa</span>
-                <select value={filtroFase} onChange={(e) => setFiltroFase(e.target.value)}>
+                <select value={grupo ? 'TODAS' : filtroFase} onChange={(e) => mudarFase(e.target.value)}>
                   <option value="TODAS">Todas as etapas ({tccs.length})</option>
                   {fasesPresentes.map((f) => {
                     const n = distribuicao.find((d) => d.fase === f)?.count ?? 0;
@@ -132,8 +181,13 @@ export function TccsCoordenador() {
             </div>
           </section>
 
-          <p className="legenda" style={{ marginTop: 10 }}>
-            Exibindo <strong>{filtrados.length}</strong> de <strong>{tccs.length}</strong> TCCs.
+          <p className="legenda" style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <span>Exibindo <strong>{filtrados.length}</strong> de <strong>{tccs.length}</strong> TCCs.</span>
+            {grupo && grupo !== 'total' && (
+              <button type="button" className="chip-filtro" onClick={() => setGrupo(null)}>
+                {ROTULO_GRUPO[grupo]} <span aria-hidden="true">×</span>
+              </button>
+            )}
           </p>
 
           {filtrados.length === 0 ? (

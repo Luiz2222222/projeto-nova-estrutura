@@ -24,7 +24,12 @@ const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 
 const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
 const icoLapis = ic('M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z');
 const icoTrocar = ic('M21 2v6h-6|M3 12a9 9 0 0 1 15-6.7L21 8|M3 22v-6h6|M21 12a9 9 0 0 1-15 6.7L3 16');
-const icoMais = ic('M12 5v14|M5 12h14');
+// Plus pequeno (tamanho fixo) para o botão compacto "Adicionar documento".
+const icoMais = (
+  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 5v14" /><path d="M5 12h14" />
+  </svg>
+);
 
 function msgErro(e: unknown, padrao: string) {
   const er = e as ErroApi;
@@ -181,12 +186,7 @@ export function PainelDocumentosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () =>
 
   return (
     <>
-      <div className="titulo-bloco-linha">
-        <h3 className="titulo-bloco" style={{ margin: 0 }}>Documentos do TCC</h3>
-        <button className="botao botao-secundario" onClick={() => setAdicionando((v) => !v)}>{icoMais} {adicionando ? 'Fechar' : 'Adicionar documento'}</button>
-      </div>
-
-      {adicionando && <FormAdicionar tccId={tcc.id} aoSalvo={aoSalvo} aoFechar={() => setAdicionando(false)} />}
+      <h3 className="titulo-bloco">Documentos do TCC</h3>
 
       {docs.length === 0 ? (
         <p className="nota-vazio">Nenhum documento enviado.</p>
@@ -210,6 +210,13 @@ export function PainelDocumentosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () =>
           </div>
         ))
       )}
+
+      <div className="doc-add">
+        <button className="botao botao-secundario doc-add-btn" onClick={() => setAdicionando((v) => !v)}>
+          {icoMais} {adicionando ? 'Fechar' : 'Adicionar documento'}
+        </button>
+        {adicionando && <FormAdicionar tccId={tcc.id} aoSalvo={aoSalvo} aoFechar={() => setAdicionando(false)} />}
+      </div>
     </>
   );
 }

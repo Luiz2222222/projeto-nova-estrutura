@@ -205,10 +205,14 @@ export function PainelAluno() {
             const podeEnviar =
               tcc.faseAtual === 'DESENVOLVIMENTO' && !tcc.monografiaAprovada && (!mono || mono.status === 'REJEITADO');
             if (!podeEnviar) return null;
+            const bloqueado = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
             return (
-              <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('monografia')}>
-                {mono ? 'Reenviar monografia' : 'Enviar monografia'}
-              </button>
+              <>
+                {bloqueado && <div className="aviso-prazo">⏰ O prazo de submissão da monografia venceu. Peça uma liberação à coordenação para enviar.</div>}
+                <button className="botao" style={{ marginTop: 14 }} disabled={bloqueado} onClick={() => setModalUpload('monografia')}>
+                  {mono ? 'Reenviar monografia' : 'Enviar monografia'}
+                </button>
+              </>
             );
           })()}
         </section>
@@ -243,9 +247,12 @@ export function PainelAluno() {
           );
         })()}
         {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (
-          <button className="botao" style={{ marginTop: 14 }} onClick={() => setModalUpload('versaoFinal')}>
-            {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
-          </button>
+          <>
+            {tcc.bloqueios?.VERSAO_FINAL && <div className="aviso-prazo">⏰ O prazo da versão final venceu. Peça uma liberação à coordenação para enviar.</div>}
+            <button className="botao" style={{ marginTop: 14 }} disabled={!!tcc.bloqueios?.VERSAO_FINAL} onClick={() => setModalUpload('versaoFinal')}>
+              {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
+            </button>
+          </>
         )}
       </section>
       )}

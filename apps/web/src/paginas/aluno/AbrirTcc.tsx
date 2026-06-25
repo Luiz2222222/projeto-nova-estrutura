@@ -4,7 +4,6 @@ import { apiGet, apiPost, apiUpload, apiDelete, type ErroApi } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { Modal } from '../../componentes/Modal';
 import { CampoArquivo } from '../../componentes/CampoArquivo';
-import { prazoEncerrado } from '../../utils/prazos';
 import {
   esquemaAbrirTcc,
   ROTULO_CURSO,
@@ -17,7 +16,8 @@ export function AbrirTcc() {
   const { usuario } = useAuth();
   const [professores, setProfessores] = useState<any[]>([]);
   const [coorientadores, setCoorientadores] = useState<any[]>([]);
-  const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
+  const [abertura, setAbertura] = useState<{ prazo: string | null; vencido: boolean; liberado: boolean; bloqueado: boolean } | null>(null);
+  const [carregandoAbertura, setCarregandoAbertura] = useState(true);
 
   const [titulo, setTitulo] = useState('');
   const [orientadorId, setOrientadorId] = useState('');
@@ -40,11 +40,14 @@ export function AbrirTcc() {
   useEffect(() => {
     apiGet('/usuarios/professores-disponiveis').then(setProfessores).catch(() => {});
     apiGet('/usuarios/coorientadores').then(setCoorientadores).catch(() => {});
-    apiGet<Record<string, string | null>>('/calendario').then(setCalendario).catch(() => setCalendario(null));
+    apiGet('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
   }, []);
 
-  // Prazo de envio de documentos: se já encerrou, bloqueia o envio (o backend também valida).
-  const prazoFim = prazoEncerrado(calendario?.envioDocumentos);
+  // Estado do prazo de abertura: considera a liberação individual deste aluno+semestre
+  // (hoje===prazo ainda vale; liberado permite mesmo vencido). O backend é a fonte real.
+  // Enquanto carrega, segura o botão para não "piscar" liberado por um instante.
+  const bloqueado = !!abertura?.bloqueado;
+  const desabilitarAbrir = bloqueado || carregandoAbertura;
 
   function montarDados(): Record<string, unknown> {
     const dados: Record<string, unknown> = { titulo, orientadorId, mensagem: mensagem || undefined };
@@ -78,7 +81,7 @@ export function AbrirTcc() {
   function aoEnviar(e: FormEvent) {
     e.preventDefault();
     setErroGeral('');
-    if (prazoFim) return;
+    if (desabilitarAbrir) return;
     if (validar()) setConfirmando(true);
   }
 
@@ -136,10 +139,10 @@ export function AbrirTcc() {
       <section className="cartao-secao bloco">
         <form onSubmit={aoEnviar}>
           {erroGeral && <div className="erro-geral">{erroGeral}</div>}
-          {prazoFim && (
+          {bloqueado && (
             <div className="alerta alerta-erro bloco">
-              <strong>Prazo encerrado.</strong> O período de envio de documentos já terminou. Não é
-              possível iniciar o TCC agora — procure a coordenação.
+              <strong>Prazo encerrado.</strong> O período de envio de documentos iniciais já terminou. Para
+              iniciar o TCC agora, peça uma liberação individual à coordenação.
             </div>
           )}
 
@@ -293,7 +296,7 @@ export function AbrirTcc() {
             <button type="button" className="botao botao-secundario" onClick={() => navegar('/aluno')}>
               Cancelar
             </button>
-            <button type="submit" className="botao" disabled={prazoFim}>
+            <button type="submit" className="botao" disabled={desabilitarAbrir}>
               Revisar e enviar
             </button>
           </div>

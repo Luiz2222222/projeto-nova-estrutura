@@ -90,6 +90,8 @@ export function AvaliarBanca() {
   const podeRascunho = editavel && emAvaliacao; // rascunho só durante a avaliação
   const podeReabrir = !!m && status === 'ENVIADO' && (emAvaliacao || emValidacao);
   const leitura = !editavel;
+  // Prazo da avaliação da fase vencido sem liberação (backend é a fonte real da regra).
+  const bloqueadoPrazo = !!m?.bloqueado;
 
   // Carrega o que estiver salvo (rascunho ou avaliação enviada).
   useEffect(() => {
@@ -244,6 +246,9 @@ export function AvaliarBanca() {
       <section className="cartao-secao bloco">
         {erro && <div className="erro-geral">{erro}</div>}
         {mensagem && <div className="alerta" style={{ background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginBottom: 14 }}>{mensagem}</div>}
+        {bloqueadoPrazo && (
+          <div className="aviso-prazo">⏰ O prazo desta etapa venceu. Para salvar/enviar a avaliação, peça à coordenação uma liberação individual deste TCC.</div>
+        )}
         {leitura && (
           <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
             {status === 'ENVIADO'
@@ -301,15 +306,15 @@ export function AvaliarBanca() {
         <div className="acoes" style={{ justifyContent: 'flex-start' }}>
           {/* Rodapé só com ações da avaliação (o "Voltar" fica no cabeçalho da página).
               "Salvar rascunho" some? Não: fica sempre visível, desativado quando não editável. */}
-          <button className="botao botao-secundario" disabled={!podeRascunho || enviando} onClick={() => salvar(false)}>
+          <button className="botao botao-secundario" disabled={!podeRascunho || enviando || bloqueadoPrazo} onClick={() => salvar(false)}>
             {enviando ? 'Salvando…' : 'Salvar rascunho'}
           </button>
           {podeReabrir ? (
-            <button className="botao" disabled={enviando} onClick={reabrir}>
+            <button className="botao" disabled={enviando || bloqueadoPrazo} onClick={reabrir}>
               {enviando ? 'Editando…' : 'Editar'}
             </button>
           ) : editavel ? (
-            <button className="botao" disabled={enviando || total == null} onClick={() => salvar(true)}>
+            <button className="botao" disabled={enviando || total == null || bloqueadoPrazo} onClick={() => salvar(true)}>
               {enviando ? 'Enviando…' : 'Enviar'}
             </button>
           ) : null}

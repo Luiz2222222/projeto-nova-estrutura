@@ -5,8 +5,6 @@ import { FASES, ROTULO_FASE } from '@tcc/compartilhado';
 
 const rotuloUsuario = (u: any) =>
   `${u.tratamento ? u.tratamento + ' ' : ''}${u.nomeCompleto}${u.papel === 'AVALIADOR' ? ' (Externo)' : u.papel === 'COORDENADOR' ? ' (Coordenador)' : u.papel === 'PROFESSOR' ? ' (Professor)' : ''}`;
-const numToStr = (v: any) => (v == null ? '' : String(v).replace('.', ','));
-const ROTULO_RESULTADO: Record<string, string> = { APROVADO: 'Aprovado', REPROVADO: 'Reprovado' };
 
 export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void }) {
   const [alunos, setAlunos] = useState<any[]>([]);
@@ -86,15 +84,6 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
             {FASES.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
           </select>
         </label>
-      </div>
-
-      <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Notas e resultado</h3>
-      <p className="legenda" style={{ marginTop: 0 }}>Calculados pelo sistema a partir da validação das fases — somente leitura.</p>
-      <div className="grade-2">
-        <div className="campo"><span>NF1 (Fase I)</span><div className="campo-leitura">{numToStr(tcc.nf1) || '—'}</div></div>
-        <div className="campo"><span>NF2 (Fase II)</span><div className="campo-leitura">{numToStr(tcc.nf2) || '—'}</div></div>
-        <div className="campo"><span>NF (final)</span><div className="campo-leitura">{numToStr(tcc.nf) || '—'}</div></div>
-        <div className="campo"><span>Resultado</span><div className="campo-leitura">{ROTULO_RESULTADO[tcc.resultado] ?? '—'}</div></div>
       </div>
 
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Desenvolvimento / continuidade</h3>

@@ -4,7 +4,6 @@ import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
-import { prazoEncerrado } from '../../utils/prazos';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
@@ -118,12 +117,14 @@ function proximoPrazo(cal: Record<string, string | null> | null) {
   return melhor;
 }
 
-type Acao = { titulo: string; desc: string; parecer?: string; botao?: { rotulo: string; ao: () => void } };
+type Acao = { titulo: string; desc: string; parecer?: string; botao?: { rotulo: string; ao: () => void }; bloqueado?: boolean };
 
 export function DashboardAluno() {
   const navegar = useNavigate();
   const [tcc, setTcc] = useState<any | null>(null);
   const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
+  const [abertura, setAbertura] = useState<{ bloqueado: boolean } | null>(null);
+  const [carregandoAbertura, setCarregandoAbertura] = useState(true);
   const [carregando, setCarregando] = useState(true);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
 
@@ -138,6 +139,8 @@ export function DashboardAluno() {
     apiGet<Record<string, string | null>>('/calendario')
       .then(setCalendario)
       .catch(() => setCalendario(null));
+    // Estado da abertura (considera liberação individual deste aluno+semestre).
+    apiGet('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
   }, []);
 
   async function corrigirEReenviar() {
@@ -172,6 +175,7 @@ export function DashboardAluno() {
           desc: mono?.status === 'REJEITADO' ? 'Seu orientador pediu ajustes — reenvie a monografia.' : 'Submeta a monografia para avaliação do orientador.',
           parecer: mono?.status === 'REJEITADO' ? mono.parecer : undefined,
           botao: { rotulo: 'Enviar', ao: () => setModalUpload('monografia') },
+          bloqueado: !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA,
         };
       if (mono.status === 'PENDENTE') return semAcao('Aguardando avaliação', 'Monografia enviada — em análise pelo orientador.');
     }
@@ -183,6 +187,7 @@ export function DashboardAluno() {
         desc: vf?.status === 'REJEITADO' ? 'O orientador pediu ajustes — reenvie a versão final.' : 'Aprovado na defesa! Envie a versão final corrigida.',
         parecer: vf?.status === 'REJEITADO' ? vf.parecer : undefined,
         botao: { rotulo: 'Enviar', ao: () => setModalUpload('versaoFinal') },
+        bloqueado: !!tcc.bloqueios?.VERSAO_FINAL,
       };
     }
     if (tcc.faseAtual === 'VALIDACAO_VERSAO_FINAL') return semAcao('Aguardando validação', 'Versão final enviada — aguardando a validação do orientador.');
@@ -219,15 +224,15 @@ export function DashboardAluno() {
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
           <h2>Você ainda não iniciou seu TCC</h2>
           <p className="nota-vazio">Comece enviando a solicitação de orientação com os documentos iniciais.</p>
-          {prazoEncerrado(calendario?.envioDocumentos) && (
+          {abertura?.bloqueado && (
             <div className="alerta alerta-erro" style={{ marginTop: 16, textAlign: 'left' }}>
-              <strong>Prazo encerrado.</strong> O período de envio de documentos já terminou — procure a coordenação.
+              <strong>Prazo encerrado.</strong> O período de envio de documentos iniciais já terminou — peça uma liberação individual à coordenação.
             </div>
           )}
           <button
             className="botao"
             style={{ marginTop: 16 }}
-            disabled={prazoEncerrado(calendario?.envioDocumentos)}
+            disabled={!!abertura?.bloqueado || carregandoAbertura}
             onClick={() => navegar('/aluno/abrir')}
           >
             Iniciar meu TCC
@@ -253,8 +258,11 @@ export function DashboardAluno() {
                 <span className="forte">{acao.titulo}</span>
                 <span className="sub">{acao.desc}</span>
                 {acao.parecer && <span className="sub"><strong>Devolutiva:</strong> {acao.parecer}</span>}
+                {acao.botao && acao.bloqueado && (
+                  <span className="aviso-prazo">⏰ O prazo desta etapa venceu. Peça uma liberação à coordenação para enviar.</span>
+                )}
                 {acao.botao && (
-                  <button className="botao" onClick={acao.botao.ao}>{acao.botao.rotulo}</button>
+                  <button className="botao" disabled={!!acao.bloqueado} onClick={acao.botao.ao}>{acao.botao.rotulo}</button>
                 )}
               </div>
             </div>

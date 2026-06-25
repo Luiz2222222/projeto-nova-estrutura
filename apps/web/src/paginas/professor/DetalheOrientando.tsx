@@ -135,6 +135,11 @@ export function DetalheOrientando() {
 
   const fase = tcc.faseAtual as string;
   const emDesenvolvimento = fase === 'DESENVOLVIMENTO';
+  // Bloqueios por prazo vencido sem liberação (backend é a fonte real da regra).
+  const blkCont = !!tcc.bloqueios?.AVALIACAO_CONTINUIDADE;
+  const blkMono = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
+  const blkVf = !!tcc.bloqueios?.VERSAO_FINAL;
+  const avisoPrazo = (rot: string) => <div className="aviso-prazo">⏰ O prazo de {rot} venceu. Peça à coordenação uma liberação individual deste TCC.</div>;
   const coorient = tcc.coorientador
     ? `${nomeComTrat(tcc.coorientador)}${tcc.coorientador.afiliacao ? ' · ' + tcc.coorientador.afiliacao : ''}`
     : tcc.coorientadorNome
@@ -203,10 +208,13 @@ export function DetalheOrientando() {
             </span>
           </div>
           {!tcc.continuidadeConfirmada && (
-            <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-              <button className="botao botao-secundario" disabled={enviando} onClick={() => { setRecusa({ tipo: 'continuidade' }); setParecer(''); setErro(''); }}>Descontinuar</button>
-              <button className="botao" disabled={enviando} onClick={() => confirmarCont(tcc.id)}>Confirmar continuidade</button>
-            </div>
+            <>
+              {blkCont && avisoPrazo('avaliação de continuidade')}
+              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                <button className="botao botao-secundario" disabled={enviando || blkCont} onClick={() => { setRecusa({ tipo: 'continuidade' }); setParecer(''); setErro(''); }}>Descontinuar</button>
+                <button className="botao" disabled={enviando || blkCont} onClick={() => confirmarCont(tcc.id)}>Confirmar continuidade</button>
+              </div>
+            </>
           )}
         </section>
       )}
@@ -221,10 +229,13 @@ export function DetalheOrientando() {
             <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {versaoFinal.parecer}</div>
           )}
           {fase === 'VALIDACAO_VERSAO_FINAL' && (
-            <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-              <button className="botao botao-secundario" disabled={enviando} onClick={() => { setRecusa({ tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-              <button className="botao" disabled={enviando} onClick={() => concluirVF(tcc.id)}>Aprovar e concluir</button>
-            </div>
+            <>
+              {blkVf && avisoPrazo('ajustes finais / versão final')}
+              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                <button className="botao botao-secundario" disabled={enviando || blkVf} onClick={() => { setRecusa({ tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
+                <button className="botao" disabled={enviando || blkVf} onClick={() => concluirVF(tcc.id)}>Aprovar e concluir</button>
+              </div>
+            </>
           )}
         </section>
       )}
@@ -247,10 +258,13 @@ export function DetalheOrientando() {
               <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {ultimaMono.parecer}</div>
             )}
             {emDesenvolvimento && ultimaMono?.status === 'PENDENTE' && (
-              <div className="acoes" style={{ marginTop: 12, justifyContent: 'flex-start' }}>
-                <button className="botao botao-secundario" disabled={enviando} onClick={() => { setRecusa({ tipo: 'monografia' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-                <button className="botao" disabled={enviando} onClick={() => aprovarMono(tcc.id)}>Aprovar monografia</button>
-              </div>
+              <>
+                {blkMono && <div style={{ marginTop: 10 }}>{avisoPrazo('submissão da monografia')}</div>}
+                <div className="acoes" style={{ marginTop: 12, justifyContent: 'flex-start' }}>
+                  <button className="botao botao-secundario" disabled={enviando || blkMono} onClick={() => { setRecusa({ tipo: 'monografia' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
+                  <button className="botao" disabled={enviando || blkMono} onClick={() => aprovarMono(tcc.id)}>Aprovar monografia</button>
+                </div>
+              </>
             )}
           </section>
 

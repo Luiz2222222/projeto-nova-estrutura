@@ -51,11 +51,11 @@ function bucketEtapa(f: string): number {
   }
 }
 const ETAPAS = [
-  { nome: 'Inicial', cor: 'azul' },
-  { nome: 'Desenvolvimento', cor: 'amarelo' },
-  { nome: 'Fase I', cor: 'roxo' },
-  { nome: 'Fase II', cor: 'rosa' },
-  { nome: 'Finalização', cor: 'verde' },
+  { nome: 'Inicial', cor: 'azul', grupo: 'inicial' },
+  { nome: 'Desenvolvimento', cor: 'amarelo', grupo: 'desenvolvimento' },
+  { nome: 'Fase I', cor: 'roxo', grupo: 'fase1' },
+  { nome: 'Fase II', cor: 'rosa', grupo: 'fase2' },
+  { nome: 'Finalização', cor: 'verde', grupo: 'finalizacao' },
 ];
 
 export function DashboardCoordenador() {
@@ -112,10 +112,10 @@ export function DashboardCoordenador() {
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
 
   const cards = [
-    { rotulo: 'Total de TCCs', sub: 'TCCs cadastrados', valor: stats.total, icone: icoDoc, cor: 'azul', corNum: undefined as string | undefined },
-    { rotulo: 'Em andamento', sub: stats.pct(stats.emAndamento), valor: stats.emAndamento, icone: icoRelogio, cor: 'amarelo', corNum: undefined },
-    { rotulo: 'Aprovados', sub: stats.pct(stats.aprovados), valor: stats.aprovados, icone: icoCheck, cor: 'verde', corNum: 'var(--aprovado)' },
-    { rotulo: 'Reprovados', sub: stats.pct(stats.reprovados), valor: stats.reprovados, icone: icoX, cor: 'vermelho', corNum: 'var(--reprovado)' },
+    { rotulo: 'Total de TCCs', sub: 'TCCs cadastrados', valor: stats.total, icone: icoDoc, cor: 'azul', corNum: undefined as string | undefined, grupo: 'total' },
+    { rotulo: 'Em andamento', sub: stats.pct(stats.emAndamento), valor: stats.emAndamento, icone: icoRelogio, cor: 'amarelo', corNum: undefined, grupo: 'andamento' },
+    { rotulo: 'Aprovados', sub: stats.pct(stats.aprovados), valor: stats.aprovados, icone: icoCheck, cor: 'verde', corNum: 'var(--aprovado)', grupo: 'aprovados' },
+    { rotulo: 'Reprovados', sub: stats.pct(stats.reprovados), valor: stats.reprovados, icone: icoX, cor: 'vermelho', corNum: 'var(--reprovado)', grupo: 'reprovados' },
   ];
 
   return (
@@ -172,7 +172,7 @@ export function DashboardCoordenador() {
       {/* Linha 2: estatísticas */}
       <div className="cartoes-resumo bloco">
         {cards.map((c) => (
-          <button key={c.rotulo} className="cartao-resumo" onClick={() => navegar('/coordenador/tccs')}>
+          <button key={c.rotulo} className="cartao-resumo" onClick={() => navegar(`/coordenador/tccs?grupo=${c.grupo}`)}>
             <span className="resumo-topo">
               <span className={`resumo-icone cor-${c.cor}`}>{c.icone}</span>
               <span className="resumo-rotulo-forte">{c.rotulo}</span>
@@ -195,7 +195,7 @@ export function DashboardCoordenador() {
                   <button
                     className={`etapa-preenchida cor-${e.cor}`}
                     style={{ width: `${Math.max(e.pct, 6)}%` }}
-                    onClick={() => navegar('/coordenador/tccs')}
+                    onClick={() => navegar(`/coordenador/tccs?grupo=${e.grupo}`)}
                     onMouseEnter={(ev) => mostrarTooltip(ev, e.alunos.join('\n'))}
                     onMouseMove={(ev) => mostrarTooltip(ev, e.alunos.join('\n'))}
                     onMouseLeave={esconderTooltip}

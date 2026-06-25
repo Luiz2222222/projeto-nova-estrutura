@@ -280,7 +280,9 @@ a:hover { color: var(--azul-escuro); }
 .card-status-vazio-ico svg { width: 38px; height: 38px; }
 .no { display: block; width: 16px; height: 16px; border-radius: 50%; background: var(--canvas); border: 2px solid var(--borda-forte); box-sizing: border-box; }
 .fase-concluida .no { background: var(--azul); border-color: var(--azul); }
-.fase-concluida::before { background: var(--azul) !important; }
+/* O traço que chega a um nó concluído OU ao nó atual fica preenchido — assim a
+   trilha alcança sempre o ponto atual, inclusive o último nó ("Concluído"). */
+.fase-concluida::before, .fase-atual::before { background: var(--azul) !important; }
 .fase-atual .no { background: var(--azul); border-color: var(--azul); box-shadow: 0 0 0 4px var(--azul-suave); }
 .fase-mapa .no { background: transparent; border-color: var(--azul); }
 
@@ -413,12 +415,20 @@ select {
 /* Perfil — grade de dados (2 colunas) + aviso */
 .grade-2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
 .grade-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.pesos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; }
+.pesos-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 14px; align-items: stretch; }
+/* Cada campo ocupa a altura da linha e empurra o input para a base — assim rótulos
+   de 1 e de 2 linhas (ex.: "Qualidade e estrutura da apresentação") mantêm os
+   inputs alinhados na mesma altura. */
+.pesos-grid .campo { justify-content: space-between; }
 .total-aval { background: var(--azul-suave); border: 1px solid var(--azul-anel); border-radius: var(--raio-1); padding: 10px 14px; font-size: 14px; color: var(--tinta-2); }
 .total-aval strong { font-size: 18px; color: var(--azul-forte); }
 @media (max-width: 700px) { .grade-3 { grid-template-columns: 1fr; } }
 .alerta-aviso { background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.35); color: var(--tinta-2); border-radius: var(--raio-1); padding: 12px 14px; font-size: 13.5px; line-height: 1.5; }
 .alerta-aviso strong { color: var(--tinta-1); }
+/* Chip do filtro inicial vindo do dashboard (?grupo=) — clicável para remover. */
+.chip-filtro { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; font-size: 12px; font-weight: 600; color: var(--azul-forte); background: var(--azul-suave); border: 1px solid var(--azul-anel); border-radius: 999px; cursor: pointer; }
+.chip-filtro:hover { background: var(--azul-anel); }
+.chip-filtro span { font-size: 14px; line-height: 1; }
 @media (max-width: 640px) { .grade-2 { grid-template-columns: 1fr; } }
 
 /* Datas do período (Informações) — lista de 1 coluna, ícone colorido por etapa */
@@ -462,7 +472,7 @@ select {
 /* Linha de toggle (preferências/configuração de e-mail). */
 .linha-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer; }
 .linha-toggle input { margin-top: 3px; flex-shrink: 0; }
-.linha-toggle > span { display: flex; flex-direction: column; }
+.linha-toggle > span { display: flex; flex-direction: column; min-width: 0; }
 .linha-toggle .legenda { margin: 2px 0 0; }
 
 /* Sino de notificações (header). */
@@ -1056,10 +1066,16 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .secao-acao { border-left: 4px solid var(--azul); }
 
 /* Notas finais (quando concluído) */
-.notas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 14px; }
-.nota-box { display: grid; gap: 4px; padding: 16px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); }
+.notas-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 14px; }
+.nota-box { display: grid; gap: 10px; align-content: start; padding: 16px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); }
 .nota-box .nota-rotulo { font-size: 12px; color: var(--tinta-3); }
 .nota-box .nota-num { font-size: 26px; font-weight: 700; color: var(--tinta-1); }
+.nota-linhas { display: grid; gap: 8px; }
+.nota-linha { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.nota-linha small { font-size: 11.5px; color: var(--tinta-3); line-height: 1.2; }
+.nota-linha strong { flex-shrink: 0; font-size: 20px; font-weight: 700; color: var(--tinta-1); }
+.nota-box-destaque { background: var(--azul-suave); border-color: var(--azul-anel); }
+.nota-box-destaque .nota-linha:last-child strong { color: var(--azul-forte); }
 .nota-box.nota-aprovado { background: var(--aprovado-suave); }
 .nota-box.nota-aprovado .nota-num { color: var(--aprovado); }
 .nota-box.nota-reprovado { background: var(--reprovado-suave); }
@@ -1118,6 +1134,9 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
   background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25); transition: transform 0.18s ease;
 }
 .pref-switch.on .pref-switch-bolinha { transform: translateX(18px); }
+/* "Conexão segura" usa o mesmo cartão de switch das preferências, ocupando a linha
+   inteira do grid SMTP (largura total em desktop; vira 1 coluna no mobile junto da grade). */
+.pref-item-span { grid-column: 1 / -1; align-items: center; }
 
 /* ============================================================
    Participações em bancas (lista por TCC + botões de fase)
@@ -1200,9 +1219,23 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .banca-caret { font-size: 12px; color: var(--tinta-3); width: 12px; }
 .banca-fase-contagem { font-size: 13px; font-weight: 500; color: var(--tinta-3); }
 
+/* Liberações de prazo (coordenador): linha = nome / status / botão Liberar-Bloquear */
+.liberacoes-lista { display: flex; flex-direction: column; }
+.liberacao-linha { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-top: 1px dashed var(--borda-suave); }
+.liberacao-linha:first-child { border-top: none; }
+.liberacao-nome { flex: 1; font-size: 13.5px; font-weight: 600; color: var(--tinta-1); }
+.liberacao-linha .botao { padding: 6px 12px; font-size: 12.5px; white-space: nowrap; }
+.pz-badge { font-size: 11.5px; font-weight: 800; padding: 3px 9px; border-radius: 999px; white-space: nowrap; }
+.pz-ok { background: #ecfdf5; color: #065f46; }
+.pz-venc { background: #fef2f2; color: #b91c1c; }
+.pz-lib { background: #eff6ff; color: #1d4ed8; }
+.pz-sem { background: #f3f4f6; color: #6b7280; }
+.aviso-prazo { font-size: 12.5px; color: #b45309; background: rgba(245,158,11,.12); border: 1px solid rgba(245,158,11,.3); border-radius: 8px; padding: 8px 10px; margin: 8px 0; }
+
 /* Valor somente leitura (ex.: notas finais calculadas) com aparência de campo desabilitado */
 .campo-leitura { padding: 9px 12px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); color: var(--tinta-2); font-weight: 600; min-height: 20px; }
-/* Cabeçalho de bloco com ação à direita (ex.: "Documentos do TCC" + "Adicionar documento") */
-.titulo-bloco-linha { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 12px; }
+/* Botão compacto "Adicionar documento", abaixo da lista de documentos do TCC */
+.doc-add { margin-top: 12px; }
+.doc-add-btn { display: inline-flex; align-items: center; gap: 6px; }
 .doc-bloco + .doc-bloco { margin-top: 6px; }
 .doc-edit, .aval-edit { margin-top: 10px; padding: 12px 14px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--inset); }
