@@ -21,6 +21,8 @@
     "@nestjs/platform-express": "^10.4.4",
     "@prisma/client": "^5.20.0",
     "@tcc/compartilhado": "*",
+    "@types/adm-zip": "^0.5.8",
+    "adm-zip": "^0.5.17",
     "bcryptjs": "^2.4.3",
     "cookie-parser": "^1.4.6",
     "nodemailer": "^9.0.0",

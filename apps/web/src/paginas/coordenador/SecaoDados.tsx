@@ -1,10 +1,18 @@
 import { useState } from 'react';
-import { apiPost, URL_API, type ErroApi } from '../../api';
+import { apiPost, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
+import { ModalBaixarDados } from '../../componentes/ModalBaixarDados';
+
+// Semestre atual no mesmo formato do backend (ex.: "2026.1").
+function semestreAtual(): string {
+  const d = new Date();
+  return `${d.getFullYear()}.${d.getMonth() + 1 <= 6 ? 1 : 2}`;
+}
 
 // Seção do Planejamento: exportar backup dos dados e resetar o período (ação destrutiva).
 export function SecaoDados() {
   const [modalReset, setModalReset] = useState(false);
+  const [modalBaixar, setModalBaixar] = useState(false);
   const [confirmacao, setConfirmacao] = useState('');
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
@@ -48,11 +56,18 @@ export function SecaoDados() {
         Baixe um backup completo dos TCCs ou reinicie o período. O reset apaga os TCCs do semestre atual.
       </p>
       <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-        <a className="botao botao-secundario" href={`${URL_API}/exportar`} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>
-          Baixar dados
-        </a>
+        <button className="botao botao-secundario" onClick={() => setModalBaixar(true)}>Baixar dados</button>
         <button className="botao botao-perigo" onClick={abrir}>Resetar período</button>
       </div>
+
+      {modalBaixar && (
+        <ModalBaixarDados
+          titulo="Baixar dados"
+          caminhoBase="/exportar"
+          nomeArquivo={`TCCs_${semestreAtual()}.zip`}
+          aoFechar={() => setModalBaixar(false)}
+        />
+      )}
 
       {modalReset && (
         <Modal

@@ -8,6 +8,7 @@ import {
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import * as bcrypt from 'bcryptjs';
+import AdmZip from 'adm-zip';
 import { PrismaService } from '../prisma/prisma.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import {
@@ -17,12 +18,17 @@ import {
   CRITERIOS_FASE1,
   CRITERIOS_FASE2,
   colunaPeso,
+  colunaNota,
   pesosSomam10,
+  ROTULO_FASE,
   CURSOS,
   TRATAMENTOS,
   AFILIACOES,
   type DadosAviso,
 } from '@tcc/compartilhado';
+
+// Opções do download em ZIP (cada parte é incluída se true).
+export type OpcoesExport = { dados: boolean; monografia: boolean; documentos: boolean };
 
 function semestreAtual(): string {
   const d = new Date();
@@ -298,6 +304,186 @@ export class CoordenacaoService {
       },
     });
     return { geradoEm: new Date().toISOString(), semestre: semestreAtual(), total: tccs.length, tccs };
+  }
+
+  // ----- Download em ZIP (dados.txt + monografia aprovada + documentos gerais) -----
+
+  // Include comum para montar o ZIP (aluno, orientação, documentos e bancas/notas).
+  private readonly incExport = {
+    aluno: { select: { nomeCompleto: true, email: true, curso: true } },
+    orientador: { select: { nomeCompleto: true, tratamento: true } },
+    coorientador: { select: { nomeCompleto: true, tratamento: true, afiliacao: true } },
+    documentos: true,
+    bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
+  };
+
+  // ZIP geral: todos os TCCs do semestre atual, uma pasta por aluno.
+  async exportarZipGeral(opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
+    const semestre = semestreAtual();
+    const tccs = await this.prisma.tcc.findMany({
+      where: { semestre },
+      orderBy: { aluno: { nomeCompleto: 'asc' } },
+      include: this.incExport,
+    });
+    const zip = new AdmZip();
+    const pastasUsadas = new Map<string, number>();
+    for (const tcc of tccs) {
+      const base = this.sanitizarNome(tcc.aluno?.nomeCompleto || 'Aluno');
+      const usadas = pastasUsadas.get(base.toLowerCase()) ?? 0;
+      pastasUsadas.set(base.toLowerCase(), usadas + 1);
+      const pasta = usadas === 0 ? base : `${base} (${usadas + 1})`;
+      await this.adicionarTccAoZip(zip, tcc, opts, pasta);
+    }
+    return { buffer: zip.toBuffer(), nome: `TCCs_${semestre}.zip` };
+  }
+
+  // ZIP de um TCC específico (sem subpasta; arquivos na raiz do ZIP).
+  async exportarZipTcc(id: string, opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id }, include: this.incExport });
+    if (!tcc) throw new NotFoundException('TCC não encontrado');
+    const zip = new AdmZip();
+    await this.adicionarTccAoZip(zip, tcc, opts, '');
+    return { buffer: zip.toBuffer(), nome: `${this.sanitizarNome(tcc.aluno?.nomeCompleto || 'TCC')}.zip` };
+  }
+
+  // Adiciona dados.txt + monografia + documentos gerais de um TCC ao ZIP (sob `pasta`).
+  private async adicionarTccAoZip(zip: AdmZip, tcc: any, opts: OpcoesExport, pasta: string) {
+    const prefixo = pasta ? `${pasta}/` : '';
+    const usados = new Set<string>();
+    const nomeUnico = (nome: string) => {
+      const base = this.sanitizarNome(nome);
+      let n = base;
+      let i = 2;
+      while (usados.has(n.toLowerCase())) n = this.comSufixo(base, ` (${i++})`);
+      usados.add(n.toLowerCase());
+      return n;
+    };
+    const addArquivo = async (doc: any) => {
+      try {
+        const buf = await fs.readFile(join(process.cwd(), doc.caminho));
+        zip.addFile(prefixo + nomeUnico(doc.nomeArquivo), buf);
+      } catch {
+        // Arquivo físico ausente: ignora sem quebrar o restante do ZIP.
+      }
+    };
+
+    if (opts.dados) {
+      usados.add('dados.txt');
+      zip.addFile(`${prefixo}dados.txt`, Buffer.from(this.gerarDadosTxt(tcc), 'utf-8'));
+    }
+
+    const docs: any[] = tcc.documentos ?? [];
+    if (opts.monografia) {
+      // Só MONOGRAFIA aprovada, a de maior versão. Sem fallback para pendente/rejeitada.
+      const mono = docs
+        .filter((d) => d.tipo === 'MONOGRAFIA' && d.status === 'APROVADO')
+        .sort((a, b) => b.versao - a.versao)[0];
+      if (mono) await addArquivo(mono);
+    }
+    if (opts.documentos) {
+      // Documentos gerais: exclui a monografia principal, o documento interno da banca
+      // (AVALIACAO_BANCA, equivalente ao antigo MONOGRAFIA_AVALIACAO) e versões substituídas.
+      const gerais = docs
+        .filter((d) => d.tipo !== 'MONOGRAFIA' && d.tipo !== 'AVALIACAO_BANCA' && d.status !== 'SUBSTITUIDA')
+        .sort((a, b) => (a.tipo === b.tipo ? b.versao - a.versao : a.tipo < b.tipo ? -1 : 1));
+      for (const d of gerais) await addArquivo(d);
+    }
+  }
+
+  // Relatório do TCC em texto (dados, fases, notas, banca, avaliações e pareceres).
+  private gerarDadosTxt(tcc: any): string {
+    const L: string[] = [];
+    const add = (s = '') => L.push(s);
+    const sep = () => add('='.repeat(60));
+    const nomeTrat = (p: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+
+    sep();
+    add(`TCC: ${tcc.titulo}`);
+    sep();
+    add('');
+    add('ALUNO');
+    add(`  Nome: ${tcc.aluno?.nomeCompleto ?? '—'}`);
+    add(`  E-mail: ${tcc.aluno?.email ?? '—'}`);
+    add(`  Curso: ${tcc.aluno?.curso ?? '—'}`);
+    add('');
+    add('ORIENTAÇÃO');
+    add(`  Orientador: ${nomeTrat(tcc.orientador)}`);
+    const coor = tcc.coorientador
+      ? nomeTrat(tcc.coorientador)
+      : tcc.coorientadorNome
+        ? `${tcc.coorientadorTitulacao ? tcc.coorientadorTitulacao + ' ' : ''}${tcc.coorientadorNome}${tcc.coorientadorAfiliacao ? ' · ' + tcc.coorientadorAfiliacao : ''}`
+        : 'Sem coorientador';
+    add(`  Coorientador: ${coor}`);
+    add('');
+    add('SITUAÇÃO');
+    add(`  Fase atual: ${ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}`);
+    add(`  Semestre: ${tcc.semestre}`);
+    add(`  Criado em: ${this.fmtData(tcc.criadoEm)}`);
+    add(`  Atualizado em: ${this.fmtData(tcc.atualizadoEm)}`);
+    add(`  Resultado: ${tcc.resultado ?? '—'}`);
+    add('');
+    add('NOTAS');
+    add(`  NF1 (Fase I): ${this.fmtNota(tcc.nf1)}`);
+    add(`  NF2 (Fase II): ${this.fmtNota(tcc.nf2)}`);
+    add(`  NF (final): ${this.fmtNota(tcc.nf)}`);
+    add('');
+
+    const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+    add('BANCA E AVALIAÇÕES');
+    if (!bancas.length) {
+      add('  Banca ainda não formada.');
+    } else {
+      for (const b of bancas) {
+        const ehF2 = b.fase === 'FASE_2';
+        const criterios = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
+        add('');
+        add(`  -- ${ehF2 ? 'Fase II — Apresentação' : 'Fase I — Monografia'} --`);
+        const membros: any[] = b.membros ?? [];
+        if (!membros.length) add('    Sem membros.');
+        for (const m of membros) {
+          add(`    Avaliador: ${nomeTrat(m.avaliador)}`);
+          add(`    Status: ${m.status}${m.avaliadoEm ? ` (em ${this.fmtData(m.avaliadoEm)})` : ''}`);
+          for (const c of criterios) add(`      - ${c.rotulo}: ${this.fmtNota(m[colunaNota(c.chave)])}`);
+          add(`      Nota total: ${this.fmtNota(m.nota)}`);
+          if (m.parecer) {
+            add('      Parecer:');
+            for (const ln of String(m.parecer).split('\n')) add(`        ${ln}`);
+          }
+          add('');
+        }
+      }
+    }
+    sep();
+    add(`Gerado em ${this.fmtData(new Date())}.`);
+    return L.join('\n');
+  }
+
+  private fmtData(d?: Date | null): string {
+    if (!d) return '—';
+    const dt = new Date(d);
+    const p = (n: number) => String(n).padStart(2, '0');
+    return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()}`;
+  }
+
+  private fmtNota(v?: number | null): string {
+    return v == null ? '—' : Number(v).toFixed(2).replace('.', ',');
+  }
+
+  // Nome seguro para entrada de ZIP / pasta (sem separadores nem caracteres de controle).
+  private sanitizarNome(nome: string): string {
+    const limpo = (nome || '')
+      .replace(/[\\/:*?"<>|]/g, '_')
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\x00-\x1f]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+    return limpo || 'arquivo';
+  }
+
+  // Insere um sufixo antes da extensão: "doc.pdf" + " (2)" -> "doc (2).pdf".
+  private comSufixo(nome: string, sufixo: string): string {
+    const i = nome.lastIndexOf('.');
+    return i > 0 ? `${nome.slice(0, i)}${sufixo}${nome.slice(i)}` : `${nome}${sufixo}`;
   }
 
   // Dados completos dos TCCs para a tela de Relatórios (com bancas, membros e notas por critério).

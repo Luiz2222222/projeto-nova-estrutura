@@ -152,14 +152,35 @@ export class CoordenacaoController {
     return this.coord.excluirUsuario(id, req.usuario.sub);
   }
 
+  // Lê os filtros do download (cada parte é incluída por padrão se o param faltar).
+  private lerOpcoesExport(q: Record<string, string>) {
+    const flag = (v?: string) => (v === undefined ? true : v === 'true');
+    return { dados: flag(q.dados), monografia: flag(q.monografia), documentos: flag(q.documentos) };
+  }
+
+  private enviarZip(res: Response, buffer: Buffer, nome: string) {
+    const ascii = nome.replace(/[^\x20-\x7e]/g, '_'); // fallback do header; o front nomeia o arquivo
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(nome)}`);
+    res.send(buffer);
+  }
+
+  // Download geral (todos os TCCs do período): ?dados=&monografia=&documentos=
   @Get('exportar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  async exportar(@Res() res: Response) {
-    const dados = await this.coord.exportarDados();
-    res.setHeader('Content-Type', 'application/json; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="dados_tcc_${dados.semestre}.json"`);
-    res.send(JSON.stringify(dados, null, 2));
+  async exportar(@Query() q: Record<string, string>, @Res() res: Response) {
+    const { buffer, nome } = await this.coord.exportarZipGeral(this.lerOpcoesExport(q));
+    this.enviarZip(res, buffer, nome);
+  }
+
+  // Download de um TCC específico (mesmos filtros).
+  @Get('tccs/:id/exportar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  async exportarTcc(@Param('id') id: string, @Query() q: Record<string, string>, @Res() res: Response) {
+    const { buffer, nome } = await this.coord.exportarZipTcc(id, this.lerOpcoesExport(q));
+    this.enviarZip(res, buffer, nome);
   }
 
   @Post('resetar')

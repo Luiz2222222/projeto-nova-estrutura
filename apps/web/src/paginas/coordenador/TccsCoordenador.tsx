@@ -5,11 +5,12 @@
 // modal de edição administrativa direto na lista (como no projeto antigo).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiGet, URL_API } from '../../api';
+import { apiGet } from '../../api';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
+import { ModalBaixarDados } from '../../componentes/ModalBaixarDados';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -60,13 +61,6 @@ const GRUPOS: Record<string, (t: any) => boolean> = {
   finalizacao: (t) => bucketEtapa(t.faseAtual) === 4,
 };
 
-// Documento principal para download: versão final (mais recente) ou, na falta, a monografia.
-function docPrincipal(t: any): any | null {
-  const docs: any[] = t.documentos ?? [];
-  const ultima = (tipo: string) => docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
-  return ultima('VERSAO_FINAL') ?? ultima('MONOGRAFIA') ?? null;
-}
-
 export function TccsCoordenador() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -83,6 +77,7 @@ export function TccsCoordenador() {
     return g && GRUPOS[g] ? g : null;
   });
   const [tccEditando, setTccEditando] = useState<any | null>(null);
+  const [tccBaixando, setTccBaixando] = useState<any | null>(null);
 
   // Ao escolher uma etapa manualmente (select ou cartão de distribuição), o filtro
   // de grupo do dashboard deixa de valer.
@@ -212,15 +207,7 @@ export function TccsCoordenador() {
                       <span className="badge-papel">{ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
                       <div className="card-tcc-acoes">
                         <button className="card-tcc-btn" title="Editar (edição administrativa)" onClick={(e) => { e.stopPropagation(); setTccEditando(t); }}>{icoLapis} Editar</button>
-                        {(() => {
-                          const doc = docPrincipal(t);
-                          return doc ? (
-                            <a className="card-tcc-btn" href={`${URL_API}/tccs/documentos/${doc.id}/baixar`} target="_blank" rel="noreferrer"
-                              title={`Baixar ${doc.tipo === 'VERSAO_FINAL' ? 'versão final' : 'monografia'}`} onClick={(e) => e.stopPropagation()}>{icoBaixar} Download</a>
-                          ) : (
-                            <button className="card-tcc-btn" disabled title="Sem documento para baixar">{icoBaixar} Download</button>
-                          );
-                        })()}
+                        <button className="card-tcc-btn" title="Baixar dados do TCC" onClick={(e) => { e.stopPropagation(); setTccBaixando(t); }}>{icoBaixar} Download</button>
                       </div>
                     </div>
                   </div>
@@ -234,6 +221,16 @@ export function TccsCoordenador() {
 
       {tccEditando && (
         <ModalEditarTcc tcc={tccEditando} aoFechar={() => setTccEditando(null)} aoSalvo={carregar} />
+      )}
+
+      {tccBaixando && (
+        <ModalBaixarDados
+          titulo="Baixar dados"
+          subtitulo={nomeCurto(tccBaixando.aluno)}
+          caminhoBase={`/tccs/${tccBaixando.id}/exportar`}
+          nomeArquivo={`${nomeCurto(tccBaixando.aluno)}.zip`}
+          aoFechar={() => setTccBaixando(null)}
+        />
       )}
     </>
   );

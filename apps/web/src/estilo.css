@@ -350,6 +350,8 @@ select {
 .modal-fechar:hover { background: var(--papel-2); color: var(--tinta-1); }
 .modal-titulo { font-size: 20px; margin: 0 0 4px; }
 .modal-sub { color: var(--tinta-3); font-size: 14px; margin: 0 0 20px; }
+/* Lista de opções do modal "Baixar dados". */
+.baixar-opcoes { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
 
 /* Seleção de categoria (passo 1 do cadastro) */
 .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
