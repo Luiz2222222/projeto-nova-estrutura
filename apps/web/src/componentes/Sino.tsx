@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { apiGet, apiPut } from '../api';
 
 type Notificacao = {
@@ -19,16 +19,18 @@ const icoSino = (
   </svg>
 );
 
-// dd/MM HH:mm (split da ISO evita "voltar" um dia por fuso).
+// dd/MM HH:mm no fuso LOCAL do navegador (a ISO é UTC; o Date converte para o local
+// — em Fortaleza/Brasil mostra o horário certo, sem somar/subtrair 3h na mão).
 function fmt(iso: string): string {
-  const [data, hora] = iso.split('T');
-  const [a, m, d] = (data ?? '').split('-');
-  const hm = (hora ?? '').slice(0, 5);
-  return a && m && d ? `${d}/${m} ${hm}` : '';
+  const dt = new Date(iso);
+  if (Number.isNaN(dt.getTime())) return '';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)} ${p(dt.getHours())}:${p(dt.getMinutes())}`;
 }
 
 export function Sino() {
   const navegar = useNavigate();
+  const location = useLocation();
   const [aberto, setAberto] = useState(false);
   const [itens, setItens] = useState<Notificacao[]>([]);
   const [naoLidas, setNaoLidas] = useState(0);
@@ -71,7 +73,13 @@ export function Sino() {
       setNaoLidas((c) => Math.max(0, c - 1));
       apiPut(`/notificacoes/${n.id}/lida`, {}).catch(() => {});
     }
-    if (n.link) navegar(n.link);
+    if (n.link) {
+      // Se já está na página de destino, navegar não recarrega os dados — força um
+      // reload completo na URL do link; senão, navegação normal (SPA).
+      const destino = n.link.split('#')[0].split('?')[0];
+      if (destino === location.pathname) window.location.assign(n.link);
+      else navegar(n.link);
+    }
   }
 
   async function marcarTodas() {

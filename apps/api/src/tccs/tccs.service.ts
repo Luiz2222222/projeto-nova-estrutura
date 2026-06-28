@@ -30,7 +30,7 @@ export class TccsService {
   professoresDisponiveis() {
     return this.prisma.usuario.findMany({
       where: { papel: 'PROFESSOR', disponivelParaOrientar: true },
-      select: { id: true, nomeCompleto: true, tratamento: true },
+      select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true },
       orderBy: { nomeCompleto: 'asc' },
     });
   }
@@ -38,7 +38,7 @@ export class TccsService {
   coorientadores() {
     return this.prisma.usuario.findMany({
       where: { papel: { in: ['PROFESSOR', 'AVALIADOR', 'COORDENADOR'] } },
-      select: { id: true, nomeCompleto: true, tratamento: true, papel: true },
+      select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, papel: true },
       orderBy: { nomeCompleto: 'asc' },
     });
   }
@@ -574,6 +574,7 @@ export class TccsService {
         where: { id: tccId },
         data: { continuidadeConfirmada: true, continuidadeAvaliadaEm: new Date(), ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
       });
+      await this.eventos.emitirParaUsuario('aluno_continuidade_confirmada', tcc.alunoId, 'Continuidade confirmada', `O orientador confirmou a continuidade do seu TCC "${tcc.titulo}".`);
       if (vaiPraBanca) {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`);
         await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase I.`);

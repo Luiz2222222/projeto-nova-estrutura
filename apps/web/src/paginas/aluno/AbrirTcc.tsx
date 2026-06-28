@@ -124,10 +124,12 @@ export function AbrirTcc() {
     }
   }
 
-  const orientadorNome = professores.find((p) => p.id === orientadorId)?.nomeCompleto;
+  const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '');
+  const orientadorSel = professores.find((p) => p.id === orientadorId);
+  const coSel = temCo && coCadastrado ? coorientadores.find((c) => c.id === coorientadorId) : null;
   const coNomeResumo = temCo
     ? coCadastrado
-      ? coorientadores.find((c) => c.id === coorientadorId)?.nomeCompleto
+      ? coSel?.nomeCompleto
       : coNome
     : null;
 
@@ -320,12 +322,17 @@ export function AbrirTcc() {
             </div>
             <div className="resumo-linha">
               <span className="resumo-rot">Orientador</span>
-              <span className="resumo-val">{orientadorNome ?? '—'}</span>
+              <span className="resumo-val">{nomeComTrat(orientadorSel) || '—'}</span>
+              {orientadorSel?.afiliacao && <span className="resumo-sub">{orientadorSel.afiliacao}</span>}
             </div>
-            {coNomeResumo && (
+            {temCo && coNomeResumo && (
               <div className="resumo-linha">
                 <span className="resumo-rot">Co-orientador</span>
-                <span className="resumo-val">{coNomeResumo}</span>
+                <span className="resumo-val">{coCadastrado ? nomeComTrat(coSel) : `${coTit ? coTit + ' ' : ''}${coNome}`}</span>
+                {(coCadastrado ? coSel?.afiliacao : coAfil) && <span className="resumo-sub">{coCadastrado ? coSel?.afiliacao : coAfil}</span>}
+                {!coCadastrado && coLattes && (
+                  <span className="resumo-sub"><a href={coLattes} target="_blank" rel="noreferrer">{coLattes}</a></span>
+                )}
               </div>
             )}
             <div className="resumo-linha">

@@ -395,6 +395,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'aluno_solicitacao_recusada', rotulo: 'Solicitação recusada', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_monografia_rejeitada', rotulo: 'Monografia rejeitada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_monografia_aprovada', rotulo: 'Monografia aprovada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
+  { chave: 'aluno_continuidade_confirmada', rotulo: 'Continuidade confirmada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_continuidade_rejeitada', rotulo: 'Continuidade rejeitada / descontinuação', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_banca_fase1_formada', rotulo: 'Banca da Fase I formada', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_resultado_fase1', rotulo: 'Resultado da Fase I validado', grupo: 'Aluno', papeis: ['ALUNO'] },

@@ -230,6 +230,24 @@ export function DetalheOrientando() {
         </section>
       )}
 
+      {/* Ação destacada: avaliação da monografia (espelha o card de continuidade) */}
+      {emDesenvolvimento && ultimaMono?.status === 'PENDENTE' && (
+        <section className="cartao-secao bloco secao-acao">
+          <h2>{icoDoc} Avaliação da monografia</h2>
+          <div className="aviso-cabecalho">
+            <p className="nota-vazio" style={{ margin: 0 }}>
+              O orientando enviou a monografia (versão {ultimaMono.versao}). Aprove ou solicite ajustes.
+            </p>
+            <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando avaliação</span>
+          </div>
+          {blkMono && avisoPrazo('submissão da monografia')}
+          <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+            <button className="botao botao-secundario" disabled={enviando || blkMono} onClick={() => { setRecusa({ tipo: 'monografia' }); setParecer(''); setErro(''); }}>Solicitar ajustes</button>
+            <button className="botao" disabled={enviando || blkMono} onClick={() => pedirConfirmacao('monografia')}>Aprovar monografia</button>
+          </div>
+        </section>
+      )}
+
       {/* Ação: versão final (validada pelo orientador) */}
       {(fase === 'VALIDACAO_VERSAO_FINAL' || versaoFinal) && (
         <section className="cartao-secao bloco secao-acao">
@@ -243,7 +261,7 @@ export function DetalheOrientando() {
             <>
               {blkVf && avisoPrazo('ajustes finais / versão final')}
               <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                <button className="botao botao-secundario" disabled={enviando || blkVf} onClick={() => { setRecusa({ tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
+                <button className="botao botao-secundario" disabled={enviando || blkVf} onClick={() => { setRecusa({ tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Solicitar ajustes</button>
                 <button className="botao" disabled={enviando || blkVf} onClick={() => pedirConfirmacao('versaofinal')}>Aprovar e concluir</button>
               </div>
             </>
@@ -263,18 +281,19 @@ export function DetalheOrientando() {
             {monografias.length === 0 ? (
               <p className="nota-vazio">Aguardando o aluno enviar a monografia.</p>
             ) : (
-              monografias.map((d) => <ItemDoc key={d.id} d={d} />)
-            )}
-            {ultimaMono?.status === 'REJEITADO' && ultimaMono.parecer && (
-              <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {ultimaMono.parecer}</div>
-            )}
-            {emDesenvolvimento && ultimaMono?.status === 'PENDENTE' && (
               <>
-                {blkMono && <div style={{ marginTop: 10 }}>{avisoPrazo('submissão da monografia')}</div>}
-                <div className="acoes" style={{ marginTop: 12, justifyContent: 'flex-start' }}>
-                  <button className="botao botao-secundario" disabled={enviando || blkMono} onClick={() => { setRecusa({ tipo: 'monografia' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-                  <button className="botao" disabled={enviando || blkMono} onClick={() => pedirConfirmacao('monografia')}>Aprovar monografia</button>
-                </div>
+                <p className="subsecao-rotulo">Última versão enviada</p>
+                <ItemDoc d={monografias[0]} />
+                {ultimaMono?.status === 'REJEITADO' && ultimaMono.parecer && (
+                  <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {ultimaMono.parecer}</div>
+                )}
+                {monografias.length > 1 && (
+                  <>
+                    <hr className="divisor-versoes" />
+                    <p className="subsecao-rotulo">Versões anteriores</p>
+                    {monografias.slice(1).map((d) => <ItemDoc key={d.id} d={d} />)}
+                  </>
+                )}
               </>
             )}
           </section>
@@ -324,9 +343,9 @@ export function DetalheOrientando() {
       {recusa && (() => {
         const txt =
           recusa.tipo === 'monografia'
-            ? { titulo: 'Pedir ajustes na monografia', sub: 'O aluno poderá reenviar uma nova versão.', label: 'O que precisa ser ajustado' }
+            ? { titulo: 'Solicitar ajustes na monografia', sub: 'O aluno poderá reenviar uma nova versão.', label: 'O que precisa ser ajustado' }
             : recusa.tipo === 'versaofinal'
-              ? { titulo: 'Pedir ajustes na versão final', sub: 'O aluno poderá reenviar a versão final corrigida.', label: 'O que precisa ser ajustado' }
+              ? { titulo: 'Solicitar ajustes na versão final', sub: 'O aluno poderá reenviar a versão final corrigida.', label: 'O que precisa ser ajustado' }
               : { titulo: 'Descontinuar o TCC', sub: 'Atenção: isso encerra o TCC como descontinuado.', label: 'Motivo da descontinuação' };
         return (
           <Modal titulo={txt.titulo} subtitulo={txt.sub} aoFechar={() => !enviando && setRecusa(null)}>

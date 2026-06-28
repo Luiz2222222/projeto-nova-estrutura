@@ -97,11 +97,25 @@ export function PainelAluno() {
   }
 
   const idx = faseParaIndice(tcc.faseAtual);
+  const mono = ultimaMonografia(tcc.documentos);
+  // Pode enviar/reenviar a 1ª monografia: em Desenvolvimento, não aprovada e sem versão
+  // em análise (nenhuma ainda ou a última teve ajustes solicitados).
+  const podeEnviarMono = tcc.faseAtual === 'DESENVOLVIMENTO' && !tcc.monografiaAprovada && (!mono || mono.status === 'REJEITADO');
+  const blkMono = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
 
   return (
     <>
-      <h1>Meu TCC</h1>
-      <p className="legenda">{tcc.titulo}</p>
+      <div className="cabecalho-secao" style={{ alignItems: 'flex-start' }}>
+        <div>
+          <h1>Meu TCC</h1>
+          <p className="legenda">{tcc.titulo}</p>
+        </div>
+        {podeEnviarMono && (
+          <button className="botao" disabled={blkMono} onClick={() => setModalUpload('monografia')}>
+            {mono ? 'Reenviar monografia' : 'Enviar monografia'}
+          </button>
+        )}
+      </div>
 
       {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
       {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
