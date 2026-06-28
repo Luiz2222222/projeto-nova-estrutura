@@ -12,6 +12,8 @@ import {
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { extname } from 'path';
+import { FORMATOS_ARQUIVO } from '@tcc/compartilhado';
 import { BancasService } from './bancas.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
@@ -27,12 +29,14 @@ import {
   type DadosTrocarAvaliadores,
 } from '@tcc/compartilhado';
 
-// Aceita só PDF no documento de avaliação da banca (mesmo padrão dos uploads de TCC).
-const SO_PDF = {
+// Documento de avaliação da banca: aceita PDF ou Word (.doc, .docx). Valida pela
+// extensão do nome enviado; o service confirma a regra do tipo AVALIACAO_BANCA.
+const FILTRO_BANCA = {
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req: any, file: any, cb: any) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new BadRequestException({ mensagem: 'Apenas arquivos PDF são aceitos.' }), false);
+    const ext = extname(file.originalname || '').toLowerCase();
+    if ((FORMATOS_ARQUIVO.PDF_WORD.exts as readonly string[]).includes(ext)) cb(null, true);
+    else cb(new BadRequestException({ mensagem: `Apenas arquivos ${FORMATOS_ARQUIVO.PDF_WORD.rotulo} são aceitos.` }), false);
   },
 };
 
@@ -54,7 +58,7 @@ export class BancasController {
   @Post('tccs/:id/banca')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', FILTRO_BANCA))
   formar(
     @Param('id') id: string,
     @Body('avaliadorIds') avaliadorIdsRaw: string,

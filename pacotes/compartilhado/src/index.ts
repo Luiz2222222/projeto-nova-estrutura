@@ -23,8 +23,43 @@ export const ROTULO_PAPEL: Record<Papel, string> = {
 
 export const ROTULO_CURSO: Record<Curso, string> = {
   ENGENHARIA_ELETRICA: 'Engenharia Elétrica',
-  CONTROLE_E_AUTOMACAO: 'Controle e Automação',
+  CONTROLE_E_AUTOMACAO: 'Engenharia de Controle e Automação',
 };
+
+// ---------- Formatos de arquivo aceitos por tipo de documento do TCC ----------
+// Regra espelhada do projeto antigo: iniciais e versão final em PDF, monografia em
+// Word, documento da banca em PDF ou Word. `accept` vai no input; `exts`/`rotulo`
+// servem para validar de verdade no backend e montar as mensagens.
+export const FORMATOS_ARQUIVO = {
+  PDF: { exts: ['.pdf'], accept: '.pdf', rotulo: 'PDF' },
+  WORD: { exts: ['.doc', '.docx'], accept: '.doc,.docx', rotulo: 'Word (.doc ou .docx)' },
+  PDF_WORD: { exts: ['.pdf', '.doc', '.docx'], accept: '.pdf,.doc,.docx', rotulo: 'PDF ou Word (.doc, .docx)' },
+} as const;
+export type FormatoArquivo = keyof typeof FORMATOS_ARQUIVO;
+
+// Tipo de documento -> formato exigido. Tipos não listados caem em PDF_WORD.
+export const FORMATO_POR_TIPO_DOC: Record<string, FormatoArquivo> = {
+  PLANO_DESENVOLVIMENTO: 'PDF',
+  TERMO_ACEITE: 'PDF',
+  MONOGRAFIA: 'WORD',
+  AVALIACAO_BANCA: 'PDF_WORD',
+  VERSAO_FINAL: 'PDF',
+};
+
+export function formatoDoTipoDoc(tipo: string) {
+  return FORMATOS_ARQUIVO[FORMATO_POR_TIPO_DOC[tipo] ?? 'PDF_WORD'];
+}
+
+// Extensão (minúscula, com ponto) do nome do arquivo; '' se não houver.
+export function extensaoArquivo(nome: string): string {
+  const i = (nome ?? '').lastIndexOf('.');
+  return i >= 0 ? nome.slice(i).toLowerCase() : '';
+}
+
+// Validação real (por extensão) usada no backend e no front.
+export function arquivoPermitidoParaTipo(tipo: string, nomeArquivo: string): boolean {
+  return (formatoDoTipoDoc(tipo).exts as readonly string[]).includes(extensaoArquivo(nomeArquivo));
+}
 
 // Opções de tratamento/titulação. "Outros" abre um campo livre na tela.
 export const TRATAMENTOS = ['Prof. Dr.', 'Prof. Ms.', 'Prof.', 'Dr.', 'Eng.', 'Outros'] as const;

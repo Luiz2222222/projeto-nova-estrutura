@@ -91,7 +91,7 @@ export function DashboardCoordenador() {
   const acoes = useMemo(() => {
     const nome = (t: any) => t.aluno?.nomeCompleto ?? '—';
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
-    pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/solicitacoes' }));
+    pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/solicitacoes?tccId=${t.id}` }));
     tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
     tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
     tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));

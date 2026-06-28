@@ -350,8 +350,43 @@ select {
 .modal-fechar:hover { background: var(--papel-2); color: var(--tinta-1); }
 .modal-titulo { font-size: 20px; margin: 0 0 4px; }
 .modal-sub { color: var(--tinta-3); font-size: 14px; margin: 0 0 20px; }
+/* Texto de consequência nos modais de confirmação. */
+.modal-confirma-texto { color: var(--tinta-2); font-size: 14px; line-height: 1.55; margin: 4px 0 22px; }
+.modal-confirma-texto strong { color: var(--tinta-1); }
 /* Lista de opções do modal "Baixar dados". */
 .baixar-opcoes { display: flex; flex-direction: column; gap: 4px; margin-bottom: 6px; }
+
+/* Resumo da confirmação de solicitação (rótulo em cima, valor embaixo). */
+.resumo-confirmacao { display: flex; flex-direction: column; gap: 14px; margin: 4px 0 22px; }
+.resumo-linha { display: flex; flex-direction: column; gap: 2px; }
+.resumo-rot { font-size: 12px; font-weight: 600; color: var(--tinta-3); }
+.resumo-val { font-size: 14.5px; color: var(--tinta-1); word-break: break-word; }
+
+/* Card da aba Solicitações (espelha o layout do projeto antigo). */
+.card-solicitacao { transition: box-shadow .25s ease, border-color .25s ease; }
+.card-solicitacao.destacado { border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-anel); }
+.solic-cabecalho { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.solic-cabecalho-esq { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.solic-data { font-size: 13px; color: var(--tinta-3); }
+.solic-data strong { color: var(--tinta-1); }
+.solic-docs { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.botao-doc { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; font-size: 12.5px; font-weight: 600; color: var(--azul-forte); background: var(--azul-suave); border: 1px solid var(--azul-anel); border-radius: 999px; text-decoration: none; }
+.botao-doc:hover { background: var(--azul-anel); }
+.botao-doc svg { width: 15px; height: 15px; }
+.solic-acoes { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.solic-acoes .botao { display: inline-flex; align-items: center; gap: 6px; }
+.solic-acoes .botao svg { width: 16px; height: 16px; }
+.solic-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.solic-bloco { display: flex; flex-direction: column; gap: 4px; font-size: 13.5px; color: var(--tinta-2); min-width: 0; }
+.solic-bloco p { margin: 0; }
+.solic-bloco strong { color: var(--tinta-1); }
+.solic-bloco .solic-sub { font-size: 12.5px; color: var(--tinta-3); }
+.solic-bloco .solic-sub strong { color: var(--tinta-2); }
+.solic-bloco .solic-sub a { color: var(--azul-forte); word-break: break-all; }
+.solic-mensagem { margin-top: 14px; }
+.solic-mensagem-rot { margin: 0 0 4px; font-size: 13px; font-weight: 600; color: var(--tinta-1); }
+.solic-mensagem-txt { margin: 0; font-size: 13.5px; color: var(--tinta-2); background: var(--papel-2); border: 1px solid var(--borda-suave); border-radius: var(--raio-1); padding: 10px 12px; }
+@media (max-width: 640px) { .solic-grid { grid-template-columns: 1fr; } }
 
 /* Seleção de categoria (passo 1 do cadastro) */
 .cat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 6px; }
@@ -473,7 +508,9 @@ select {
 .resumo-extra { font-size: 11.5px; color: var(--tinta-3); margin-top: 2px; }
 /* Linha de toggle (preferências/configuração de e-mail). */
 .linha-toggle { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; cursor: pointer; }
-.linha-toggle input { margin-top: 3px; flex-shrink: 0; }
+/* Checkbox precisa de tamanho fixo: a regra global "input { width:100% }" senão o
+   estica e empurra o texto pra fora (igual .radios input / .vidro .linha-check input). */
+.linha-toggle input[type="checkbox"] { width: 16px; height: 16px; margin-top: 2px; flex-shrink: 0; accent-color: var(--azul); }
 .linha-toggle > span { display: flex; flex-direction: column; min-width: 0; }
 .linha-toggle .legenda { margin: 2px 0 0; }
 
@@ -750,6 +787,12 @@ textarea { resize: vertical; min-height: 72px; }
 .card-recusa-cabecalho h3 { font-size: 18px; font-weight: 600; color: var(--tinta-1); margin: 0; }
 .card-recusa-texto { font-size: 13px; color: var(--tinta-2); margin: 0 0 12px; }
 .card-recusa-parecer { background: var(--papel-1); border: 1px solid rgba(185, 28, 28, 0.3); border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; color: var(--tinta-2); }
+/* Botão X para fechar o card de recusa (sem ação destrutiva — só dispensa o aviso). */
+.card-recusa-x { position: absolute; top: 12px; right: 12px; width: 28px; height: 28px; display: grid; place-items: center; border: none; background: transparent; color: var(--reprovado); font-size: 16px; line-height: 1; cursor: pointer; border-radius: var(--raio-1); }
+.card-recusa-x:hover { background: rgba(185, 28, 28, 0.12); }
+/* Switch alinhado à esquerda, junto do texto (modal de editar usuário). */
+.campo-switch { display: flex; align-items: center; gap: 10px; margin: 14px 0 4px; }
+.campo-switch-label { font-size: 14px; color: var(--tinta-1); }
 /* Card de solicitação pendente: destacado no topo, em âmbar (reusa as sub-classes do card-recusa). */
 .card-pendente { position: relative; background: rgba(234, 179, 8, 0.10); border: 2px solid rgba(234, 179, 8, 0.40); border-radius: var(--raio-2); padding: 20px 22px; box-shadow: var(--sombra-1); }
 .card-pendente .card-recusa-cabecalho svg { color: #a16207; }
@@ -771,6 +814,9 @@ textarea { resize: vertical; min-height: 72px; }
 .tl-subs { padding: 0 4px 14px 46px; display: flex; flex-direction: column; gap: 9px; }
 .tl-sub { display: flex; align-items: center; gap: 10px; font-size: 13.5px; color: var(--tinta-2); }
 .tl-sub.atual { color: var(--tinta-1); font-weight: 600; }
+.tl-sub-texto { min-width: 0; }
+.tl-sub-data { font-size: 12px; font-weight: 400; color: var(--tinta-3); white-space: nowrap; }
+.tl-sub-sem { font-style: italic; color: var(--tinta-4); }
 .tl-dot { width: 10px; height: 10px; border-radius: 999px; border: 2px solid var(--borda-forte); background: var(--papel-1); flex-shrink: 0; }
 .tl-dot.concluido { background: var(--azul); border-color: var(--azul); }
 .tl-dot.atual { background: var(--azul-suave); border-color: var(--azul); }

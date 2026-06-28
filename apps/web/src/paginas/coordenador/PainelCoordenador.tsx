@@ -1,17 +1,30 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { ROTULO_TIPO_DOC } from '../../utils/fases';
 import { Modal } from '../../componentes/Modal';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
     {d.split('|').map((p, i) => <path key={i} d={p} />)}
   </svg>
 );
-const icoArquivo = ic('M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z|M14 2v6h6');
 const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
-const icoBaixar = ic('M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4|M7 10l5 5 5-5|M12 15V3');
+const icoCheck = ic('M20 6 9 17l-5-5');
+const icoX = ic('M18 6 6 18|M6 6l12 12');
+
+const fmtData = (iso?: string | null) => {
+  if (!iso) return '—';
+  return new Date(iso).toLocaleDateString('pt-BR'); // dd/mm/aaaa, sem horário
+};
+// Coorientador: interno (relação) ou externo (campos soltos). null se não houver.
+const coorientadorDe = (t: any) => {
+  if (t.coorientador) return { nome: t.coorientador.nomeCompleto, titulacao: t.coorientador.tratamento, afiliacao: t.coorientador.afiliacao, lattes: null as string | null };
+  if (t.coorientadorNome) return { nome: t.coorientadorNome, titulacao: t.coorientadorTitulacao, afiliacao: t.coorientadorAfiliacao, lattes: t.coorientadorLattes };
+  return null;
+};
 
 export function PainelCoordenador() {
   const [pendentes, setPendentes] = useState<any[]>([]);
@@ -19,6 +32,12 @@ export function PainelCoordenador() {
   const [recusando, setRecusando] = useState<any | null>(null);
   const [parecer, setParecer] = useState('');
   const [erroRecusa, setErroRecusa] = useState('');
+  const [aprovando, setAprovando] = useState<any | null>(null);
+  const [erroAprovar, setErroAprovar] = useState('');
+  const [processando, setProcessando] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [destacado, setDestacado] = useState<string | null>(null);
+  const cardRefs = useRef<Record<string, HTMLElement | null>>({});
 
   function carregar() {
     setCarregando(true);
@@ -29,12 +48,32 @@ export function PainelCoordenador() {
   }
   useEffect(carregar, []);
 
-  async function aprovar(id: string) {
+  // Vindo do dashboard com ?tccId=: rola até o card e o destaca por alguns segundos.
+  useEffect(() => {
+    const tccId = searchParams.get('tccId');
+    if (!tccId || carregando) return;
+    const el = cardRefs.current[tccId];
+    if (!el) return;
+    const t = setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setDestacado(tccId);
+    }, 200);
+    const t2 = setTimeout(() => setDestacado(null), 2600);
+    return () => { clearTimeout(t); clearTimeout(t2); };
+  }, [searchParams, carregando, pendentes]);
+
+  async function confirmarAprovar() {
+    if (!aprovando) return;
+    setErroAprovar('');
+    setProcessando(true);
     try {
-      await apiPost(`/tccs/${id}/aprovar`, {});
+      await apiPost(`/tccs/${aprovando.id}/aprovar`, {});
+      setAprovando(null);
+      setProcessando(false);
       carregar();
     } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Erro ao aprovar.');
+      setErroAprovar((e as ErroApi).mensagem || 'Erro ao aprovar.');
+      setProcessando(false);
     }
   }
 
@@ -66,66 +105,75 @@ export function PainelCoordenador() {
         <div className="lista bloco">
           {pendentes.map((t) => {
             const s = t.solicitacoes?.[0];
+            const co = coorientadorDe(t);
             return (
-              <section key={t.id} className="cartao-secao">
-                <h2>{t.titulo}</h2>
-                <dl className="dados">
-                  <div>
-                    <dt>Aluno</dt>
-                    <dd>
-                      {t.aluno?.nomeCompleto}
-                      {t.aluno?.curso ? ` · ${ROTULO_CURSO[t.aluno.curso as keyof typeof ROTULO_CURSO]}` : ''}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Orientador</dt>
-                    <dd>{t.orientador?.nomeCompleto ?? '—'}</dd>
-                  </div>
-                  {(t.coorientador || t.coorientadorNome) && (
-                    <div>
-                      <dt>Coorientador</dt>
-                      <dd>{t.coorientador?.nomeCompleto ?? t.coorientadorNome}</dd>
-                    </div>
-                  )}
-                </dl>
-                {s?.mensagem && <p className="nota-vazio">Mensagem: “{s.mensagem}”</p>}
-
-                <h3 style={{ marginTop: 14, fontSize: 14 }}>Documentos</h3>
-                {t.documentos?.length ? (
-                  t.documentos.map((d: any) => (
-                    <div key={d.id} className="item-arquivo">
-                      <div className="item-arquivo-info">
-                        {icoArquivo}
-                        <div>
-                          <span className="nome">{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</span>
-                          <span className="meta">{d.nomeArquivo}</span>
-                        </div>
-                      </div>
-                      <span className="acoes-doc">
-                        <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
-                        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+              <section
+                key={t.id}
+                ref={(el) => { cardRefs.current[t.id] = el; }}
+                className={`cartao-secao card-solicitacao${destacado === t.id ? ' destacado' : ''}`}
+              >
+                {/* Header: data + documentos (esq) · Aceitar/Rejeitar (dir) */}
+                <div className="solic-cabecalho">
+                  <div className="solic-cabecalho-esq">
+                    <span className="solic-data"><strong>Data da solicitação:</strong> {fmtData(s?.criadoEm)}</span>
+                    {t.documentos?.length > 0 && (
+                      <span className="solic-docs">
+                        {t.documentos.map((d: any) => (
+                          <a key={d.id} className="botao-doc" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer" title="Visualizar">
+                            {icoOlho}<span>{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</span>
+                          </a>
+                        ))}
                       </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="nota-vazio">Nenhum documento.</p>
-                )}
-
-                <div className="acoes">
-                  <button
-                    className="botao botao-secundario"
-                    onClick={() => {
-                      setRecusando(t);
-                      setParecer('');
-                      setErroRecusa('');
-                    }}
-                  >
-                    Recusar
-                  </button>
-                  <button className="botao" onClick={() => aprovar(t.id)}>
-                    Aprovar
-                  </button>
+                    )}
+                  </div>
+                  <div className="solic-acoes">
+                    <button className="botao" onClick={() => { setAprovando(t); setErroAprovar(''); }}>{icoCheck} Aceitar</button>
+                    <button className="botao botao-perigo" onClick={() => { setRecusando(t); setParecer(''); setErroRecusa(''); }}>{icoX} Rejeitar</button>
+                  </div>
                 </div>
+
+                {/* Dados do aluno (esq) · orientação (dir) */}
+                <div className="solic-grid">
+                  <div className="solic-bloco">
+                    <p><strong>Aluno:</strong> {t.aluno?.nomeCompleto ?? '—'}</p>
+                    <p><strong>Email:</strong> {t.aluno?.email ?? '—'}</p>
+                    {t.aluno?.curso && <p><strong>Curso:</strong> {ROTULO_CURSO[t.aluno.curso as keyof typeof ROTULO_CURSO] ?? t.aluno.curso}</p>}
+                    <p><strong>Título do TCC:</strong> {t.titulo}</p>
+                  </div>
+                  <div className="solic-bloco">
+                    <p><strong>Orientador:</strong> {t.orientador?.nomeCompleto ?? '—'}</p>
+                    {(t.orientador?.tratamento || t.orientador?.afiliacao) && (
+                      <p className="solic-sub">
+                        {t.orientador?.tratamento && <><strong>Titulação:</strong> {t.orientador.tratamento}{t.orientador?.afiliacao ? ' · ' : ''}</>}
+                        {t.orientador?.afiliacao && <><strong>Afiliação:</strong> {t.orientador.afiliacao}</>}
+                      </p>
+                    )}
+                    {co ? (
+                      <>
+                        <p style={{ marginTop: 6 }}><strong>Co-orientador:</strong> {co.nome}</p>
+                        {(co.titulacao || co.afiliacao) && (
+                          <p className="solic-sub">
+                            {co.titulacao && <><strong>Titulação:</strong> {co.titulacao}{co.afiliacao ? ' · ' : ''}</>}
+                            {co.afiliacao && <><strong>Afiliação:</strong> {co.afiliacao}</>}
+                          </p>
+                        )}
+                        {co.lattes && (
+                          <p className="solic-sub"><strong>Lattes:</strong> <a href={co.lattes} target="_blank" rel="noreferrer">{co.lattes}</a></p>
+                        )}
+                      </>
+                    ) : (
+                      <p className="solic-sub" style={{ fontStyle: 'italic' }}>Sem coorientador sugerido</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Mensagem do aluno */}
+                {s?.mensagem && (
+                  <div className="solic-mensagem">
+                    <p className="solic-mensagem-rot">Mensagem do aluno:</p>
+                    <p className="solic-mensagem-txt">{s.mensagem}</p>
+                  </div>
+                )}
               </section>
             );
           })}
@@ -153,6 +201,19 @@ export function PainelCoordenador() {
             </button>
           </div>
         </Modal>
+      )}
+
+      {aprovando && (
+        <ModalConfirmacao
+          titulo="Aprovar abertura"
+          mensagem={<>Deseja aprovar a abertura do TCC <strong>{aprovando.titulo}</strong>? O aluno avança para o desenvolvimento e os documentos iniciais são aprovados.</>}
+          textoConfirmar="Aprovar"
+          textoProcessando="Aprovando…"
+          processando={processando}
+          erro={erroAprovar}
+          aoConfirmar={confirmarAprovar}
+          aoCancelar={() => setAprovando(null)}
+        />
       )}
     </>
   );

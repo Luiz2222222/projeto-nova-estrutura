@@ -9,6 +9,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../api';
 import { useAuth } from '../autenticacao/contexto';
+import { ModalConfirmacao } from '../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../utils/fases';
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, colunaPeso, type Criterio } from '@tcc/compartilhado';
 
@@ -67,6 +68,8 @@ export function AvaliarBanca() {
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [confirmacao, setConfirmacao] = useState<null | 'enviar' | 'reabrir'>(null);
+  const [erroConfirmacao, setErroConfirmacao] = useState('');
 
   const prefixoLista = usuario?.papel === 'AVALIADOR' ? '/avaliador/bancas' : usuario?.papel === 'PROFESSOR' ? '/professor/bancas' : '/bancas';
 
@@ -136,17 +139,19 @@ export function AvaliarBanca() {
   }
 
   // finalizar=false → salva rascunho (notas parciais); finalizar=true → envia (exige todas).
-  async function salvar(finalizar: boolean) {
-    setErro('');
+  // reportar() recebe o erro: rascunho usa setErro (topo da página); o envio via modal
+  // usa setErroConfirmacao (dentro do ModalConfirmacao). Retorna true só em sucesso.
+  async function salvar(finalizar: boolean, reportar: (msg: string) => void): Promise<boolean> {
+    reportar('');
     setMensagem('');
     const corpo: Record<string, number> = {};
     for (const c of criterios) {
       const n = parseBR(notas[c.chave] ?? '');
       if (n == null) {
-        if (finalizar) return setErro(`Preencha a nota de "${c.rotulo}" para enviar.`);
+        if (finalizar) { reportar(`Preencha a nota de "${c.rotulo}" para enviar.`); return false; }
         continue; // rascunho: pula nota vazia
       }
-      if (n < 0 || n > peso(c)) return setErro(`A nota de "${c.rotulo}" deve estar entre 0 e ${fmt(peso(c))}.`);
+      if (n < 0 || n > peso(c)) { reportar(`A nota de "${c.rotulo}" deve estar entre 0 e ${fmt(peso(c))}.`); return false; }
       corpo[c.chave] = n;
     }
     setEnviando(true);
@@ -154,27 +159,40 @@ export function AvaliarBanca() {
       await apiPost(`/bancas/${m.bancaId}/avaliar`, { notas: corpo, parecer: construirParecer() || undefined, finalizar });
       await recarregar();
       setMensagem(finalizar ? 'Avaliação enviada.' : 'Rascunho salvo.');
+      return true;
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível salvar.');
+      reportar((e as ErroApi).mensagem || 'Não foi possível salvar.');
+      return false;
     } finally {
       setEnviando(false);
     }
   }
 
   // Reabre a avaliação enviada para edição (ENVIADO → PENDENTE), preservando os dados.
-  async function reabrir() {
-    setErro('');
+  async function reabrir(reportar: (msg: string) => void): Promise<boolean> {
+    reportar('');
     setMensagem('');
     setEnviando(true);
     try {
       await apiPost(`/bancas/${m.bancaId}/reabrir`, {});
       await recarregar();
       setMensagem('Avaliação reaberta para edição.');
+      return true;
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível reabrir a avaliação.');
+      reportar((e as ErroApi).mensagem || 'Não foi possível reabrir a avaliação.');
+      return false;
     } finally {
       setEnviando(false);
     }
+  }
+
+  // Confirmações: só fecham o modal em caso de sucesso. Se a validação falhar ou der
+  // erro, o modal continua aberto exibindo o erro (erroConfirmacao).
+  async function confirmarEnvio() {
+    if (await salvar(true, setErroConfirmacao)) setConfirmacao(null);
+  }
+  async function confirmarReabrir() {
+    if (await reabrir(setErroConfirmacao)) setConfirmacao(null);
   }
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
@@ -306,20 +324,46 @@ export function AvaliarBanca() {
         <div className="acoes" style={{ justifyContent: 'flex-start' }}>
           {/* Rodapé só com ações da avaliação (o "Voltar" fica no cabeçalho da página).
               "Salvar rascunho" some? Não: fica sempre visível, desativado quando não editável. */}
-          <button className="botao botao-secundario" disabled={!podeRascunho || enviando || bloqueadoPrazo} onClick={() => salvar(false)}>
+          <button className="botao botao-secundario" disabled={!podeRascunho || enviando || bloqueadoPrazo} onClick={() => salvar(false, setErro)}>
             {enviando ? 'Salvando…' : 'Salvar rascunho'}
           </button>
           {podeReabrir ? (
-            <button className="botao" disabled={enviando || bloqueadoPrazo} onClick={reabrir}>
+            <button className="botao" disabled={enviando || bloqueadoPrazo} onClick={() => { setErro(''); setMensagem(''); setErroConfirmacao(''); setConfirmacao('reabrir'); }}>
               {enviando ? 'Editando…' : 'Editar'}
             </button>
           ) : editavel ? (
-            <button className="botao" disabled={enviando || total == null || bloqueadoPrazo} onClick={() => salvar(true)}>
+            <button className="botao" disabled={enviando || total == null || bloqueadoPrazo} onClick={() => { setErro(''); setMensagem(''); setErroConfirmacao(''); setConfirmacao('enviar'); }}>
               {enviando ? 'Enviando…' : 'Enviar'}
             </button>
           ) : null}
         </div>
       </section>
+
+      {confirmacao === 'enviar' && (
+        <ModalConfirmacao
+          titulo="Enviar avaliação"
+          mensagem="Deseja enviar esta avaliação? Ela poderá ser editada apenas enquanto a fase permitir."
+          textoConfirmar="Confirmar envio"
+          textoProcessando="Enviando…"
+          processando={enviando}
+          erro={erroConfirmacao}
+          aoConfirmar={confirmarEnvio}
+          aoCancelar={() => setConfirmacao(null)}
+        />
+      )}
+
+      {confirmacao === 'reabrir' && (
+        <ModalConfirmacao
+          titulo="Editar avaliação enviada"
+          mensagem="Deseja reabrir esta avaliação para edição? O status volta para pendente até você enviar novamente."
+          textoConfirmar="Reabrir para editar"
+          textoProcessando="Reabrindo…"
+          processando={enviando}
+          erro={erroConfirmacao}
+          aoConfirmar={confirmarReabrir}
+          aoCancelar={() => setConfirmacao(null)}
+        />
+      )}
     </>
   );
 }

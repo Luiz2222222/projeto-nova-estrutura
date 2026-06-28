@@ -13,6 +13,7 @@ import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, 
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { LiberacoesPrazo } from '../../componentes/LiberacoesPrazo';
 
 const ic = (d: string) => (
@@ -68,7 +69,8 @@ export function TccDetalheCoordenador() {
   const [avaliador2, setAvaliador2] = useState('');
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
-  const [erro, setErro] = useState('');
+  const [erroAcao, setErroAcao] = useState('');
+  const [confirmando, setConfirmando] = useState<null | 'banca' | 'validar'>(null);
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [pesos, setPesos] = useState<any | null>(null);
@@ -124,10 +126,10 @@ export function TccDetalheCoordenador() {
   const nfFinalPonderada = tcc.nf != null ? Number(tcc.nf) : (nf1 != null && nf2 != null ? notaFinal(nf1, nf2) : null);
 
   async function formarBanca() {
-    setErro('');
-    if (!avaliador1 || !avaliador2) return setErro('Escolha o Avaliador 1 e o Avaliador 2.');
-    if (avaliador1 === avaliador2) return setErro('Os dois avaliadores devem ser pessoas diferentes.');
-    if (!arquivoBanca) return setErro('Envie o documento para avaliação da banca.');
+    setErroAcao('');
+    if (!avaliador1 || !avaliador2) return setErroAcao('Escolha o Avaliador 1 e o Avaliador 2.');
+    if (avaliador1 === avaliador2) return setErroAcao('Os dois avaliadores devem ser pessoas diferentes.');
+    if (!arquivoBanca) return setErroAcao('Envie o documento para avaliação da banca.');
     setEnviando(true);
     try {
       const form = new FormData();
@@ -137,23 +139,25 @@ export function TccDetalheCoordenador() {
       setAvaliador1('');
       setAvaliador2('');
       setArquivoBanca(null);
+      setConfirmando(null);
       carregar();
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível formar a banca.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível formar a banca.');
     } finally {
       setEnviando(false);
     }
   }
 
   async function validar() {
-    setErro('');
+    setErroAcao('');
     setEnviando(true);
     try {
       const r = await apiPost(`/tccs/${tcc.id}/banca/validar`, {});
       setResultado(r);
+      setConfirmando(null);
       carregar();
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível validar.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível validar.');
     } finally {
       setEnviando(false);
     }
@@ -251,7 +255,6 @@ export function TccDetalheCoordenador() {
         <section className="cartao-secao bloco secao-acao">
           <h2>{icoBanca} Formar banca da Fase I</h2>
           <p className="legenda">Escolha <strong>2 avaliadores</strong> para a banca da Fase I. (A banca da Fase II será o orientador + estes 2 avaliadores.)</p>
-          {erro && <div className="erro-geral">{erro}</div>}
           {candidatos.length === 0 ? (
             <p className="nota-vazio">Nenhum avaliador disponível (cadastre professores/avaliadores).</p>
           ) : (
@@ -277,12 +280,12 @@ export function TccDetalheCoordenador() {
             </div>
           )}
           <label className="campo" style={{ marginTop: 16 }}>
-            <span>Documento para avaliação (PDF)</span>
-            <input type="file" accept="application/pdf" onChange={(e) => setArquivoBanca(e.target.files?.[0] ?? null)} />
-            <small className="legenda">A banca avaliará este documento (ex.: versão anônima da monografia). Obrigatório para formar a banca.</small>
+            <span>Documento para avaliação (PDF ou Word)</span>
+            <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setArquivoBanca(e.target.files?.[0] ?? null)} />
+            <small className="legenda">A banca avaliará este documento (ex.: versão anônima da monografia). PDF ou Word (.doc, .docx). Obrigatório para formar a banca.</small>
           </label>
           <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" disabled={enviando || !avaliador1 || !avaliador2 || avaliador1 === avaliador2 || !arquivoBanca} onClick={formarBanca}>
+            <button className="botao" disabled={enviando || !avaliador1 || !avaliador2 || avaliador1 === avaliador2 || !arquivoBanca} onClick={() => { setErroAcao(''); setConfirmando('banca'); }}>
               {enviando ? 'Formando…' : 'Formar banca'}
             </button>
           </div>
@@ -297,7 +300,6 @@ export function TccDetalheCoordenador() {
           <section className="cartao-secao bloco secao-acao">
             <h2>{icoBanca} {ehF2 ? 'Validar Fase II' : 'Validar Fase I'}</h2>
             {ehF2 && <p className="legenda">Banca da Fase II: orientador + os 2 avaliadores da Fase I.</p>}
-            {erro && <div className="erro-geral">{erro}</div>}
             <dl className="dados">
               {membros.map((m: any) => (
                 <div key={m.id}><dt>{nomeComTrat(m.avaliador)}</dt><dd>{fmtNota(m.nota)}</dd></div>
@@ -324,7 +326,7 @@ export function TccDetalheCoordenador() {
               </div>
             ) : (
               <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                <button className="botao" disabled={enviando} onClick={validar}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
+                <button className="botao" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
               </div>
             )}
           </section>
@@ -433,6 +435,36 @@ export function TccDetalheCoordenador() {
 
       {editando && (
         <ModalEditarTcc tcc={tcc} pesos={pesos} aoFechar={() => setEditando(false)} aoSalvo={carregar} />
+      )}
+
+      {confirmando === 'banca' && (
+        <ModalConfirmacao
+          titulo="Formar banca da Fase I"
+          mensagem="Deseja formar esta banca com os avaliadores e o documento selecionados?"
+          textoConfirmar="Formar banca"
+          textoProcessando="Formando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={formarBanca}
+          aoCancelar={() => setConfirmando(null)}
+        />
+      )}
+
+      {confirmando === 'validar' && (
+        <ModalConfirmacao
+          titulo={fase === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
+          mensagem={
+            fase === 'VALIDACAO_FASE_2'
+              ? 'Deseja validar a Fase II? Essa ação calcula a NF2 e o resultado da fase.'
+              : 'Deseja validar a Fase I? Essa ação calcula a NF1 e muda o fluxo do TCC.'
+          }
+          textoConfirmar={fase === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
+          textoProcessando="Validando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={validar}
+          aoCancelar={() => setConfirmando(null)}
+        />
       )}
     </>
   );

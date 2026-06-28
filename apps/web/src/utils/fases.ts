@@ -13,10 +13,11 @@ export const ROTULO_STATUS_SOLIC: Record<string, string> = {
 };
 
 export const ROTULO_TIPO_DOC: Record<string, string> = {
-  PLANO_DESENVOLVIMENTO: 'Plano de Desenvolvimento',
-  TERMO_ACEITE: 'Termo de Aceite',
+  PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento',
+  TERMO_ACEITE: 'Termo de aceite',
   MONOGRAFIA: 'Monografia',
   VERSAO_FINAL: 'Versão final',
+  AVALIACAO_BANCA: 'Documento para avaliação (banca)',
 };
 
 // A versão final só entra depois da Fase II aprovada (TCC vai para AGUARDANDO_AJUSTES_FINAIS),

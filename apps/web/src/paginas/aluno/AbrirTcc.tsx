@@ -282,12 +282,16 @@ export function AbrirTcc() {
                 arquivo={plano}
                 aoMudar={setPlano}
                 erro={erros.plano}
+                aceita=".pdf"
+                dica="PDF, até 10MB"
               />
               <CampoArquivo
                 rotulo="Termo de Aceite"
                 arquivo={termo}
                 aoMudar={setTermo}
                 erro={erros.termo}
+                aceita=".pdf"
+                dica="PDF, até 10MB"
               />
             </div>
           </div>
@@ -297,7 +301,7 @@ export function AbrirTcc() {
               Cancelar
             </button>
             <button type="submit" className="botao" disabled={desabilitarAbrir}>
-              Revisar e enviar
+              Enviar
             </button>
           </div>
         </form>
@@ -309,44 +313,36 @@ export function AbrirTcc() {
           subtitulo="Confira os dados antes de enviar."
           aoFechar={() => !enviando && setConfirmando(false)}
         >
-          <dl className="dados">
-            <div>
-              <dt>Aluno</dt>
-              <dd>{usuario?.nomeCompleto}</dd>
+          <div className="resumo-confirmacao">
+            <div className="resumo-linha">
+              <span className="resumo-rot">Título</span>
+              <span className="resumo-val">{titulo || '—'}</span>
             </div>
-            {usuario?.curso && (
-              <div>
-                <dt>Curso</dt>
-                <dd>{ROTULO_CURSO[usuario.curso]}</dd>
-              </div>
-            )}
-            <div>
-              <dt>Título</dt>
-              <dd>{titulo}</dd>
-            </div>
-            <div>
-              <dt>Orientador</dt>
-              <dd>{orientadorNome ?? '—'}</dd>
+            <div className="resumo-linha">
+              <span className="resumo-rot">Orientador</span>
+              <span className="resumo-val">{orientadorNome ?? '—'}</span>
             </div>
             {coNomeResumo && (
-              <div>
-                <dt>Coorientador</dt>
-                <dd>{coNomeResumo}</dd>
+              <div className="resumo-linha">
+                <span className="resumo-rot">Co-orientador</span>
+                <span className="resumo-val">{coNomeResumo}</span>
               </div>
             )}
-            <div>
-              <dt>Documentos</dt>
-              <dd>
-                {plano?.name}, {termo?.name}
-              </dd>
+            <div className="resumo-linha">
+              <span className="resumo-rot">Plano de desenvolvimento</span>
+              <span className="resumo-val">{plano?.name ?? '—'}</span>
             </div>
-          </dl>
+            <div className="resumo-linha">
+              <span className="resumo-rot">Termo de aceite de orientação</span>
+              <span className="resumo-val">{termo?.name ?? '—'}</span>
+            </div>
+          </div>
           <div className="acoes">
             <button className="botao botao-secundario" disabled={enviando} onClick={() => setConfirmando(false)}>
               Voltar
             </button>
             <button className="botao" disabled={enviando} onClick={confirmar}>
-              {enviando ? 'Enviando…' : 'Confirmar e enviar'}
+              {enviando ? 'Enviando…' : 'Confirmar'}
             </button>
           </div>
         </Modal>

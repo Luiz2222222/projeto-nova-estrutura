@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, apiDelete, URL_API, type ErroApi } from '../../api';
+import { apiGet, URL_API } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
@@ -127,6 +127,7 @@ export function DashboardAluno() {
   const [carregandoAbertura, setCarregandoAbertura] = useState(true);
   const [carregando, setCarregando] = useState(true);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
+  const [recusaFechada, setRecusaFechada] = useState(false);
 
   function carregar() {
     apiGet('/tccs/meu')
@@ -143,16 +144,6 @@ export function DashboardAluno() {
     apiGet('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
   }, []);
 
-  async function corrigirEReenviar() {
-    if (!window.confirm('Isso descarta esta solicitação recusada e abre uma nova. Continuar?')) return;
-    try {
-      await apiDelete(`/tccs/${tcc.id}`);
-      navegar('/aluno/abrir');
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível reenviar.');
-    }
-  }
-
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
   const prazo = proximoPrazo(calendario);
@@ -162,8 +153,6 @@ export function DashboardAluno() {
     const semAcao = (titulo: string, desc: string): Acao => ({ titulo, desc });
     if (!tcc) return semAcao('—', 'Sem TCC ativo.');
 
-    if (solic?.status === 'RECUSADA')
-      return { titulo: 'Abertura recusada', desc: 'Corrija os documentos e reenvie a solicitação.', botao: { rotulo: 'Corrigir e reenviar', ao: corrigirEReenviar } };
     if (solic?.status === 'PENDENTE')
       return semAcao('Aguardando aprovação', 'Sua abertura está em análise pelo coordenador.');
 
@@ -205,7 +194,8 @@ export function DashboardAluno() {
   const acao: Acao = acaoBruta.botao
     ? acaoBruta
     : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
-  const recusada = solic?.status === 'RECUSADA' && solic.parecer;
+  // Recusada → trata como "sem TCC ativo": volta ao estado inicial, só com o aviso vermelho.
+  const recusada = !!tcc && tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'RECUSADA';
 
   // Versão final só aparece depois da Fase II aprovada (AGUARDANDO_AJUSTES_FINAIS),
   // na validação do orientador (VALIDACAO_VERSAO_FINAL) ou já concluído — ou quando
@@ -220,32 +210,44 @@ export function DashboardAluno() {
     <>
       {carregando ? (
         <p className="nota-vazio">Carregando…</p>
-      ) : !tcc ? (
-        <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
-          <h2>Você ainda não iniciou seu TCC</h2>
-          <p className="nota-vazio">Comece enviando a solicitação de orientação com os documentos iniciais.</p>
-          {abertura?.bloqueado && (
-            <div className="alerta alerta-erro" style={{ marginTop: 16, textAlign: 'left' }}>
-              <strong>Prazo encerrado.</strong> O período de envio de documentos iniciais já terminou — peça uma liberação individual à coordenação.
+      ) : (!tcc || recusada) ? (
+        <>
+          {recusada && !recusaFechada && (
+            <div className="card-recusa bloco">
+              <button className="card-recusa-x" onClick={() => setRecusaFechada(true)} aria-label="Fechar">✕</button>
+              <div className="card-recusa-cabecalho">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M12 8v4M12 16h.01" />
+                </svg>
+                <h3>Solicitação recusada</h3>
+              </div>
+              <p className="card-recusa-texto">
+                Sua solicitação de orientação foi recusada pela coordenação{fmtData(solic?.respondidoEm) !== '—' ? ` em ${fmtData(solic?.respondidoEm)}` : ''}.
+              </p>
+              {solic?.parecer && <div className="card-recusa-parecer">{solic.parecer}</div>}
             </div>
           )}
-          <button
-            className="botao"
-            style={{ marginTop: 16 }}
-            disabled={!!abertura?.bloqueado || carregandoAbertura}
-            onClick={() => navegar('/aluno/abrir')}
-          >
-            Iniciar meu TCC
-          </button>
-        </section>
+          <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
+            <h2>Você ainda não iniciou seu TCC</h2>
+            <p className="nota-vazio">Comece enviando a solicitação de orientação com os documentos iniciais.</p>
+            {abertura?.bloqueado && (
+              <div className="alerta alerta-erro" style={{ marginTop: 16, textAlign: 'left' }}>
+                <strong>Prazo encerrado.</strong> O período de envio de documentos iniciais já terminou — peça uma liberação individual à coordenação.
+              </div>
+            )}
+            <button
+              className="botao"
+              style={{ marginTop: 16 }}
+              disabled={!!abertura?.bloqueado || carregandoAbertura}
+              onClick={() => navegar('/aluno/abrir')}
+            >
+              Iniciar meu TCC
+            </button>
+          </section>
+        </>
       ) : (
         <>
-          {recusada && (
-            <div className="alerta alerta-erro bloco">
-              <strong>Abertura recusada.</strong> {solic.parecer}
-            </div>
-          )}
-
           {/* 3 cards de status */}
           <div className="cards-status bloco">
             <div className="card-status">
@@ -341,12 +343,14 @@ export function DashboardAluno() {
                   const st = doc
                     ? STATUS_DOC[doc.status] ?? { rotulo: doc.status, classe: 'pilula-neutra' }
                     : { rotulo: 'Aguardando envio', classe: 'pilula-neutra' };
+                  // Monografia ainda não tem status antes da fase em que pode ser enviada.
+                  const semStatus = tipo === 'MONOGRAFIA' && !doc && tcc.faseAtual === 'INICIALIZACAO';
                   return (
                     <tr key={tipo}>
                       <td>{doc ? fmtData(doc.criadoEm) : '—'}</td>
                       <td>{ROTULO_TIPO_DOC[tipo] ?? tipo}</td>
                       <td>{doc ? doc.nomeArquivo : <span className="nota-vazio" style={{ margin: 0 }}>—</span>}</td>
-                      <td><span className={`pilula ${st.classe}`}>{st.rotulo}</span></td>
+                      <td>{semStatus ? <span className="nota-vazio" style={{ margin: 0 }}>—</span> : <span className={`pilula ${st.classe}`}>{st.rotulo}</span>}</td>
                       <td>
                         {doc && (
                           <span className="acoes-doc">
@@ -373,14 +377,17 @@ export function DashboardAluno() {
           titulo={modalUpload === 'monografia' ? 'Enviar versão do TCC' : 'Enviar versão final'}
           subtitulo={
             modalUpload === 'monografia'
-              ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
+              ? 'Envie a monografia em Word (.doc ou .docx) para avaliação do seu orientador.'
               : 'Envie a versão final corrigida (PDF) para validação do orientador.'
           }
           rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
+          aceita={modalUpload === 'monografia' ? '.doc,.docx' : '.pdf'}
+          dica={modalUpload === 'monografia' ? 'Word (.doc ou .docx), até 10MB' : 'PDF, até 10MB'}
           aoFechar={() => setModalUpload(null)}
           aoEnviado={() => { setModalUpload(null); carregar(); }}
         />
       )}
+
     </>
   );
 }

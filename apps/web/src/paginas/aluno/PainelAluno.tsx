@@ -4,11 +4,18 @@ import { apiGet, apiDelete, type ErroApi } from '../../api';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
+import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
 const ultimaMonografia = (docs: any[] = []) => ultimoDoc(docs, 'MONOGRAFIA');
+
+const fmtData = (iso?: string | null) => {
+  if (!iso) return null;
+  const [a, m, d] = String(iso).split('T')[0].split('-');
+  return a && m && d ? `${d}/${m}/${a}` : null;
+};
 
 export function PainelAluno() {
   const navegar = useNavigate();
@@ -16,6 +23,10 @@ export function PainelAluno() {
   const [carregando, setCarregando] = useState(true);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
   const [modoTimeline, setModoTimeline] = useState<'vertical' | 'horizontal'>('vertical');
+  const [confirmar, setConfirmar] = useState<null | 'cancelar'>(null);
+  const [processandoAcao, setProcessandoAcao] = useState(false);
+  const [erroAcao, setErroAcao] = useState('');
+  const [recusaFechada, setRecusaFechada] = useState(false);
 
   function carregar() {
     setCarregando(true);
@@ -26,32 +37,52 @@ export function PainelAluno() {
   }
   useEffect(carregar, []);
 
-  async function corrigirEReenviar() {
-    if (!window.confirm('Isso descarta esta solicitação recusada e abre uma nova. Continuar?')) return;
+  async function cancelar() {
+    setErroAcao('');
+    setProcessandoAcao(true);
     try {
       await apiDelete(`/tccs/${tcc.id}`);
-      navegar('/aluno/abrir');
+      setConfirmar(null);
+      setProcessandoAcao(false);
+      setTcc(null);
     } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível reenviar.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível cancelar.');
+      setProcessandoAcao(false);
     }
   }
 
-  async function cancelar() {
-    if (!window.confirm('Cancelar a solicitação de abertura do TCC?')) return;
-    try {
-      await apiDelete(`/tccs/${tcc.id}`);
-      setTcc(null);
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível cancelar.');
-    }
+  function abrirCancelar() {
+    setErroAcao('');
+    setProcessandoAcao(false);
+    setConfirmar('cancelar');
   }
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
-  if (!tcc) {
+  const solic = tcc?.solicitacoes?.[0];
+  // Solicitação recusada → trata como "sem TCC ativo": estado inicial + aviso vermelho no topo.
+  const recusada = !!tcc && tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'RECUSADA';
+
+  if (!tcc || recusada) {
     return (
       <>
         <h1>Meu TCC</h1>
+        {recusada && !recusaFechada && (
+          <div className="card-recusa bloco">
+            <button className="card-recusa-x" onClick={() => setRecusaFechada(true)} aria-label="Fechar">✕</button>
+            <div className="card-recusa-cabecalho">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 8v4M12 16h.01" />
+              </svg>
+              <h3>Solicitação recusada</h3>
+            </div>
+            <p className="card-recusa-texto">
+              Sua solicitação de orientação foi recusada pela coordenação{fmtData(solic?.respondidoEm) ? ` em ${fmtData(solic?.respondidoEm)}` : ''}.
+            </p>
+            {solic?.parecer && <div className="card-recusa-parecer">{solic.parecer}</div>}
+          </div>
+        )}
         <section className="cartao-secao bloco" style={{ textAlign: 'center' }}>
           <h2>Você ainda não iniciou seu TCC</h2>
           <p className="nota-vazio">
@@ -65,32 +96,12 @@ export function PainelAluno() {
     );
   }
 
-  const solic = tcc.solicitacoes?.[0];
   const idx = faseParaIndice(tcc.faseAtual);
 
   return (
     <>
       <h1>Meu TCC</h1>
       <p className="legenda">{tcc.titulo}</p>
-
-      {solic?.status === 'RECUSADA' && (
-        <div className="card-recusa bloco">
-          <div className="card-recusa-cabecalho">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10" />
-              <path d="M12 8v4M12 16h.01" />
-            </svg>
-            <h3>Solicitação recusada</h3>
-          </div>
-          <p className="card-recusa-texto">
-            Sua solicitação de orientação foi recusada pela coordenação. Corrija os documentos e reenvie.
-          </p>
-          {solic.parecer && <div className="card-recusa-parecer">{solic.parecer}</div>}
-          <div className="acoes" style={{ marginTop: 14, justifyContent: 'flex-start' }}>
-            <button className="botao" onClick={corrigirEReenviar}>Corrigir e reenviar</button>
-          </div>
-        </div>
-      )}
 
       {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
       {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
@@ -107,30 +118,10 @@ export function PainelAluno() {
             cancelá-la enquanto não for aprovada.
           </p>
           <div className="acoes" style={{ marginTop: 6, justifyContent: 'flex-start' }}>
-            <button className="botao botao-secundario" onClick={cancelar}>Cancelar solicitação</button>
+            <button className="botao botao-secundario" onClick={abrirCancelar}>Cancelar solicitação</button>
           </div>
         </div>
       )}
-
-      <section className="cartao-secao bloco">
-        <div className="cabecalho-secao">
-          <h2>Timeline de eventos</h2>
-          <div className="rel-abas" style={{ margin: 0 }}>
-            <button className={`rel-aba${modoTimeline === 'vertical' ? ' ativa' : ''}`} onClick={() => setModoTimeline('vertical')}>Vertical</button>
-            <button className={`rel-aba${modoTimeline === 'horizontal' ? ' ativa' : ''}`} onClick={() => setModoTimeline('horizontal')}>Horizontal</button>
-          </div>
-        </div>
-        {modoTimeline === 'vertical' ? (
-          <TimelineVerticalDetalhada tcc={tcc} />
-        ) : idx === null ? (
-          <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
-        ) : (
-          <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} chips={chipsTrilha(tcc)} notas={notasTrilhaTcc(tcc, false)} />
-        )}
-        <p className="nota-vazio" style={{ marginTop: 14 }}>
-          Etapa atual: <strong>{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</strong>
-        </p>
-      </section>
 
       <section className="cartao-secao bloco">
         <h2>Dados</h2>
@@ -167,13 +158,33 @@ export function PainelAluno() {
           <ul className="lista-docs">
             {tcc.documentos.map((d: any) => (
               <li key={d.id}>
-                {d.nomeArquivo} <span className="muted">({d.tipo})</span>
+                {d.nomeArquivo} <span className="muted">({ROTULO_TIPO_DOC[d.tipo] ?? d.tipo})</span>
               </li>
             ))}
           </ul>
         ) : (
           <p className="nota-vazio">Nenhum documento enviado.</p>
         )}
+      </section>
+
+      <section className="cartao-secao bloco">
+        <div className="cabecalho-secao">
+          <h2>Timeline de eventos</h2>
+          <div className="rel-abas" style={{ margin: 0 }}>
+            <button className={`rel-aba${modoTimeline === 'vertical' ? ' ativa' : ''}`} onClick={() => setModoTimeline('vertical')}>Vertical</button>
+            <button className={`rel-aba${modoTimeline === 'horizontal' ? ' ativa' : ''}`} onClick={() => setModoTimeline('horizontal')}>Horizontal</button>
+          </div>
+        </div>
+        {modoTimeline === 'vertical' ? (
+          <TimelineVerticalDetalhada tcc={tcc} />
+        ) : idx === null ? (
+          <span className="badge-status status-bad">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span>
+        ) : (
+          <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} chips={chipsTrilha(tcc)} notas={notasTrilhaTcc(tcc, false)} />
+        )}
+        <p className="nota-vazio" style={{ marginTop: 14 }}>
+          Etapa atual: <strong>{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</strong>
+        </p>
       </section>
 
       {(tcc.faseAtual === 'DESENVOLVIMENTO' || ultimaMonografia(tcc.documentos)) && (
@@ -263,14 +274,32 @@ export function PainelAluno() {
           titulo={modalUpload === 'monografia' ? 'Enviar versão do TCC' : 'Enviar versão final'}
           subtitulo={
             modalUpload === 'monografia'
-              ? 'Envie a monografia (PDF) para avaliação do seu orientador.'
+              ? 'Envie a monografia em Word (.doc ou .docx) para avaliação do seu orientador.'
               : 'Envie a versão final corrigida (PDF) para validação do seu orientador.'
           }
           rotulo={modalUpload === 'monografia' ? 'Monografia' : 'Versão final'}
+          aceita={modalUpload === 'monografia' ? '.doc,.docx' : '.pdf'}
+          dica={modalUpload === 'monografia' ? 'Word (.doc ou .docx), até 10MB' : 'PDF, até 10MB'}
           aoFechar={() => setModalUpload(null)}
           aoEnviado={() => { setModalUpload(null); carregar(); }}
         />
       )}
+
+      {confirmar === 'cancelar' && (
+        <ModalConfirmacao
+          titulo="Cancelar solicitação"
+          mensagem="Deseja cancelar a solicitação de abertura do TCC? Os documentos enviados serão descartados e você poderá iniciar uma nova solicitação depois."
+          textoConfirmar="Cancelar solicitação"
+          textoCancelar="Voltar"
+          textoProcessando="Cancelando…"
+          perigo
+          processando={processandoAcao}
+          erro={erroAcao}
+          aoConfirmar={cancelar}
+          aoCancelar={() => setConfirmar(null)}
+        />
+      )}
+
     </>
   );
 }

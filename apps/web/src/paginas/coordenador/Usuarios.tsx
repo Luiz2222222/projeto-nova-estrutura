@@ -241,10 +241,19 @@ export function Usuarios() {
             </label>
           )}
           {aba === 'PROFESSOR' && (
-            <label className="linha-check" style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!form.disponivelParaOrientar} onChange={(e) => setForm({ ...form, disponivelParaOrientar: e.target.checked })} />
-              <span>Disponível para orientar (aparece na lista de orientadores)</span>
-            </label>
+            <div className="campo-switch">
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!!form.disponivelParaOrientar}
+                aria-label="Disponível para orientar"
+                className={`pref-switch${form.disponivelParaOrientar ? ' on' : ''}`}
+                onClick={() => setForm({ ...form, disponivelParaOrientar: !form.disponivelParaOrientar })}
+              >
+                <span className="pref-switch-bolinha" aria-hidden="true" />
+              </button>
+              <span className="campo-switch-label">Disponível para orientar</span>
+            </div>
           )}
           <div className="acoes">
             <button className="botao botao-secundario" disabled={salvando} onClick={() => setEditando(null)}>Cancelar</button>

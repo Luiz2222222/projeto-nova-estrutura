@@ -35,6 +35,63 @@ const GRUPOS: { num: number; label: string; subs: { i: number; label: string }[]
   ] },
 ];
 
+// ISO -> dd/MM/yyyy (split evita "voltar" um dia por fuso). null se vazio.
+const fmtDataBR = (iso?: string | null): string | null => {
+  if (!iso) return null;
+  const [a, m, d] = String(iso).split('T')[0].split('-');
+  return a && m && d ? `${d}/${m}/${a}` : null;
+};
+
+// Data REAL em que cada ato aconteceu, a partir dos registros do próprio TCC
+// (solicitação, documentos, banca). Atos sem timestamp próprio no sistema
+// (aprovação da monografia, continuidade, validações) ficam sem data — não inventa.
+function dataRealDoSub(tcc: any, i: number): string | null {
+  const docs: any[] = tcc?.documentos ?? [];
+  const ultimaDoc = (tipo: string) =>
+    docs
+      .filter((d) => d.tipo === tipo)
+      .sort((a, b) => b.versao - a.versao || +new Date(b.criadoEm) - +new Date(a.criadoEm))[0];
+  const sols: any[] = tcc?.solicitacoes ?? [];
+  const banca = (fase: string) => (tcc?.bancas ?? []).find((b: any) => b.fase === fase);
+  // Data da última avaliação enviada da banca (maior avaliadoEm entre os membros).
+  const avaliacaoBanca = (fase: string): string | null => {
+    const datas = (banca(fase)?.membros ?? []).map((m: any) => m.avaliadoEm).filter(Boolean);
+    if (!datas.length) return null;
+    return new Date(Math.max(...datas.map((d: string) => +new Date(d)))).toISOString();
+  };
+
+  switch (i) {
+    case 0: // Envio da solicitação (a mais antiga)
+      return fmtDataBR([...sols].sort((a, b) => +new Date(a.criadoEm) - +new Date(b.criadoEm))[0]?.criadoEm);
+    case 1: // Aceite da solicitação
+      return fmtDataBR(sols.find((s) => s.status === 'ACEITA')?.respondidoEm);
+    case 2: // Envio da monografia
+      return fmtDataBR(ultimaDoc('MONOGRAFIA')?.criadoEm);
+    case 3: // Monografia aprovada
+      return fmtDataBR(tcc?.monografiaAprovadaEm);
+    case 4: // Confirmação de continuidade
+      return fmtDataBR(tcc?.continuidadeAvaliadaEm);
+    case 5: // Formação da banca (Fase I)
+      return fmtDataBR(banca('FASE_1')?.criadoEm);
+    case 6: // Avaliação da banca (Fase I)
+      return fmtDataBR(avaliacaoBanca('FASE_1'));
+    case 7: // Validação da Fase I
+      return fmtDataBR(tcc?.fase1ValidadaEm);
+    case 8: // Avaliação da banca (Fase II)
+      return fmtDataBR(avaliacaoBanca('FASE_2'));
+    case 9: // Validação da Fase II
+      return fmtDataBR(tcc?.fase2ValidadaEm);
+    case 10: // Envio da versão final
+      return fmtDataBR(ultimaDoc('VERSAO_FINAL')?.criadoEm);
+    case 11: // Validação do orientador
+      return fmtDataBR(tcc?.versaoFinalValidadaEm);
+    case 12: // Concluído
+      return fmtDataBR(tcc?.concluidoEm);
+    default:
+      return null;
+  }
+}
+
 // Estado atual do TCC -> índice linear do subestado + se é um estado-problema.
 function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: boolean } {
   const f = tcc?.faseAtual;
@@ -83,9 +140,26 @@ export function TimelineVerticalDetalhada({ tcc }: { tcc: any }) {
 
   // Grupo que contém o subestado atual (expandido por padrão).
   const grupoAtual = GRUPOS.find((g) => g.subs.some((s) => s.i === indice)) ?? GRUPOS[0];
-  const [aberto, setAberto] = useState<number>(grupoAtual.num);
+  // Vários grupos podem ficar abertos ao mesmo tempo (não é accordion). O grupo
+  // atual já vem aberto; clicar abre/fecha apenas aquele grupo.
+  const [abertos, setAbertos] = useState<Set<number>>(() => new Set([grupoAtual.num]));
+  const alternarGrupo = (num: number) =>
+    setAbertos((prev) => {
+      const n = new Set(prev);
+      if (n.has(num)) n.delete(num);
+      else n.add(num);
+      return n;
+    });
 
   function statusSub(i: number): Status {
+    // Monografia aprovada e Confirmação de continuidade são trilhas PARALELAS na fase de
+    // Desenvolvimento: o status vem dos campos reais do TCC, não só do índice linear
+    // (a continuidade pode ser confirmada antes de a monografia ser aprovada, e vice-versa).
+    if (i === 3 && (tcc?.monografiaAprovada || tcc?.monografiaAprovadaEm)) return 'concluido';
+    if (i === 4) {
+      if (tcc?.faseAtual === 'DESCONTINUADO') return 'problema';
+      if (tcc?.continuidadeConfirmada || tcc?.continuidadeAvaliadaEm) return 'concluido';
+    }
     if (concluido) return 'concluido';
     if (problema && i === indice) return 'problema';
     if (i < indice) return 'concluido';
@@ -106,10 +180,10 @@ export function TimelineVerticalDetalhada({ tcc }: { tcc: any }) {
     <div className="tl-vert">
       {GRUPOS.map((g) => {
         const sg = statusGrupo(g);
-        const expandido = aberto === g.num;
+        const expandido = abertos.has(g.num);
         return (
           <div key={g.num} className="tl-grupo">
-            <button className="tl-cab" onClick={() => setAberto(expandido ? -1 : g.num)} aria-expanded={expandido}>
+            <button className="tl-cab" onClick={() => alternarGrupo(g.num)} aria-expanded={expandido}>
               <span className={`tl-num ${sg}`}>{sg === 'concluido' ? icoCheck : g.num}</span>
               <span className="tl-cab-texto">
                 <span className="tl-cab-label">{g.label}</span>
@@ -121,10 +195,18 @@ export function TimelineVerticalDetalhada({ tcc }: { tcc: any }) {
               <div className="tl-subs">
                 {g.subs.map((s) => {
                   const ss = statusSub(s.i);
+                  const dataTexto = dataRealDoSub(tcc, s.i);
+                  // Etapa já concluída/interrompida sem data confiável: deixa explícito
+                  // que não há registro (em vez de parecer um bug com data faltando).
+                  const semRegistro = !dataTexto && (ss === 'concluido' || ss === 'problema');
                   return (
                     <div key={s.i} className={`tl-sub${ss === 'atual' ? ' atual' : ''}`}>
                       <span className={`tl-dot ${ss}`} />
-                      <span>{s.label}</span>
+                      <span className="tl-sub-texto">
+                        {s.label}
+                        {dataTexto && <span className="tl-sub-data"> · {dataTexto}</span>}
+                        {semRegistro && <span className="tl-sub-data tl-sub-sem"> · sem registro</span>}
+                      </span>
                     </div>
                   );
                 })}

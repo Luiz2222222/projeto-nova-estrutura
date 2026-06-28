@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
-import { FASES } from '@tcc/compartilhado';
+import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
 function semestreAtual(): string {
@@ -165,6 +165,7 @@ export class TccsService {
     if (!TccsService.STATUS_DOC.includes(st)) {
       throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
     }
+    this.validarFormato(tipo, arquivo); // valida pelo tipo selecionado
     const arq = await this.gravarArquivo(arquivo);
     try {
       const versao = await this.proximaVersao(tccId, tipo);
@@ -187,6 +188,7 @@ export class TccsService {
     if (!TccsService.STATUS_DOC.includes(st)) {
       throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
     }
+    this.validarFormato(antigo.tipo, arquivo); // valida pelo tipo original do documento
     const arq = await this.gravarArquivo(arquivo);
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -212,8 +214,19 @@ export class TccsService {
 
     const jaTem = await this.prisma.tcc.findUnique({
       where: { alunoId_semestre: { alunoId, semestre } },
+      include: { solicitacoes: { orderBy: { criadoEm: 'desc' }, take: 1 } },
     });
-    if (jaTem) throw new BadRequestException({ mensagem: 'Você já tem um TCC neste semestre.' });
+    if (jaTem) {
+      const ult = jaTem.solicitacoes[0];
+      // Só dá pra recomeçar se o TCC anterior ainda está na abertura E foi recusado/cancelado.
+      const podeRecomecar = jaTem.faseAtual === 'INICIALIZACAO' && (ult?.status === 'RECUSADA' || ult?.status === 'CANCELADA');
+      if (!podeRecomecar) throw new BadRequestException({ mensagem: 'Você já tem um TCC neste semestre.' });
+      // Recomeço LIMPO: apaga o TCC recusado/cancelado (cascade em solicitações/documentos) e
+      // remove os arquivos físicos — a nova solicitação não reaproveita nada do anterior.
+      const docs = await this.prisma.documentoTcc.findMany({ where: { tccId: jaTem.id }, select: { caminho: true } });
+      await this.prisma.tcc.delete({ where: { id: jaTem.id } });
+      for (const d of docs) await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
+    }
 
     // Prazo de envio de documentos iniciais (calendário da coordenação). Se vencido e SEM
     // liberação individual para este aluno+semestre, bloqueia a abertura. hoje===prazo ainda
@@ -252,7 +265,7 @@ export class TccsService {
       include: { solicitacoes: true },
     });
 
-    await this.eventos.emitirParaUsuario('aluno_solicitacao_enviada', alunoId, 'Solicitação de TCC enviada', `Sua solicitação de abertura do TCC "${tcc.titulo}" foi enviada e está em análise pela coordenação.`);
+    // Não notifica o próprio aluno por ter enviado a própria solicitação (ele já vê na tela).
     await this.eventos.emitirParaCoordenadores('coord_nova_solicitacao', 'Nova solicitação de TCC', `Há uma nova solicitação de abertura aguardando análise: "${tcc.titulo}".`);
     await this.eventos.emitirParaUsuario('coorientador_indicado', tcc.coorientadorId, 'Você foi indicado como coorientador', `Você foi indicado como coorientador do TCC "${tcc.titulo}".`);
     return tcc;
@@ -266,6 +279,8 @@ export class TccsService {
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
         coorientador: { select: { id: true, nomeCompleto: true } },
         solicitacoes: { orderBy: { criadoEm: 'desc' } },
+        // Banca só para as DATAS da timeline (sem expor notas/avaliadores ao aluno).
+        bancas: { select: { fase: true, criadoEm: true, membros: { select: { avaliadoEm: true } } } },
         // O documento interno da banca (AVALIACAO_BANCA) não aparece para o aluno.
         documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } } },
       },
@@ -297,6 +312,7 @@ export class TccsService {
         coorientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
         documentos: { orderBy: { criadoEm: 'desc' } },
+        solicitacoes: { orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },
     });
@@ -307,7 +323,8 @@ export class TccsService {
       where: { faseAtual: 'INICIALIZACAO', solicitacoes: { some: { status: 'PENDENTE' } } },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
-        orientador: { select: { id: true, nomeCompleto: true } },
+        orientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
         solicitacoes: { orderBy: { criadoEm: 'desc' }, take: 1 },
         documentos: true,
       },
@@ -411,6 +428,14 @@ export class TccsService {
 
   // ---------- Fase de Desenvolvimento (monografia + continuidade) ----------
 
+  // Validação REAL do formato pelo tipo de documento (extensão do nome enviado).
+  // Vale para qualquer rota; é a fonte de verdade independente do filtro do multer.
+  private validarFormato(tipo: string, arquivo: any) {
+    if (!arquivoPermitidoParaTipo(tipo, arquivo?.originalname ?? '')) {
+      throw new BadRequestException({ mensagem: `Para este documento, envie ${formatoDoTipoDoc(tipo).rotulo}.` });
+    }
+  }
+
   // Grava um arquivo no disco e devolve {nomeArquivo, caminho, tamanho}. Storage local (dev).
   private async gravarArquivo(arquivo: any) {
     const dir = join(process.cwd(), 'uploads');
@@ -437,6 +462,7 @@ export class TccsService {
       throw new BadRequestException({ mensagem: 'Sua monografia já foi aprovada pelo orientador.' });
     }
     await this.prazos.exigirEtapaLiberada({ etapa: 'SUBMISSAO_MONOGRAFIA', semestre: tcc.semestre, tccId: tcc.id, alunoId: tcc.alunoId });
+    this.validarFormato('MONOGRAFIA', arquivo);
     const arq = await this.gravarArquivo(arquivo);
     try {
       const doc = await this.prisma.$transaction(async (tx) => {
@@ -468,6 +494,7 @@ export class TccsService {
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
         // Documento interno da banca não aparece como metadado para o orientador.
         documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } }, orderBy: { criadoEm: 'desc' } },
+        solicitacoes: { orderBy: { criadoEm: 'desc' } },
       },
       orderBy: { criadoEm: 'desc' },
     });
@@ -517,7 +544,7 @@ export class TccsService {
         this.prisma.documentoTcc.update({ where: { id: mono.id }, data: { status: 'APROVADO', parecer: null } }),
         this.prisma.tcc.update({
           where: { id: tccId },
-          data: { monografiaAprovada: true, ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
+          data: { monografiaAprovada: true, monografiaAprovadaEm: new Date(), ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
         }),
       ]);
       await this.eventos.emitirParaUsuario('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.`);
@@ -545,7 +572,7 @@ export class TccsService {
       const vaiPraBanca = tcc.monografiaAprovada;
       await this.prisma.tcc.update({
         where: { id: tccId },
-        data: { continuidadeConfirmada: true, ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
+        data: { continuidadeConfirmada: true, continuidadeAvaliadaEm: new Date(), ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
       });
       if (vaiPraBanca) {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`);
@@ -554,7 +581,7 @@ export class TccsService {
     } else {
       await this.prisma.tcc.update({
         where: { id: tccId },
-        data: { faseAtual: 'DESCONTINUADO', parecerContinuidade: parecer ?? null },
+        data: { faseAtual: 'DESCONTINUADO', parecerContinuidade: parecer ?? null, continuidadeAvaliadaEm: new Date() },
       });
       await this.eventos.emitirParaUsuario('aluno_continuidade_rejeitada', tcc.alunoId, 'TCC descontinuado', `O orientador não confirmou a continuidade do TCC "${tcc.titulo}".${parecer ? ' Motivo: ' + parecer : ''}`);
     }
@@ -573,6 +600,7 @@ export class TccsService {
     }
     await this.prazos.exigirEtapaLiberada({ etapa: 'VERSAO_FINAL', semestre: tcc.semestre, tccId: tcc.id, alunoId: tcc.alunoId });
     const reenvio = (await this.prisma.documentoTcc.count({ where: { tccId, tipo: 'VERSAO_FINAL' } })) > 0;
+    this.validarFormato('VERSAO_FINAL', arquivo);
     const arq = await this.gravarArquivo(arquivo);
     try {
       const doc = await this.prisma.$transaction(async (tx) => {
@@ -611,11 +639,12 @@ export class TccsService {
       orderBy: { versao: 'desc' },
     });
     if (decisao === 'CONCLUIR') {
+      const agora = new Date(); // mesma marca para "validação do orientador" e "concluído"
       await this.prisma.$transaction([
         ...(versao
           ? [this.prisma.documentoTcc.update({ where: { id: versao.id }, data: { status: 'APROVADO', parecer: null } })]
           : []),
-        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO' } }),
+        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO', versaoFinalValidadaEm: agora, concluidoEm: agora } }),
       ]);
       await this.eventos.emitirParaUsuario('aluno_tcc_concluido', tcc.alunoId, 'TCC concluído 🎉', `Parabéns! Seu TCC "${tcc.titulo}" foi aprovado e concluído.`);
       await this.eventos.emitirParaUsuario('orientador_tcc_concluido', tcc.orientadorId, 'TCC concluído', `O TCC "${tcc.titulo}" que você orientou foi concluído (aprovado).`);
@@ -646,6 +675,7 @@ export class TccsService {
     // Mesmo prazo da abertura (ENVIO_DOCUMENTOS) bloqueia subir PLANO/TERMO fora do prazo sem
     // liberação individual — fecha o caminho de chamar a API direto. Escopo aluno+semestre.
     await this.prazos.exigirEtapaLiberada({ etapa: 'ENVIO_DOCUMENTOS', semestre: tcc.semestre, tccId: tcc.id, alunoId: tcc.alunoId });
+    this.validarFormato(tipo, arquivo);
     const arq = await this.gravarArquivo(arquivo);
     try {
       return await this.prisma.documentoTcc.create({

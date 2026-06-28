@@ -4,6 +4,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, type ErroApi } from '../api';
 import { ETAPAS_PRAZO, ROTULO_ETAPA_PRAZO } from '@tcc/compartilhado';
+import { ModalConfirmacao } from './ModalConfirmacao';
 
 type EstadoEtapa = { liberado: boolean; vencido: boolean; bloqueado: boolean; prazo: string | null };
 
@@ -17,21 +18,29 @@ function badge(e?: EstadoEtapa) {
 
 export function LiberacoesPrazo({ tccId }: { tccId: string }) {
   const [estado, setEstado] = useState<Record<string, EstadoEtapa> | null>(null);
-  const [erro, setErro] = useState('');
   const [ocupado, setOcupado] = useState<string | null>(null);
+  const [confirmar, setConfirmar] = useState<{ etapa: string; liberado: boolean } | null>(null);
+  const [erroAcao, setErroAcao] = useState('');
 
   const carregar = () => apiGet(`/tccs/${tccId}/liberacoes`).then(setEstado).catch(() => setEstado(null));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { carregar(); }, [tccId]);
 
-  async function alternar(etapa: string) {
-    setErro('');
+  function pedir(etapa: string, liberado: boolean) {
+    setErroAcao('');
+    setConfirmar({ etapa, liberado });
+  }
+  async function executarAlternar() {
+    if (!confirmar) return;
+    const { etapa } = confirmar;
+    setErroAcao('');
     setOcupado(etapa);
     try {
       await apiPost(`/tccs/${tccId}/liberacoes/${etapa}`, {});
       await carregar();
+      setConfirmar(null);
     } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível alterar a liberação.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível alterar a liberação.');
     } finally {
       setOcupado(null);
     }
@@ -44,7 +53,6 @@ export function LiberacoesPrazo({ tccId }: { tccId: string }) {
         Permite ou impede ações <strong>fora do prazo</strong> só para este TCC, sem mexer no calendário do semestre.
         Prazo vencido sem liberação bloqueia a ação; <em>hoje = prazo</em> ainda conta como dentro do prazo.
       </p>
-      {erro && <div className="erro-geral">{erro}</div>}
       {!estado ? (
         <p className="nota-vazio">Carregando…</p>
       ) : (
@@ -59,7 +67,7 @@ export function LiberacoesPrazo({ tccId }: { tccId: string }) {
                 <button
                   className={`botao ${e?.liberado ? 'botao-secundario' : ''}`}
                   disabled={ocupado === etapa}
-                  onClick={() => alternar(etapa)}
+                  onClick={() => pedir(etapa, !!e?.liberado)}
                 >
                   {ocupado === etapa ? '…' : e?.liberado ? 'Bloquear' : 'Liberar'}
                 </button>
@@ -67,6 +75,26 @@ export function LiberacoesPrazo({ tccId }: { tccId: string }) {
             );
           })}
         </div>
+      )}
+
+      {confirmar && (
+        <ModalConfirmacao
+          titulo={confirmar.liberado ? 'Bloquear etapa' : 'Liberar etapa'}
+          mensagem={
+            confirmar.liberado ? (
+              <>Deseja bloquear novamente <strong>{ROTULO_ETAPA_PRAZO[confirmar.etapa as keyof typeof ROTULO_ETAPA_PRAZO]}</strong> para este TCC? As ações fora do prazo voltam a ser impedidas.</>
+            ) : (
+              <>Deseja liberar <strong>{ROTULO_ETAPA_PRAZO[confirmar.etapa as keyof typeof ROTULO_ETAPA_PRAZO]}</strong> fora do prazo só para este TCC? A ação poderá ser feita mesmo com o prazo vencido.</>
+            )
+          }
+          textoConfirmar={confirmar.liberado ? 'Bloquear' : 'Liberar'}
+          textoProcessando={confirmar.liberado ? 'Bloqueando…' : 'Liberando…'}
+          perigo={confirmar.liberado}
+          processando={ocupado === confirmar.etapa}
+          erro={erroAcao}
+          aoConfirmar={executarAlternar}
+          aoCancelar={() => setConfirmar(null)}
+        />
       )}
     </section>
   );

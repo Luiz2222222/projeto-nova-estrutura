@@ -12,6 +12,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
@@ -72,8 +73,10 @@ export function DetalheOrientando() {
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [recusa, setRecusa] = useState<{ tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
+  const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal'>(null);
   const [parecer, setParecer] = useState('');
   const [erro, setErro] = useState('');
+  const [erroAcao, setErroAcao] = useState('');
   const [enviando, setEnviando] = useState(false);
 
   function carregar() {
@@ -84,20 +87,28 @@ export function DetalheOrientando() {
 
   const tcc = useMemo(() => tccs.find((t) => t.id === id), [tccs, id]);
 
-  async function acao(fn: () => Promise<unknown>) {
+  // Ações positivas diretas (confirmar continuidade / aprovar monografia / aprovar e
+  // concluir) passam por um modal de confirmação antes de executar.
+  function pedirConfirmacao(qual: 'continuidade' | 'monografia' | 'versaofinal') {
+    setErroAcao('');
+    setConfirmarAcao(qual);
+  }
+  async function executarAcao() {
+    if (!confirmarAcao || !tcc) return;
+    setErroAcao('');
     setEnviando(true);
     try {
-      await fn();
+      if (confirmarAcao === 'continuidade') await apiPost(`/tccs/${tcc.id}/continuidade`, { decisao: 'CONFIRMAR' });
+      else if (confirmarAcao === 'monografia') await apiPost(`/tccs/${tcc.id}/monografia/avaliar`, { decisao: 'APROVAR' });
+      else await apiPost(`/tccs/${tcc.id}/validar-versao-final`, { decisao: 'CONCLUIR' });
+      setConfirmarAcao(null);
       carregar();
     } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível concluir a ação.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível concluir a ação.');
     } finally {
       setEnviando(false);
     }
   }
-  const aprovarMono = (tccId: string) => acao(() => apiPost(`/tccs/${tccId}/monografia/avaliar`, { decisao: 'APROVAR' }));
-  const confirmarCont = (tccId: string) => acao(() => apiPost(`/tccs/${tccId}/continuidade`, { decisao: 'CONFIRMAR' }));
-  const concluirVF = (tccId: string) => acao(() => apiPost(`/tccs/${tccId}/validar-versao-final`, { decisao: 'CONCLUIR' }));
 
   async function confirmarRecusa() {
     if (!recusa || !tcc) return;
@@ -212,7 +223,7 @@ export function DetalheOrientando() {
               {blkCont && avisoPrazo('avaliação de continuidade')}
               <div className="acoes" style={{ justifyContent: 'flex-start' }}>
                 <button className="botao botao-secundario" disabled={enviando || blkCont} onClick={() => { setRecusa({ tipo: 'continuidade' }); setParecer(''); setErro(''); }}>Descontinuar</button>
-                <button className="botao" disabled={enviando || blkCont} onClick={() => confirmarCont(tcc.id)}>Confirmar continuidade</button>
+                <button className="botao" disabled={enviando || blkCont} onClick={() => pedirConfirmacao('continuidade')}>Confirmar continuidade</button>
               </div>
             </>
           )}
@@ -233,7 +244,7 @@ export function DetalheOrientando() {
               {blkVf && avisoPrazo('ajustes finais / versão final')}
               <div className="acoes" style={{ justifyContent: 'flex-start' }}>
                 <button className="botao botao-secundario" disabled={enviando || blkVf} onClick={() => { setRecusa({ tipo: 'versaofinal' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-                <button className="botao" disabled={enviando || blkVf} onClick={() => concluirVF(tcc.id)}>Aprovar e concluir</button>
+                <button className="botao" disabled={enviando || blkVf} onClick={() => pedirConfirmacao('versaofinal')}>Aprovar e concluir</button>
               </div>
             </>
           )}
@@ -262,7 +273,7 @@ export function DetalheOrientando() {
                 {blkMono && <div style={{ marginTop: 10 }}>{avisoPrazo('submissão da monografia')}</div>}
                 <div className="acoes" style={{ marginTop: 12, justifyContent: 'flex-start' }}>
                   <button className="botao botao-secundario" disabled={enviando || blkMono} onClick={() => { setRecusa({ tipo: 'monografia' }); setParecer(''); setErro(''); }}>Pedir ajustes</button>
-                  <button className="botao" disabled={enviando || blkMono} onClick={() => aprovarMono(tcc.id)}>Aprovar monografia</button>
+                  <button className="botao" disabled={enviando || blkMono} onClick={() => pedirConfirmacao('monografia')}>Aprovar monografia</button>
                 </div>
               </>
             )}
@@ -331,6 +342,45 @@ export function DetalheOrientando() {
           </Modal>
         );
       })()}
+
+      {confirmarAcao === 'continuidade' && (
+        <ModalConfirmacao
+          titulo="Confirmar continuidade"
+          mensagem="Deseja confirmar a continuidade deste TCC? O orientando segue para a próxima etapa do fluxo."
+          textoConfirmar="Confirmar continuidade"
+          textoProcessando="Confirmando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={executarAcao}
+          aoCancelar={() => setConfirmarAcao(null)}
+        />
+      )}
+
+      {confirmarAcao === 'monografia' && (
+        <ModalConfirmacao
+          titulo="Aprovar monografia"
+          mensagem="Deseja aprovar a monografia? O orientando avança no fluxo do TCC."
+          textoConfirmar="Aprovar monografia"
+          textoProcessando="Aprovando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={executarAcao}
+          aoCancelar={() => setConfirmarAcao(null)}
+        />
+      )}
+
+      {confirmarAcao === 'versaofinal' && (
+        <ModalConfirmacao
+          titulo="Aprovar versão final"
+          mensagem="Deseja aprovar a versão final e concluir o TCC? Essa ação encerra o trabalho como concluído."
+          textoConfirmar="Aprovar e concluir"
+          textoProcessando="Concluindo…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={executarAcao}
+          aoCancelar={() => setConfirmarAcao(null)}
+        />
+      )}
     </>
   );
 }

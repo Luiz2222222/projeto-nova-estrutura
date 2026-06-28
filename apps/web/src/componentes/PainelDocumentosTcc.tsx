@@ -4,6 +4,8 @@
 // Uploads aceitam só PDF e usam o padrão seguro de gravação do backend.
 import { useState } from 'react';
 import { apiPut, apiUpload, URL_API, type ErroApi } from '../api';
+import { formatoDoTipoDoc, arquivoPermitidoParaTipo } from '@tcc/compartilhado';
+import { ModalConfirmacao } from './ModalConfirmacao';
 
 const TIPOS = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
 const ROTULO_TIPO: Record<string, string> = {
@@ -84,17 +86,26 @@ function FormSubstituir({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => v
   const [status, setStatus] = useState(doc.status ?? 'PENDENTE');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
 
-  async function salvar() {
+  // Valida e abre a confirmação (troca de documento oficial não deve executar direto).
+  function pedirConfirmacao() {
     setErro('');
-    if (!arquivo) return setErro('Escolha o novo arquivo PDF.');
-    if (arquivo.type !== 'application/pdf') return setErro('Apenas arquivos PDF são aceitos.');
+    if (!arquivo) return setErro('Escolha o novo arquivo.');
+    if (!arquivoPermitidoParaTipo(doc.tipo, arquivo.name)) return setErro(`Para este documento, envie ${formatoDoTipoDoc(doc.tipo).rotulo}.`);
+    setConfirmando(true);
+  }
+
+  async function substituir() {
+    if (!arquivo) return;
+    setErro('');
     setSalvando(true);
     try {
       const form = new FormData();
       form.append('arquivo', arquivo);
       form.append('status', status);
       await apiUpload(`/tccs/documentos/${doc.id}/substituir`, form);
+      setConfirmando(false);
       aoSalvo();
       aoFechar();
     } catch (e) {
@@ -106,18 +117,32 @@ function FormSubstituir({ doc, aoSalvo, aoFechar }: { doc: any; aoSalvo: () => v
 
   return (
     <div className="doc-edit">
-      {erro && <div className="erro-geral">{erro}</div>}
+      {erro && !confirmando && <div className="erro-geral">{erro}</div>}
       <p className="legenda" style={{ marginTop: 0 }}>O arquivo atual vira <strong>SUBSTITUIDA</strong> e o novo passa a ser a versão mais recente de <strong>{ROTULO_TIPO[doc.tipo] ?? doc.tipo}</strong>.</p>
       <div className="grade-2">
-        <label className="campo"><span>Novo arquivo (PDF)</span><input type="file" accept="application/pdf" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
+        <label className="campo"><span>Novo arquivo ({formatoDoTipoDoc(doc.tipo).accept.replace(/,/g, ', ')})</span><input type="file" accept={formatoDoTipoDoc(doc.tipo).accept} onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
         <label className="campo"><span>Status do novo</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         </label>
       </div>
       <div className="acoes" style={{ justifyContent: 'flex-end' }}>
         <button className="botao botao-secundario" disabled={salvando} onClick={aoFechar}>Cancelar</button>
-        <button className="botao" disabled={salvando || !arquivo} onClick={salvar}>{salvando ? 'Enviando…' : 'Substituir arquivo'}</button>
+        <button className="botao" disabled={salvando || !arquivo} onClick={pedirConfirmacao}>{salvando ? 'Enviando…' : 'Substituir arquivo'}</button>
       </div>
+
+      {confirmando && (
+        <ModalConfirmacao
+          titulo="Substituir documento oficial"
+          mensagem={<>Isso substitui o arquivo oficial de <strong>{ROTULO_TIPO[doc.tipo] ?? doc.tipo}</strong>: a versão atual passa a ser <strong>SUBSTITUIDA</strong> e o novo arquivo vira a versão mais recente. Deseja continuar?</>}
+          textoConfirmar="Substituir arquivo"
+          textoProcessando="Enviando…"
+          perigo
+          processando={salvando}
+          erro={erro}
+          aoConfirmar={substituir}
+          aoCancelar={() => setConfirmando(false)}
+        />
+      )}
     </div>
   );
 }
@@ -133,8 +158,8 @@ function FormAdicionar({ tccId, aoSalvo, aoFechar }: { tccId: string; aoSalvo: (
 
   async function salvar() {
     setErro('');
-    if (!arquivo) return setErro('Escolha o arquivo PDF.');
-    if (arquivo.type !== 'application/pdf') return setErro('Apenas arquivos PDF são aceitos.');
+    if (!arquivo) return setErro('Escolha o arquivo.');
+    if (!arquivoPermitidoParaTipo(tipo, arquivo.name)) return setErro(`Para este tipo, envie ${formatoDoTipoDoc(tipo).rotulo}.`);
     setSalvando(true);
     try {
       const form = new FormData();
@@ -155,7 +180,7 @@ function FormAdicionar({ tccId, aoSalvo, aoFechar }: { tccId: string; aoSalvo: (
   return (
     <div className="doc-edit">
       {erro && <div className="erro-geral">{erro}</div>}
-      <p className="legenda" style={{ marginTop: 0 }}>A versão é automática (próxima daquele tipo no TCC). Só PDF.</p>
+      <p className="legenda" style={{ marginTop: 0 }}>A versão é automática (próxima daquele tipo no TCC). Formato: {formatoDoTipoDoc(tipo).rotulo}.</p>
       <div className="grade-2">
         <label className="campo"><span>Tipo</span>
           <select value={tipo} onChange={(e) => setTipo(e.target.value)}>{TIPOS.map((t) => <option key={t} value={t}>{ROTULO_TIPO[t] ?? t}</option>)}</select>
@@ -163,7 +188,7 @@ function FormAdicionar({ tccId, aoSalvo, aoFechar }: { tccId: string; aoSalvo: (
         <label className="campo"><span>Status inicial</span>
           <select value={status} onChange={(e) => setStatus(e.target.value)}>{STATUS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
         </label>
-        <label className="campo"><span>Arquivo (PDF)</span><input type="file" accept="application/pdf" onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
+        <label className="campo"><span>Arquivo ({formatoDoTipoDoc(tipo).accept.replace(/,/g, ', ')})</span><input type="file" accept={formatoDoTipoDoc(tipo).accept} onChange={(e) => setArquivo(e.target.files?.[0] ?? null)} /></label>
       </div>
       <label className="campo" style={{ marginTop: 10 }}><span>Parecer / devolutiva (opcional)</span><textarea rows={2} value={parecer} onChange={(e) => setParecer(e.target.value)} /></label>
       <div className="acoes" style={{ justifyContent: 'flex-end' }}>

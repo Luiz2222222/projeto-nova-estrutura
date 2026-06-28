@@ -16,7 +16,8 @@ import {
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { join } from 'path';
+import { extname, join } from 'path';
+import { FORMATOS_ARQUIVO } from '@tcc/compartilhado';
 import { TccsService } from './tccs.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
@@ -39,14 +40,19 @@ import {
   type DadosEditarDocumento,
 } from '@tcc/compartilhado';
 
-// Aceita só PDF nos uploads de documentos do TCC.
-const SO_PDF = {
-  limits: { fileSize: 10 * 1024 * 1024 },
-  fileFilter: (_req: any, file: any, cb: any) => {
-    if (file.mimetype === 'application/pdf') cb(null, true);
-    else cb(new BadRequestException({ mensagem: 'Apenas arquivos PDF são aceitos.' }), false);
-  },
-};
+// Filtro de upload por formato (valida pela extensão do nome enviado). Para rotas em
+// que o tipo é dinâmico (admin/substituição/banca) usamos o conjunto mais amplo aqui e
+// validamos o tipo exato no service.
+function filtroArquivo(formato: { exts: readonly string[]; rotulo: string }) {
+  return {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req: any, file: any, cb: any) => {
+      const ext = extname(file.originalname || '').toLowerCase();
+      if (formato.exts.includes(ext)) cb(null, true);
+      else cb(new BadRequestException({ mensagem: `Apenas arquivos ${formato.rotulo} são aceitos.` }), false);
+    },
+  };
+}
 
 type Req = { usuario: { sub: string; papel: string } };
 
@@ -95,10 +101,11 @@ export class TccsController {
     return this.tccs.cancelar(req.usuario.sub, id);
   }
 
+  // Documentos iniciais (Plano/Termo): só PDF.
   @Post('tccs/:id/documentos')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('ALUNO')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', filtroArquivo(FORMATOS_ARQUIVO.PDF)))
   upload(
     @Req() req: Req,
     @Param('id') id: string,
@@ -129,10 +136,11 @@ export class TccsController {
 
   // ---------- Fase de Desenvolvimento ----------
 
+  // Monografia (TCC textual do aluno): só Word (.doc, .docx).
   @Post('tccs/:id/monografia')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('ALUNO')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', filtroArquivo(FORMATOS_ARQUIVO.WORD)))
   enviarMonografia(@Req() req: Req, @Param('id') id: string, @UploadedFile() arquivo: any) {
     if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
     return this.tccs.enviarMonografia(req.usuario.sub, id, arquivo);
@@ -178,10 +186,11 @@ export class TccsController {
 
   // ---------- Conclusão ----------
 
+  // Versão final: só PDF.
   @Post('tccs/:id/versao-final')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('ALUNO')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', filtroArquivo(FORMATOS_ARQUIVO.PDF)))
   enviarVersaoFinal(@Req() req: Req, @Param('id') id: string, @UploadedFile() arquivo: any) {
     if (!arquivo) throw new BadRequestException({ mensagem: 'Arquivo obrigatório.' });
     return this.tccs.enviarVersaoFinal(req.usuario.sub, id, arquivo);
@@ -245,11 +254,12 @@ export class TccsController {
     return this.tccs.editarDocumento(docId, dados);
   }
 
-  // Coordenador adiciona administrativamente um novo documento ao TCC (upload PDF).
+  // Coordenador adiciona administrativamente um novo documento ao TCC. Filtro amplo
+  // (PDF/Word) aqui; o service valida pelo TIPO selecionado.
   @Post('tccs/:id/documentos/admin')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', filtroArquivo(FORMATOS_ARQUIVO.PDF_WORD)))
   adicionarDocumentoAdmin(
     @Param('id') id: string,
     @Body('tipo') tipo: string,
@@ -261,11 +271,12 @@ export class TccsController {
     return this.tccs.adicionarDocumentoAdmin(id, tipo, status, parecer, arquivo);
   }
 
-  // Coordenador substitui o arquivo de um documento existente (antigo → SUBSTITUIDA; cria nova versão).
+  // Coordenador substitui o arquivo de um documento existente (antigo → SUBSTITUIDA; cria
+  // nova versão). Filtro amplo aqui; o service valida pelo TIPO original do documento.
   @Post('tccs/documentos/:docId/substituir')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  @UseInterceptors(FileInterceptor('arquivo', SO_PDF))
+  @UseInterceptors(FileInterceptor('arquivo', filtroArquivo(FORMATOS_ARQUIVO.PDF_WORD)))
   substituirArquivoDocumento(
     @Param('docId') docId: string,
     @Body('status') status: string,

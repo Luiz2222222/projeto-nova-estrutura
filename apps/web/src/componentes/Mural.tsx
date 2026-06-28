@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, apiDelete, type ErroApi } from '../api';
 import { useAuth } from '../autenticacao/contexto';
 import { Modal } from './Modal';
+import { ModalConfirmacao } from './ModalConfirmacao';
 
 // Mural de avisos compartilhado por todos os perfis (espelha o projeto antigo).
 // podeGerenciar = coordenador: cria/edita/apaga avisos e vê os destinatários.
@@ -60,6 +61,15 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
+  // Confirmação de remoção (aviso ou comentário).
+  const [confirmarRemocao, setConfirmarRemocao] = useState<
+    | { tipo: 'aviso'; id: string }
+    | { tipo: 'comentario'; avisoId: string; comentarioId: string }
+    | null
+  >(null);
+  const [processandoRemocao, setProcessandoRemocao] = useState(false);
+  const [erroRemocao, setErroRemocao] = useState('');
+
   function carregar() {
     apiGet('/avisos')
       .then((a: any) => setAvisos(a ?? []))
@@ -111,13 +121,23 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
     }
   }
 
-  async function apagar(id: string) {
-    if (!window.confirm('Remover este aviso?')) return;
+  function pedirRemocao(alvo: NonNullable<typeof confirmarRemocao>) {
+    setErroRemocao('');
+    setConfirmarRemocao(alvo);
+  }
+  async function executarRemocao() {
+    if (!confirmarRemocao) return;
+    setErroRemocao('');
+    setProcessandoRemocao(true);
     try {
-      await apiDelete(`/avisos/${id}`);
+      if (confirmarRemocao.tipo === 'aviso') await apiDelete(`/avisos/${confirmarRemocao.id}`);
+      else await apiDelete(`/avisos/${confirmarRemocao.avisoId}/comentarios/${confirmarRemocao.comentarioId}`);
+      setConfirmarRemocao(null);
       carregar();
     } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível remover.');
+      setErroRemocao((e as ErroApi).mensagem || 'Não foi possível remover.');
+    } finally {
+      setProcessandoRemocao(false);
     }
   }
 
@@ -138,14 +158,6 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
       carregar();
     } catch (e) {
       window.alert((e as ErroApi).mensagem || 'Não foi possível comentar.');
-    }
-  }
-  async function apagarComentario(avisoId: string, comentarioId: string) {
-    try {
-      await apiDelete(`/avisos/${avisoId}/comentarios/${comentarioId}`);
-      carregar();
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível remover o comentário.');
     }
   }
 
@@ -200,7 +212,7 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
                   {podeGerenciar && (
                     <span className="aviso-acoes">
                       <button className="botao-icone" title="Editar" onClick={() => abrirEditar(a)}>{icoLapis}</button>
-                      <button className="botao-icone" title="Apagar" onClick={() => apagar(a.id)}>{icoLixeira}</button>
+                      <button className="botao-icone" title="Apagar" onClick={() => pedirRemocao({ tipo: 'aviso', id: a.id })}>{icoLixeira}</button>
                     </span>
                   )}
                 </div>
@@ -221,7 +233,7 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
                                 <span className="coment-nome">{c.autorNome}</span>
                                 <span className="coment-data">{fmt(c.criadoEm)}</span>
                                 {(c.autorId === usuario?.id || podeGerenciar) && (
-                                  <button className="coment-apagar" title="Apagar comentário" onClick={() => apagarComentario(a.id, c.id)}>{icoLixeira}</button>
+                                  <button className="coment-apagar" title="Apagar comentário" onClick={() => pedirRemocao({ tipo: 'comentario', avisoId: a.id, comentarioId: c.id })}>{icoLixeira}</button>
                                 )}
                               </div>
                               <p className="coment-texto">{c.texto}</p>
@@ -294,6 +306,24 @@ export function Mural({ podeGerenciar }: { podeGerenciar: boolean }) {
             <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : editando ? 'Salvar' : 'Publicar aviso'}</button>
           </div>
         </Modal>
+      )}
+
+      {confirmarRemocao && (
+        <ModalConfirmacao
+          titulo={confirmarRemocao.tipo === 'aviso' ? 'Remover aviso' : 'Remover comentário'}
+          mensagem={
+            confirmarRemocao.tipo === 'aviso'
+              ? 'Deseja remover este aviso do mural? Os comentários também serão apagados. Esta ação não pode ser desfeita.'
+              : 'Deseja remover este comentário? Esta ação não pode ser desfeita.'
+          }
+          textoConfirmar="Remover"
+          textoProcessando="Removendo…"
+          perigo
+          processando={processandoRemocao}
+          erro={erroRemocao}
+          aoConfirmar={executarRemocao}
+          aoCancelar={() => setConfirmarRemocao(null)}
+        />
       )}
     </>
   );

@@ -143,6 +143,15 @@ model Tcc {
   nf        Float?
   resultado String?
 
+  // Datas REAIS em que cada ato do fluxo aconteceu (preenchidas no momento da ação).
+  // Usadas pela timeline. Ficam null para registros antigos (não há data confiável).
+  monografiaAprovadaEm   DateTime?
+  continuidadeAvaliadaEm DateTime?
+  fase1ValidadaEm        DateTime?
+  fase2ValidadaEm        DateTime?
+  versaoFinalValidadaEm  DateTime?
+  concluidoEm            DateTime?
+
   aluno   Usuario @relation("TccAluno", fields: [alunoId], references: [id], onDelete: Cascade)
   alunoId String
 

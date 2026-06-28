@@ -21,6 +21,7 @@ import {
   colunaNota,
   pesosSomam10,
   ROTULO_FASE,
+  ROTULO_CURSO,
   CURSOS,
   TRATAMENTOS,
   AFILIACOES,
@@ -404,7 +405,7 @@ export class CoordenacaoService {
     add('ALUNO');
     add(`  Nome: ${tcc.aluno?.nomeCompleto ?? '—'}`);
     add(`  E-mail: ${tcc.aluno?.email ?? '—'}`);
-    add(`  Curso: ${tcc.aluno?.curso ?? '—'}`);
+    add(`  Curso: ${(ROTULO_CURSO as Record<string, string>)[tcc.aluno?.curso] ?? tcc.aluno?.curso ?? '—'}`);
     add('');
     add('ORIENTAÇÃO');
     add(`  Orientador: ${nomeTrat(tcc.orientador)}`);

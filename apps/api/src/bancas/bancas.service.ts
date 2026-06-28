@@ -16,6 +16,8 @@ import {
   colunaPeso,
   colunaNota,
   soma,
+  arquivoPermitidoParaTipo,
+  formatoDoTipoDoc,
 } from '@tcc/compartilhado';
 
 @Injectable()
@@ -62,6 +64,9 @@ export class BancasService {
     }
     if (!arquivo) {
       throw new BadRequestException({ mensagem: 'Envie o documento para avaliação da banca.' });
+    }
+    if (!arquivoPermitidoParaTipo('AVALIACAO_BANCA', arquivo.originalname ?? '')) {
+      throw new BadRequestException({ mensagem: `Para o documento da banca, envie ${formatoDoTipoDoc('AVALIACAO_BANCA').rotulo}.` });
     }
     const fase = 'FASE_1' as const;
     const qtd = 2;
@@ -476,7 +481,7 @@ export class BancasService {
       if (!aprovado) {
         await this.prisma.tcc.update({
           where: { id: tccId },
-          data: { nf1: media, faseAtual: 'REPROVADO_FASE_1', resultado: 'REPROVADO' },
+          data: { nf1: media, faseAtual: 'REPROVADO_FASE_1', resultado: 'REPROVADO', fase1ValidadaEm: new Date() },
         });
         await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi validada. Resultado: reprovado (NF1 ${media.toFixed(2)}).`);
         return { ok: true, fase, nf1: media, aprovado };
@@ -488,7 +493,7 @@ export class BancasService {
       await this.prisma.$transaction([
         this.prisma.tcc.update({
           where: { id: tccId },
-          data: { nf1: media, faseAtual: 'AVALIACAO_FASE_2', resultado: null },
+          data: { nf1: media, faseAtual: 'AVALIACAO_FASE_2', resultado: null, fase1ValidadaEm: new Date() },
         }),
         this.prisma.banca.create({
           data: { tccId, fase: 'FASE_2', membros: { create: membrosFase2.map((id) => ({ avaliadorId: id })) } },
@@ -518,6 +523,7 @@ export class BancasService {
         nf,
         faseAtual: aprovado ? 'AGUARDANDO_AJUSTES_FINAIS' : 'REPROVADO_FASE_2',
         resultado: aprovado ? null : 'REPROVADO',
+        fase2ValidadaEm: new Date(),
       },
     });
     await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada (NF ${nf.toFixed(2)}). ${aprovado ? 'Aprovado na defesa!' : 'Resultado: reprovado.'}`);

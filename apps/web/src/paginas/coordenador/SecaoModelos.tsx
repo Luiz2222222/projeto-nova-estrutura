@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiDelete, apiPut, apiUpload, URL_API, type ErroApi } from '../../api';
 import { CampoArquivo } from '../../componentes/CampoArquivo';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 
 function formatarTamanho(bytes?: number): string {
   if (!bytes) return '';
@@ -32,6 +33,10 @@ export function SecaoModelos() {
 
   const [editando, setEditando] = useState<string | null>(null);
   const [editVisiveis, setEditVisiveis] = useState<string[]>([]);
+
+  const [removendo, setRemovendo] = useState<any | null>(null);
+  const [processandoRem, setProcessandoRem] = useState(false);
+  const [erroRem, setErroRem] = useState('');
 
   function carregar() {
     apiGet('/documentos-referencia').then(setDocs).catch(() => setDocs([]));
@@ -74,13 +79,18 @@ export function SecaoModelos() {
     }
   }
 
-  async function remover(id: string) {
-    if (!window.confirm('Remover este documento?')) return;
+  async function confirmarRemover() {
+    if (!removendo) return;
+    setErroRem('');
+    setProcessandoRem(true);
     try {
-      await apiDelete(`/documentos-referencia/${id}`);
+      await apiDelete(`/documentos-referencia/${removendo.id}`);
+      setRemovendo(null);
       carregar();
     } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível remover.');
+      setErroRem((e as ErroApi).mensagem || 'Não foi possível remover.');
+    } finally {
+      setProcessandoRem(false);
     }
   }
 
@@ -158,13 +168,27 @@ export function SecaoModelos() {
                     <a className="botao-icone" title="Visualizar" href={`${URL_API}/documentos-referencia/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
                     <a className="botao-icone" title="Baixar" href={`${URL_API}/documentos-referencia/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
                     <button className="botao-icone" title="Editar perfis" onClick={() => { setEditando(d.id); setEditVisiveis(d.visivelPara?.split(',') ?? []); }}>{icoLapis}</button>
-                    <button className="botao-icone" title="Remover" onClick={() => remover(d.id)}>{icoLixeira}</button>
+                    <button className="botao-icone" title="Remover" onClick={() => { setErroRem(''); setRemovendo(d); }}>{icoLixeira}</button>
                   </>
                 )}
               </span>
             </li>
           ))}
         </ul>
+      )}
+
+      {removendo && (
+        <ModalConfirmacao
+          titulo="Remover documento de referência"
+          mensagem={<>Deseja remover <strong>{removendo.titulo}</strong>? Os perfis que tinham acesso deixarão de ver este documento. Esta ação não pode ser desfeita.</>}
+          textoConfirmar="Remover"
+          textoProcessando="Removendo…"
+          perigo
+          processando={processandoRem}
+          erro={erroRem}
+          aoConfirmar={confirmarRemover}
+          aoCancelar={() => setRemovendo(null)}
+        />
       )}
     </section>
   );
