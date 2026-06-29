@@ -19,6 +19,7 @@ const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR'); // dd/mm/aaaa, sem horário
 };
+const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 // Coorientador: interno (relação) ou externo (campos soltos). null se não houver.
 const coorientadorDe = (t: any) => {
   if (t.coorientador) return { nome: t.coorientador.nomeCompleto, titulacao: t.coorientador.tratamento, afiliacao: t.coorientador.afiliacao, lattes: null as string | null };
@@ -141,22 +142,10 @@ export function PainelCoordenador() {
                     <p><strong>Título do TCC:</strong> {t.titulo}</p>
                   </div>
                   <div className="solic-bloco">
-                    <p><strong>Orientador:</strong> {t.orientador?.nomeCompleto ?? '—'}</p>
-                    {(t.orientador?.tratamento || t.orientador?.afiliacao) && (
-                      <p className="solic-sub">
-                        {t.orientador?.tratamento && <><strong>Titulação:</strong> {t.orientador.tratamento}{t.orientador?.afiliacao ? ' · ' : ''}</>}
-                        {t.orientador?.afiliacao && <><strong>Afiliação:</strong> {t.orientador.afiliacao}</>}
-                      </p>
-                    )}
+                    <p><strong>Orientador:</strong> {nomeComTrat(t.orientador)}{t.orientador?.afiliacao ? ` (${t.orientador.afiliacao})` : ''}</p>
                     {co ? (
                       <>
-                        <p style={{ marginTop: 6 }}><strong>Co-orientador:</strong> {co.nome}</p>
-                        {(co.titulacao || co.afiliacao) && (
-                          <p className="solic-sub">
-                            {co.titulacao && <><strong>Titulação:</strong> {co.titulacao}{co.afiliacao ? ' · ' : ''}</>}
-                            {co.afiliacao && <><strong>Afiliação:</strong> {co.afiliacao}</>}
-                          </p>
-                        )}
+                        <p style={{ marginTop: 6 }}><strong>Co-orientador:</strong> {co.titulacao ? co.titulacao + ' ' : ''}{co.nome}{co.afiliacao ? ` (${co.afiliacao})` : ''}</p>
                         {co.lattes && (
                           <p className="solic-sub"><strong>Lattes:</strong> <a href={co.lattes} target="_blank" rel="noreferrer">{co.lattes}</a></p>
                         )}

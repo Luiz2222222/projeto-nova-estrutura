@@ -322,14 +322,12 @@ export function AbrirTcc() {
             </div>
             <div className="resumo-linha">
               <span className="resumo-rot">Orientador</span>
-              <span className="resumo-val">{nomeComTrat(orientadorSel) || '—'}</span>
-              {orientadorSel?.afiliacao && <span className="resumo-sub">{orientadorSel.afiliacao}</span>}
+              <span className="resumo-val">{nomeComTrat(orientadorSel) || '—'}{orientadorSel?.afiliacao ? ` (${orientadorSel.afiliacao})` : ''}</span>
             </div>
             {temCo && coNomeResumo && (
               <div className="resumo-linha">
                 <span className="resumo-rot">Co-orientador</span>
-                <span className="resumo-val">{coCadastrado ? nomeComTrat(coSel) : `${coTit ? coTit + ' ' : ''}${coNome}`}</span>
-                {(coCadastrado ? coSel?.afiliacao : coAfil) && <span className="resumo-sub">{coCadastrado ? coSel?.afiliacao : coAfil}</span>}
+                <span className="resumo-val">{(coCadastrado ? nomeComTrat(coSel) : `${coTit ? coTit + ' ' : ''}${coNome}`)}{(coCadastrado ? coSel?.afiliacao : coAfil) ? ` (${coCadastrado ? coSel?.afiliacao : coAfil})` : ''}</span>
                 {!coCadastrado && coLattes && (
                   <span className="resumo-sub"><a href={coLattes} target="_blank" rel="noreferrer">{coLattes}</a></span>
                 )}
