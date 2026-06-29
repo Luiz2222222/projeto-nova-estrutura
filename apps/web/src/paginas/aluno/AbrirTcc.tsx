@@ -27,6 +27,7 @@ export function AbrirTcc() {
   const [coorientadorId, setCoorientadorId] = useState('');
   const [coNome, setCoNome] = useState('');
   const [coTit, setCoTit] = useState('');
+  const [coTitLivre, setCoTitLivre] = useState(''); // titulação digitada quando coTit === 'Outros'
   const [coAfil, setCoAfil] = useState('');
   const [coLattes, setCoLattes] = useState('');
   const [plano, setPlano] = useState<File | null>(null);
@@ -55,7 +56,8 @@ export function AbrirTcc() {
       if (coCadastrado) dados.coorientadorId = coorientadorId || undefined;
       else {
         dados.coorientadorNome = coNome || undefined;
-        dados.coorientadorTitulacao = coTit || undefined;
+        // "Outros" envia o texto digitado; senão envia o valor do select.
+        dados.coorientadorTitulacao = (coTit === 'Outros' ? coTitLivre.trim() : coTit) || undefined;
         dados.coorientadorAfiliacao = coAfil || undefined;
         dados.coorientadorLattes = coLattes || undefined;
       }
@@ -70,6 +72,8 @@ export function AbrirTcc() {
     if (!r.success) for (const i of r.error.issues) m[i.path.join('.')] = i.message;
     if (temCo && coCadastrado && coorientadorId && coorientadorId === orientadorId)
       m.coorientadorId = 'O coorientador deve ser diferente do orientador.';
+    if (temCo && !coCadastrado && coTit === 'Outros' && !coTitLivre.trim())
+      m.coorientadorTitulacao = 'Informe a titulação.';
     if (!plano) m.plano = 'Anexe o Plano de Desenvolvimento (PDF).';
     if (!termo) m.termo = 'Anexe o Termo de Aceite (PDF).';
     if (plano && plano.size > 10 * 1024 * 1024) m.plano = 'Máximo 10MB.';
@@ -127,6 +131,7 @@ export function AbrirTcc() {
   const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '');
   const orientadorSel = professores.find((p) => p.id === orientadorId);
   const coSel = temCo && coCadastrado ? coorientadores.find((c) => c.id === coorientadorId) : null;
+  const coTitEfetiva = coTit === 'Outros' ? coTitLivre.trim() : coTit; // titulação externa exibida no resumo
   const coNomeResumo = temCo
     ? coCadastrado
       ? coSel?.nomeCompleto
@@ -253,7 +258,11 @@ export function AbrirTcc() {
                           {t}
                         </option>
                       ))}
+                      <option value="Outros">Outros</option>
                     </select>
+                    {coTit === 'Outros' && (
+                      <input value={coTitLivre} onChange={(e) => setCoTitLivre(e.target.value)} placeholder="Digite a titulação" />
+                    )}
                     {erros.coorientadorTitulacao && <small className="erro">{erros.coorientadorTitulacao}</small>}
                   </label>
                   <label className="campo">
@@ -327,7 +336,7 @@ export function AbrirTcc() {
             {temCo && coNomeResumo && (
               <div className="resumo-linha">
                 <span className="resumo-rot">Co-orientador</span>
-                <span className="resumo-val">{(coCadastrado ? nomeComTrat(coSel) : `${coTit ? coTit + ' ' : ''}${coNome}`)}{(coCadastrado ? coSel?.afiliacao : coAfil) ? ` (${coCadastrado ? coSel?.afiliacao : coAfil})` : ''}</span>
+                <span className="resumo-val">{(coCadastrado ? nomeComTrat(coSel) : `${coTitEfetiva ? coTitEfetiva + ' ' : ''}${coNome}`)}{(coCadastrado ? coSel?.afiliacao : coAfil) ? ` (${coCadastrado ? coSel?.afiliacao : coAfil})` : ''}</span>
                 {!coCadastrado && coLattes && (
                   <span className="resumo-sub"><a href={coLattes} target="_blank" rel="noreferrer">{coLattes}</a></span>
                 )}
