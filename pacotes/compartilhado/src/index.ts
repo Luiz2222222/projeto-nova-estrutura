@@ -390,7 +390,6 @@ export interface EventoEmail {
 
 export const EVENTOS_EMAIL: EventoEmail[] = [
   // Aluno
-  { chave: 'aluno_solicitacao_enviada', rotulo: 'Solicitação enviada', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_solicitacao_aprovada', rotulo: 'Solicitação aprovada', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_solicitacao_recusada', rotulo: 'Solicitação recusada', grupo: 'Aluno', papeis: ['ALUNO'] },
   { chave: 'aluno_monografia_rejeitada', rotulo: 'Monografia rejeitada pelo orientador', grupo: 'Aluno', papeis: ['ALUNO'] },

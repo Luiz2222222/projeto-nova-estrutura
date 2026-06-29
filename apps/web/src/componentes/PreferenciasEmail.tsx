@@ -5,11 +5,11 @@ import { EVENTOS_EMAIL, type Papel } from '@tcc/compartilhado';
 
 // Descrição curta por evento (só apresentação — não muda evento/lógica/backend).
 const DESC_EVENTO: Record<string, string> = {
-  aluno_solicitacao_enviada: 'Confirmação de que sua solicitação de orientação foi enviada.',
   aluno_solicitacao_aprovada: 'Quando o coordenador aprovar a abertura do seu TCC.',
   aluno_solicitacao_recusada: 'Quando a abertura do seu TCC for recusada.',
   aluno_monografia_rejeitada: 'Quando o orientador pedir ajustes na sua monografia.',
   aluno_monografia_aprovada: 'Quando o orientador aprovar a sua monografia.',
+  aluno_continuidade_confirmada: 'Quando o orientador confirmar a continuidade do seu TCC.',
   aluno_continuidade_rejeitada: 'Quando o orientador não confirmar a continuidade do TCC.',
   aluno_banca_fase1_formada: 'Quando a banca da Fase I do seu TCC for formada.',
   aluno_resultado_fase1: 'Quando o resultado da Fase I for validado.',
