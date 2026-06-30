@@ -106,7 +106,7 @@ function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: 
   }
   const mapa: Record<string, number> = {
     FORMACAO_BANCA_FASE_1: 5, AVALIACAO_FASE_1: 6, VALIDACAO_FASE_1: 7,
-    AVALIACAO_FASE_2: 8, VALIDACAO_FASE_2: 9,
+    AGENDAMENTO_DEFESA_FASE_2: 8, AVALIACAO_FASE_2: 8, VALIDACAO_FASE_2: 9,
     AGUARDANDO_AJUSTES_FINAIS: 10, VALIDACAO_VERSAO_FINAL: 11,
   };
   if (f in mapa) return { indice: mapa[f], problema: false, concluido: false };

@@ -85,25 +85,32 @@ export function DashboardAvaliador() {
 
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
 
-  const stats = useMemo(() => {
-    const total = bancas.length;
-    const pendentes = bancas.filter(bancaPendente).length;
-    const avaliadas = bancas.filter((m) => m.nota != null).length;
-    return { total, pendentes, avaliadas, coorientacoes: coorientacoes.length };
-  }, [bancas, coorientacoes]);
+  // Não conta como "participação em banca" o TCC onde o usuário é orientador/coorientador
+  // (banca da Fase II) — essa avaliação fica na página interna do orientando.
+  const bancasReais = useMemo(
+    () => bancas.filter((m: any) => m.banca?.tcc?.orientadorId !== usuario?.id && m.banca?.tcc?.coorientadorId !== usuario?.id),
+    [bancas, usuario?.id],
+  );
 
-  // Fila de ações pendentes: bancas que aguardam minha avaliação (item a item).
+  const stats = useMemo(() => {
+    const total = bancasReais.length;
+    const pendentes = bancasReais.filter(bancaPendente).length;
+    const avaliadas = bancasReais.filter((m) => m.nota != null).length;
+    return { total, pendentes, avaliadas, coorientacoes: coorientacoes.length };
+  }, [bancasReais, coorientacoes]);
+
+  // Fila de ações pendentes: bancas que aguardam minha avaliação (link direto p/ a avaliação).
   const acoes = useMemo(() => {
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
-    bancas.forEach((m: any) => {
+    bancasReais.forEach((m: any) => {
       if (bancaPendente(m)) {
         const t = m.banca?.tcc;
         const ehF2 = m.banca?.fase === 'FASE_2';
-        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: '/bancas' });
+        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
       }
     });
     return items;
-  }, [bancas]);
+  }, [bancasReais]);
 
   // "Coorientações por etapa" (espelha o "Co-orientandos por grupo" do antigo).
   const etapas = useMemo(() => {

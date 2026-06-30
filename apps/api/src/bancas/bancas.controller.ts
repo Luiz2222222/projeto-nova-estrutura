@@ -109,6 +109,14 @@ export class BancasController {
     return this.bancas.validar(id);
   }
 
+  // Orientador libera/agenda a defesa da Fase II (AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2).
+  @Post('tccs/:id/liberar-defesa')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR')
+  liberarDefesa(@Req() req: Req, @Param('id') id: string) {
+    return this.bancas.liberarDefesa(req.usuario.sub, id);
+  }
+
   // ----- Edição administrativa da banca (só coordenador) -----
 
   // Pesos do calendário do semestre do TCC (para a tela de banca do coordenador).

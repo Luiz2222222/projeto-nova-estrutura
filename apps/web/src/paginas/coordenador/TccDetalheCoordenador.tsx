@@ -6,7 +6,7 @@
 //  - a banca da Fase II é o orientador + os 2 avaliadores da Fase I (já composta);
 //  - a versão final é validada pelo ORIENTADOR, não pelo coordenador.
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
@@ -96,6 +96,18 @@ export function TccDetalheCoordenador() {
   useEffect(() => {
     if (tccId) apiGet(`/tccs/${tccId}/banca/pesos`).then(setPesos).catch(() => setPesos(null));
   }, [tccId]);
+
+  // Deep link: rola até a seção de validação (#validacao) e a destaca por alguns segundos.
+  const location = useLocation();
+  useEffect(() => {
+    if (!tcc || !location.hash) return;
+    const el = document.getElementById(location.hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('secao-destaque');
+    const t = setTimeout(() => el.classList.remove('secao-destaque'), 2400);
+    return () => clearTimeout(t);
+  }, [tcc, location.hash]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 
@@ -297,7 +309,7 @@ export function TccDetalheCoordenador() {
         const { membros, media } = blocoNotas(ehF2 ? 'FASE_2' : 'FASE_1');
         const nfFinal = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media) : null;
         return (
-          <section className="cartao-secao bloco secao-acao">
+          <section id="validacao" className="cartao-secao bloco secao-acao">
             <h2>{icoBanca} {ehF2 ? 'Validar Fase II' : 'Validar Fase I'}</h2>
             {ehF2 && <p className="legenda">Banca da Fase II: orientador + os 2 avaliadores da Fase I.</p>}
             <dl className="dados">

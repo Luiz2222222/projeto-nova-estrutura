@@ -59,6 +59,9 @@ export function MinhasBancas() {
     itens.forEach((m) => {
       const tcc = m.banca?.tcc;
       if (!tcc) return;
+      // Não lista o TCC onde o próprio usuário é orientador/coorientador (banca da Fase II):
+      // essa avaliação aparece na página interna do orientando, não aqui.
+      if (tcc.orientadorId === usuario?.id || tcc.coorientadorId === usuario?.id) return;
       const g = map.get(tcc.id) ?? { tcc };
       if (m.banca.fase === 'FASE_1') g.fase1 = m;
       else g.fase2 = m;
@@ -66,7 +69,7 @@ export function MinhasBancas() {
       map.set(tcc.id, g);
     });
     return [...map.values()];
-  }, [itens]);
+  }, [itens, usuario?.id]);
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
 

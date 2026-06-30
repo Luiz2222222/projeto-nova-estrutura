@@ -75,6 +75,7 @@ function faseMacroSub(tcc: any): { macro: string; sub: string } {
         : 'Aguardando monografia e continuidade';
       return { macro: 'Desenvolvimento', sub };
     }
+    case 'AGENDAMENTO_DEFESA_FASE_2': return { macro: 'Fase II', sub: 'Aguardando agendamento da defesa' };
     case 'FORMACAO_BANCA_FASE_1': return { macro: 'Fase I', sub: 'Formação da banca' };
     case 'AVALIACAO_FASE_1': return { macro: 'Fase I', sub: 'Avaliação da banca' };
     case 'VALIDACAO_FASE_1': return { macro: 'Fase I', sub: 'Validação da Fase I' };

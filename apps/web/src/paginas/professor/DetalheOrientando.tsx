@@ -9,7 +9,7 @@
 //  - a versão final pós-Fase II é validada pelo ORIENTADOR (aqui), não pelo coordenador;
 //  - sem nenhuma etapa de análise final do coordenador.
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
@@ -73,7 +73,7 @@ export function DetalheOrientando() {
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [recusa, setRecusa] = useState<{ tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
-  const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal'>(null);
+  const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal' | 'liberardefesa'>(null);
   const [parecer, setParecer] = useState('');
   const [erro, setErro] = useState('');
   const [erroAcao, setErroAcao] = useState('');
@@ -87,9 +87,21 @@ export function DetalheOrientando() {
 
   const tcc = useMemo(() => tccs.find((t) => t.id === id), [tccs, id]);
 
+  // Deep link: rola até a seção (#acao / #acao-fase2) e destaca por alguns segundos.
+  const location = useLocation();
+  useEffect(() => {
+    if (carregando || !tcc || !location.hash) return;
+    const el = document.getElementById(location.hash.slice(1));
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el.classList.add('secao-destaque');
+    const t = setTimeout(() => el.classList.remove('secao-destaque'), 2400);
+    return () => clearTimeout(t);
+  }, [carregando, tcc, location.hash]);
+
   // Ações positivas diretas (confirmar continuidade / aprovar monografia / aprovar e
   // concluir) passam por um modal de confirmação antes de executar.
-  function pedirConfirmacao(qual: 'continuidade' | 'monografia' | 'versaofinal') {
+  function pedirConfirmacao(qual: 'continuidade' | 'monografia' | 'versaofinal' | 'liberardefesa') {
     setErroAcao('');
     setConfirmarAcao(qual);
   }
@@ -100,6 +112,7 @@ export function DetalheOrientando() {
     try {
       if (confirmarAcao === 'continuidade') await apiPost(`/tccs/${tcc.id}/continuidade`, { decisao: 'CONFIRMAR' });
       else if (confirmarAcao === 'monografia') await apiPost(`/tccs/${tcc.id}/monografia/avaliar`, { decisao: 'APROVAR' });
+      else if (confirmarAcao === 'liberardefesa') await apiPost(`/tccs/${tcc.id}/liberar-defesa`, {});
       else await apiPost(`/tccs/${tcc.id}/validar-versao-final`, { decisao: 'CONCLUIR' });
       setConfirmarAcao(null);
       carregar();
@@ -150,6 +163,12 @@ export function DetalheOrientando() {
   const blkCont = !!tcc.bloqueios?.AVALIACAO_CONTINUIDADE;
   const blkMono = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
   const blkVf = !!tcc.bloqueios?.VERSAO_FINAL;
+  // Fase II: o orientador também é membro da banca. O agendamento da defesa e a avaliação
+  // do orientador acontecem AQUI (não em "Participações em bancas").
+  const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
+  const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
+  const podeAgendarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2';
+  const podeAvaliarFase2 = (fase === 'AVALIACAO_FASE_2' || fase === 'VALIDACAO_FASE_2') && !!meuMembroF2;
   const avisoPrazo = (rot: string) => <div className="aviso-prazo">⏰ O prazo de {rot} venceu. Peça à coordenação uma liberação individual deste TCC.</div>;
   const coorient = tcc.coorientador
     ? `${nomeComTrat(tcc.coorientador)}${tcc.coorientador.afiliacao ? ' · ' + tcc.coorientador.afiliacao : ''}`
@@ -203,6 +222,8 @@ export function DetalheOrientando() {
           </section>
         )}
       </div>
+
+      <div id="acao" />
 
       {/* Ação: confirmação de continuidade (em desenvolvimento) */}
       {emDesenvolvimento && (
@@ -266,6 +287,42 @@ export function DetalheOrientando() {
               </div>
             </>
           )}
+        </section>
+      )}
+
+      {/* Ação: agendar/liberar a defesa da Fase II (orientador) */}
+      {podeAgendarDefesa && (
+        <section id="acao-fase2" className="cartao-secao bloco secao-acao">
+          <h2>{icoBanca} Agendamento da defesa (Fase II)</h2>
+          <div className="aviso-cabecalho">
+            <p className="nota-vazio" style={{ margin: 0 }}>
+              A Fase I foi aprovada. Agende com a banca e libere a defesa — só então os avaliadores poderão avaliar a Fase II.
+            </p>
+            <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando agendamento</span>
+          </div>
+          <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+            <button className="botao" disabled={enviando} onClick={() => pedirConfirmacao('liberardefesa')}>Liberar defesa da Fase II</button>
+          </div>
+        </section>
+      )}
+
+      {/* Ação: avaliação da Fase II do orientador (mesma página do orientando) */}
+      {podeAvaliarFase2 && (
+        <section id="acao-fase2" className="cartao-secao bloco secao-acao">
+          <h2>{icoBanca} Sua avaliação da Fase II</h2>
+          <div className="aviso-cabecalho">
+            <p className="nota-vazio" style={{ margin: 0 }}>
+              Como orientador, você também avalia a Fase II (apresentação). Sua avaliação fica aqui — não em "Participações em bancas".
+            </p>
+            <span className={`selo ${meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? 'selo-ok' : ''}`} style={meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? {} : { background: 'var(--inset)', color: 'var(--tinta-3)' }}>
+              {meuMembroF2?.status === 'CONCLUIDO' ? 'Concluída' : meuMembroF2?.status === 'ENVIADO' ? 'Enviada' : 'Pendente'}
+            </span>
+          </div>
+          <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+            <button className="botao" onClick={() => navigate(`/professor/bancas/${meuMembroF2.id}`)}>
+              {meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? 'Ver/editar avaliação' : 'Avaliar Fase II'}
+            </button>
+          </div>
         </section>
       )}
 
@@ -394,6 +451,19 @@ export function DetalheOrientando() {
           mensagem="Deseja aprovar a versão final e concluir o TCC? Essa ação encerra o trabalho como concluído."
           textoConfirmar="Aprovar e concluir"
           textoProcessando="Concluindo…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={executarAcao}
+          aoCancelar={() => setConfirmarAcao(null)}
+        />
+      )}
+
+      {confirmarAcao === 'liberardefesa' && (
+        <ModalConfirmacao
+          titulo="Liberar defesa da Fase II"
+          mensagem="Deseja liberar a defesa da Fase II? O TCC entra em avaliação e os avaliadores serão notificados para avaliar."
+          textoConfirmar="Liberar defesa"
+          textoProcessando="Liberando…"
           processando={enviando}
           erro={erroAcao}
           aoConfirmar={executarAcao}

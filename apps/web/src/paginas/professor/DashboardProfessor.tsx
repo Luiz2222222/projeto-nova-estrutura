@@ -104,30 +104,35 @@ export function DashboardProfessor() {
     const nome = (t: any) => t?.aluno?.nomeCompleto ?? '—';
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
     tccs.forEach((t) => {
+      const alvo = `/professor/orientandos/${t.id}#acao`; // página interna do orientando + âncora
       if (t.faseAtual === 'DESENVOLVIMENTO') {
         const mono = (t.documentos ?? []).filter((d: any) => d.tipo === 'MONOGRAFIA').sort((a: any, b: any) => b.versao - a.versao)[0];
         if (mono && mono.status === 'PENDENTE') {
-          items.push({ id: 'mono' + t.id, cor: 'amarelo', titulo: 'Avaliar monografia', sub: `${nome(t)} · ${t.titulo}`, link: '/professor/orientandos' });
+          items.push({ id: 'mono' + t.id, cor: 'amarelo', titulo: 'Avaliar monografia', sub: `${nome(t)} · ${t.titulo}`, link: alvo });
         }
         if (!t.continuidadeConfirmada) {
-          items.push({ id: 'cont' + t.id, cor: 'azul', titulo: 'Confirmar continuidade', sub: `${nome(t)} · ${t.titulo}`, link: '/professor/orientandos' });
+          items.push({ id: 'cont' + t.id, cor: 'azul', titulo: 'Confirmar continuidade', sub: `${nome(t)} · ${t.titulo}`, link: alvo });
         }
       }
+      if (t.faseAtual === 'AGENDAMENTO_DEFESA_FASE_2') {
+        items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Agendar defesa (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
+      }
       if (t.faseAtual === 'VALIDACAO_VERSAO_FINAL') {
-        items.push({ id: 'vf' + t.id, cor: 'verde', titulo: 'Validar versão final', sub: `${nome(t)} · ${t.titulo}`, link: '/professor/orientandos' });
+        items.push({ id: 'vf' + t.id, cor: 'verde', titulo: 'Validar versão final', sub: `${nome(t)} · ${t.titulo}`, link: alvo });
       }
     });
-    // Bancas em que sou membro: só é pendência quando o TCC está na fase de avaliação
-    // correspondente e eu ainda não lancei a nota (Fase II surge para o orientador).
+    // Bancas em que sou AVALIADOR (não do meu próprio orientando) — só pendência quando o
+    // TCC está na fase de avaliação correspondente e eu ainda não lancei a nota.
     bancas.forEach((m: any) => {
+      const t = m.banca?.tcc;
+      if (t?.orientadorId === usuario?.id || t?.coorientadorId === usuario?.id) return; // próprio orientando: fica na página do orientando
       if (bancaPendente(m)) {
-        const t = m.banca?.tcc;
         const ehF2 = m.banca?.fase === 'FASE_2';
-        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${nome(t)} · ${t?.titulo ?? ''}`, link: '/bancas' });
+        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${nome(t)} · ${t?.titulo ?? ''}`, link: `/professor/bancas/${m.id}` });
       }
     });
     return items;
-  }, [tccs, bancas]);
+  }, [tccs, bancas, usuario?.id]);
 
   const etapas = useMemo(() => {
     const counts = [0, 0, 0, 0, 0];

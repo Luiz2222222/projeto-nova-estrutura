@@ -1233,6 +1233,15 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .criterio-peso { font-size: 12px; color: var(--tinta-3); white-space: nowrap; }
 .criterio-desc { margin: 4px 0 8px; font-size: 12.5px; color: var(--tinta-3); font-style: italic; line-height: 1.4; }
 .criterio-comentario { width: 100%; font: inherit; resize: vertical; }
+/* Contraste do formulário de avaliação: o input/textarea era da MESMA cor do card de
+   critério (--inset = --papel-2). Eleva os campos para superfície branca (--papel-1) com
+   borda forte e foco visível. Usa variáveis → continua certo no tema escuro. */
+.criterio-card { border-color: var(--borda-forte); }
+.criterio-nota input, .criterio-comentario { background: var(--papel-1); border: 1px solid var(--borda-forte); }
+.criterio-nota input:focus, .criterio-comentario:focus { background: var(--papel-1); border-color: var(--azul); box-shadow: 0 0 0 3px var(--azul-anel); }
+.criterio-nota input:disabled, .criterio-comentario:disabled { background: var(--papel-2); color: var(--tinta-3); -webkit-text-fill-color: var(--tinta-3); }
+/* Destaque temporário ao chegar via deep link (#acao, #validacao, …). */
+.secao-destaque { box-shadow: 0 0 0 3px var(--azul-anel); transition: box-shadow 0.4s ease; }
 
 .nota-total-box {
   display: flex; align-items: center; justify-content: center; gap: 10px; flex-wrap: wrap;
