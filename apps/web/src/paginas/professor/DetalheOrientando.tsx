@@ -16,6 +16,7 @@ import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
+import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -71,6 +72,7 @@ export function DetalheOrientando() {
   const navigate = useNavigate();
 
   const [tccs, setTccs] = useState<any[]>([]);
+  const [bancasMinhas, setBancasMinhas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [recusa, setRecusa] = useState<{ tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
   const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal' | 'liberardefesa'>(null);
@@ -82,10 +84,19 @@ export function DetalheOrientando() {
   function carregar() {
     setCarregando(true);
     apiGet('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+    // Carrega também o membro da banca do próprio orientador (com pesos/bloqueio) para
+    // avaliar a Fase II aqui mesmo, sem ir para "Participações em bancas".
+    apiGet('/bancas/minhas').then(setBancasMinhas).catch(() => setBancasMinhas([]));
   }
   useEffect(carregar, []);
 
   const tcc = useMemo(() => tccs.find((t) => t.id === id), [tccs, id]);
+  // Membro da banca da Fase II que é meu (orientador) neste TCC. /bancas/minhas já só
+  // devolve membros do usuário atual, então basta casar fase + TCC.
+  const meuMembroFase2 = useMemo(
+    () => bancasMinhas.find((x) => x.banca?.fase === 'FASE_2' && x.banca?.tcc?.id === id) ?? null,
+    [bancasMinhas, id],
+  );
 
   // Deep link: rola até a seção (#acao / #acao-fase2) e destaca por alguns segundos.
   const location = useLocation();
@@ -310,19 +321,12 @@ export function DetalheOrientando() {
       {podeAvaliarFase2 && (
         <section id="acao-fase2" className="cartao-secao bloco secao-acao">
           <h2>{icoBanca} Sua avaliação da Fase II</h2>
-          <div className="aviso-cabecalho">
-            <p className="nota-vazio" style={{ margin: 0 }}>
-              Como orientador, você também avalia a Fase II (apresentação). Sua avaliação fica aqui — não em "Participações em bancas".
-            </p>
-            <span className={`selo ${meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? 'selo-ok' : ''}`} style={meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? {} : { background: 'var(--inset)', color: 'var(--tinta-3)' }}>
-              {meuMembroF2?.status === 'CONCLUIDO' ? 'Concluída' : meuMembroF2?.status === 'ENVIADO' ? 'Enviada' : 'Pendente'}
-            </span>
-          </div>
-          <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" onClick={() => navigate(`/professor/bancas/${meuMembroF2.id}`)}>
-              {meuMembroF2?.status === 'ENVIADO' || meuMembroF2?.status === 'CONCLUIDO' ? 'Ver/editar avaliação' : 'Avaliar Fase II'}
-            </button>
-          </div>
+          <p className="nota-vazio" style={{ marginTop: 0 }}>
+            Como orientador, você também avalia a Fase II (apresentação). Avalie aqui mesmo — não em "Participações em bancas".
+          </p>
+          {meuMembroFase2
+            ? <AvaliacaoBancaForm membro={meuMembroFase2} aoAtualizar={carregar} />
+            : <p className="nota-vazio">Carregando o formulário de avaliação…</p>}
         </section>
       )}
 

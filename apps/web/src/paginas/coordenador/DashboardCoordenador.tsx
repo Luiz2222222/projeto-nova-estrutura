@@ -45,7 +45,7 @@ function bucketEtapa(f: string): number {
     case 'INICIALIZACAO': return 0;
     case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
     case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
-    case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
+    case 'AGENDAMENTO_DEFESA_FASE_2': case 'AVALIACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
     case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
     default: return -1;
   }
@@ -92,9 +92,9 @@ export function DashboardCoordenador() {
     const nome = (t: any) => t.aluno?.nomeCompleto ?? '—';
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
     pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/solicitacoes?tccId=${t.id}` }));
-    tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
-    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
-    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: '/coordenador/tccs' }));
+    tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#banca` }));
+    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
+    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
     return items;
   }, [tccs, pendentes]);
 

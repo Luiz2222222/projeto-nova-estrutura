@@ -264,7 +264,7 @@ export function TccDetalheCoordenador() {
 
       {/* Seção de ação conforme a fase */}
       {fase === 'FORMACAO_BANCA_FASE_1' && (
-        <section className="cartao-secao bloco secao-acao">
+        <section id="banca" className="cartao-secao bloco secao-acao">
           <h2>{icoBanca} Formar banca da Fase I</h2>
           <p className="legenda">Escolha <strong>2 avaliadores</strong> para a banca da Fase I. (A banca da Fase II será o orientador + estes 2 avaliadores.)</p>
           {candidatos.length === 0 ? (
