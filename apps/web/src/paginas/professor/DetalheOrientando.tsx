@@ -5,7 +5,7 @@
 // documentos iniciais, monografias, continuidade, versão final e notas.
 // Regras do projeto NOVO:
 //  - a banca da Fase II é o orientador + os 2 avaliadores da Fase I (o orientador
-//    agenda/libera a defesa e avalia a Fase II AQUI mesmo, nesta página do orientando,
+//    libera a defesa e avalia a Fase II AQUI mesmo, nesta página do orientando,
 //    não em "Participações em bancas");
 //  - a versão final pós-Fase II é validada pelo ORIENTADOR (aqui), não pelo coordenador;
 //  - sem nenhuma etapa de análise final do coordenador.

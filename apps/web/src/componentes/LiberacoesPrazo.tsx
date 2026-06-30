@@ -1,6 +1,6 @@
 // Seção "Liberações de prazo" do coordenador, dentro do detalhe de um TCC.
 // Cada etapa restritiva mostra o status do prazo e um botão Liberar/Bloquear (toggle).
-// As etapas informativas (preparação de banca/agendamento) aparecem como "Sem bloqueio".
+// As etapas informativas (preparação de banca/liberação da defesa) aparecem como "Sem bloqueio".
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, type ErroApi } from '../api';
 import { ETAPAS_PRAZO, ROTULO_ETAPA_PRAZO } from '@tcc/compartilhado';

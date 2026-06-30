@@ -547,7 +547,7 @@ export class BancasService {
     return { ok: true, fase, nf2, nf, aprovado };
   }
 
-  // Orientador agenda/libera a defesa da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
+  // Orientador libera a defesa da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
   // Só o orientador do TCC. A partir daqui os AVALIADORES (não o orientador) recebem a ação.
   async liberarDefesa(profId: string, tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });

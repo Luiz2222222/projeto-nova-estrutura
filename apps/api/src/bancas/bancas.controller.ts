@@ -109,7 +109,7 @@ export class BancasController {
     return this.bancas.validar(id);
   }
 
-  // Orientador libera/agenda a defesa da Fase II (AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2).
+  // Orientador libera a defesa da Fase II (AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2).
   @Post('tccs/:id/liberar-defesa')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR')
