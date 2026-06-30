@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
+import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
 import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
@@ -287,7 +288,8 @@ export class TccsService {
     });
     if (!tcc) return null;
     // bloqueios[etapa] = ação bloqueada por prazo vencido sem liberação (para desabilitar botões).
-    return { ...tcc, bloqueios: await this.prazos.bloqueiosDoTcc(tcc) };
+    // Aluno não é coordenador: esconde notas/resultado até a confirmação da nota final (tcc.nf).
+    return { ...sanitizarNotasTcc(tcc), bloqueios: await this.prazos.bloqueiosDoTcc(tcc) };
   }
 
   async cancelar(alunoId: string, tccId: string) {
@@ -498,12 +500,14 @@ export class TccsService {
       },
       orderBy: { criadoEm: 'desc' },
     });
-    return Promise.all(tccs.map(async (t) => ({ ...t, bloqueios: await this.prazos.bloqueiosDoTcc(t) })));
+    // Orientador não é coordenador: esconde NF1/NF2/NF, resultado e as notas/parecer dos
+    // membros da banca até a confirmação da nota final da Fase II (tcc.nf).
+    return Promise.all(tccs.map(async (t) => ({ ...sanitizarNotasTcc(t), bloqueios: await this.prazos.bloqueiosDoTcc(t) })));
   }
 
   // Lista os TCCs em que o usuário é coorientador (visão de leitura: aluno, orientador e docs).
-  coorientacoes(usuarioId: string) {
-    return this.prisma.tcc.findMany({
+  async coorientacoes(usuarioId: string) {
+    const tccs = await this.prisma.tcc.findMany({
       where: { coorientadorId: usuarioId },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
@@ -513,6 +517,8 @@ export class TccsService {
       },
       orderBy: { criadoEm: 'desc' },
     });
+    // Coorientador não é coordenador: esconde NF1/NF2/NF e resultado até a confirmação final.
+    return tccs.map((t) => sanitizarNotasTcc(t));
   }
 
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {

@@ -6,6 +6,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
+import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
 import {
   mediaNotas,
   notaFinal,
@@ -148,7 +149,10 @@ export class BancasService {
           tccId: m.banca.tcc.id,
           alunoId: m.banca.tcc.alunoId,
         });
-        return { ...m, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
+        // O avaliador vê a PRÓPRIA avaliação (m.nota*/m.parecer) — necessário para editar.
+        // Mas o TCC embutido não pode vazar NF1/NF2/NF/resultado antes da confirmação final.
+        const banca = { ...m.banca, tcc: sanitizarNotasTcc(m.banca.tcc) };
+        return { ...m, banca, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
       }),
     );
   }
@@ -508,11 +512,11 @@ export class BancasService {
         }),
       ]);
       // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
-      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador agendar a defesa da Fase II. A nota final ainda não foi confirmada.`);
-      // Só o ORIENTADOR é avisado agora — para agendar/liberar a defesa. Os avaliadores
-      // só recebem ação/notificação depois que a defesa for liberada.
-      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Agendar a defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Agende/libere a defesa da Fase II na página do orientando para liberar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
-      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda o agendamento da defesa.`);
+      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador liberar a defesa da Fase II. A nota final ainda não foi confirmada.`);
+      // Só o ORIENTADOR é avisado agora — para liberar a defesa. Os avaliadores só recebem
+      // ação/notificação depois que a defesa for liberada.
+      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Liberar a defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Libere a defesa da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
+      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a liberação da defesa.`);
       return { ok: true, fase, nf1: media, aprovado };
     }
 

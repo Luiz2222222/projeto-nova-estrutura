@@ -45,7 +45,7 @@ export const ROTULO_FASE: Record<string, string> = {
   FORMACAO_BANCA_FASE_1: 'Formação da banca (Fase I)',
   AVALIACAO_FASE_1: 'Avaliação — Fase I',
   VALIDACAO_FASE_1: 'Validação — Fase I',
-  AGENDAMENTO_DEFESA_FASE_2: 'Agendamento da defesa — Fase II',
+  AGENDAMENTO_DEFESA_FASE_2: 'Liberação da defesa — Fase II',
   AVALIACAO_FASE_2: 'Avaliação — Fase II',
   VALIDACAO_FASE_2: 'Validação — Fase II',
   AGUARDANDO_AJUSTES_FINAIS: 'Ajustes finais — versão final',

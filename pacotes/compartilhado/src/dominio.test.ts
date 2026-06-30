@@ -41,9 +41,9 @@ describe('fases', () => {
     expect(ROTULO_FASE['VALIDACAO_FASE_2']).toBe('Validação — Fase II');
   });
 
-  it('Agendamento da defesa (Fase II) tem índice 3 e rótulo próprio', () => {
+  it('Liberação da defesa (Fase II) tem índice 3 e rótulo próprio', () => {
     expect(indiceFase('AGENDAMENTO_DEFESA_FASE_2')).toBe(3);
-    expect(ROTULO_FASE['AGENDAMENTO_DEFESA_FASE_2']).toBe('Agendamento da defesa — Fase II');
+    expect(ROTULO_FASE['AGENDAMENTO_DEFESA_FASE_2']).toBe('Liberação da defesa — Fase II');
   });
 
   it('indiceFase devolve null para fase desconhecida', () => {

@@ -115,7 +115,7 @@ export function DashboardProfessor() {
         }
       }
       if (t.faseAtual === 'AGENDAMENTO_DEFESA_FASE_2') {
-        items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Agendar defesa (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
+        items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Liberar defesa (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
       }
       if (t.faseAtual === 'VALIDACAO_VERSAO_FINAL') {
         items.push({ id: 'vf' + t.id, cor: 'verde', titulo: 'Validar versão final', sub: `${nome(t)} · ${t.titulo}`, link: alvo });

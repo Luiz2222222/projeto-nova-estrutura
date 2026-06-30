@@ -20,7 +20,7 @@ const DESC_EVENTO: Record<string, string> = {
   orientador_definido: 'Quando você for definido como orientador de um TCC aprovado.',
   orientador_monografia_enviada: 'Quando um orientando enviar ou reenviar a monografia.',
   orientador_confirmar_continuidade: 'Lembrete para confirmar a continuidade de um orientando.',
-  orientador_agendar_defesa: 'Quando a Fase I for aprovada e você precisar agendar/liberar a defesa da Fase II.',
+  orientador_agendar_defesa: 'Quando a Fase I for aprovada e você precisar liberar a defesa da Fase II.',
   orientador_versao_final_enviada: 'Quando um orientando enviar a versão final.',
   orientador_versao_final_reenviada: 'Quando a versão final for reenviada após ajustes.',
   orientador_tcc_concluido: 'Quando o TCC de um orientando for concluído.',
