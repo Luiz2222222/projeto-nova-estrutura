@@ -5,7 +5,8 @@
 // documentos iniciais, monografias, continuidade, versão final e notas.
 // Regras do projeto NOVO:
 //  - a banca da Fase II é o orientador + os 2 avaliadores da Fase I (o orientador
-//    avalia a Fase II em "Minhas bancas"; não há formação manual nem agendamento aqui);
+//    agenda/libera a defesa e avalia a Fase II AQUI mesmo, nesta página do orientando,
+//    não em "Participações em bancas");
 //  - a versão final pós-Fase II é validada pelo ORIENTADOR (aqui), não pelo coordenador;
 //  - sem nenhuma etapa de análise final do coordenador.
 import { useEffect, useMemo, useState } from 'react';
@@ -192,7 +193,11 @@ export function DetalheOrientando() {
   const iniciais = [...docsDe(tcc.documentos, 'PLANO_DESENVOLVIMENTO'), ...docsDe(tcc.documentos, 'TERMO_ACEITE')];
   const versaoFinal = docsDe(tcc.documentos, 'VERSAO_FINAL')[0] ?? null;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
-  const temNotas = tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null;
+  // Notas só ficam visíveis ao orientador DEPOIS da confirmação da nota final da Fase II
+  // (tcc.nf é preenchido na validação da Fase II pela coordenação). Antes disso, nada de
+  // NF1/NF2/NF, resultado ou nota por membro — mesma regra da timeline (notasTrilhaTcc).
+  const notasLiberadas = tcc.nf != null;
+  const temNotas = notasLiberadas && (tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null);
 
   return (
     <>
@@ -381,7 +386,7 @@ export function DetalheOrientando() {
                       {(b.membros ?? []).map((m: any) => (
                         <div key={m.id}>
                           <dt>{nomeComTrat(m.avaliador)}</dt>
-                          <dd>{fmtNota1(m.nota)}{m.parecer ? ` · ${m.parecer}` : ''}</dd>
+                          <dd>{notasLiberadas ? <>{fmtNota1(m.nota)}{m.parecer ? ` · ${m.parecer}` : ''}</> : (m.nota != null ? 'Avaliação registrada' : 'Aguardando avaliação')}</dd>
                         </div>
                       ))}
                     </dl>

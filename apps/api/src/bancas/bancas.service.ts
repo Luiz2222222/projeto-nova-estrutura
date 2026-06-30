@@ -488,7 +488,8 @@ export class BancasService {
           where: { id: tccId },
           data: { nf1: media, faseAtual: 'REPROVADO_FASE_1', resultado: 'REPROVADO', fase1ValidadaEm: new Date() },
         });
-        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi validada. Resultado: reprovado (NF1 ${media.toFixed(2)}).`);
+        // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
+        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
         return { ok: true, fase, nf1: media, aprovado };
       }
       // Banca da Fase II NÃO é formada do zero: orientador + os 2 avaliadores da Fase I.
@@ -506,7 +507,8 @@ export class BancasService {
           data: { tccId, fase: 'FASE_2', membros: { create: membrosFase2.map((id) => ({ avaliadorId: id })) } },
         }),
       ]);
-      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi validada (NF1 ${media.toFixed(2)}). Aprovado — aguardando o orientador agendar a defesa.`);
+      // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
+      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador agendar a defesa da Fase II. A nota final ainda não foi confirmada.`);
       // Só o ORIENTADOR é avisado agora — para agendar/liberar a defesa. Os avaliadores
       // só recebem ação/notificação depois que a defesa for liberada.
       await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Agendar a defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Agende/libere a defesa da Fase II na página do orientando para liberar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
@@ -531,7 +533,9 @@ export class BancasService {
         fase2ValidadaEm: new Date(),
       },
     });
-    await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada (NF ${nf.toFixed(2)}). ${aprovado ? 'Aprovado na defesa!' : 'Resultado: reprovado.'}`);
+    // Esta validação É a confirmação da nota final da Fase II; ainda assim a notificação
+    // traz só o resultado qualitativo (a nota fica visível na página do TCC, não no texto).
+    await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada pela coordenação. ${aprovado ? 'Você foi aprovado na defesa!' : 'Resultado: reprovado.'}`);
     if (aprovado) {
       await this.eventos.emitirParaUsuario('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
