@@ -17,6 +17,7 @@ import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
+import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 
 const ic = (d: string) => (
@@ -212,6 +213,9 @@ export function DetalheOrientando() {
           </div>
         </div>
       </div>
+
+      {/* Notas Finais (topo) — só aparece quando há notas liberadas para este perfil. */}
+      <CardNotasFinais tcc={tcc} />
 
       {/* Informações: orientando + orientação */}
       <div className="grade-detalhe bloco">

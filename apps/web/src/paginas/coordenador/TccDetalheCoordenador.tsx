@@ -11,6 +11,7 @@ import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
+import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
@@ -129,13 +130,6 @@ export function TccDetalheCoordenador() {
       : null;
   const descricao = tcc.resumo || tcc.descricao || tcc.objetivos || null;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
-  const concluido = fase === 'CONCLUIDO';
-  const nf1 = tcc.nf1 != null ? Number(tcc.nf1) : null;
-  const nf2 = tcc.nf2 != null ? Number(tcc.nf2) : null;
-  const nf1Ponderada = nf1 != null ? nf1 * 0.6 : null;
-  const nf2Ponderada = nf2 != null ? nf2 * 0.4 : null;
-  const mediaFinalNormal = nf1 != null && nf2 != null ? (nf1 + nf2) / 2 : null;
-  const nfFinalPonderada = tcc.nf != null ? Number(tcc.nf) : (nf1 != null && nf2 != null ? notaFinal(nf1, nf2) : null);
 
   async function formarBanca() {
     setErroAcao('');
@@ -203,38 +197,8 @@ export function TccDetalheCoordenador() {
         </div>
       </div>
 
-      {/* Notas finais — só quando concluído */}
-      {concluido && (
-        <section className="cartao-secao bloco">
-          <h2>Notas finais</h2>
-          <div className="notas-grid">
-            <div className="nota-box">
-              <span className="nota-rotulo">Fase I</span>
-              <div className="nota-linhas">
-                <span className="nota-linha"><small>Média normal</small><strong>{fmtNota(nf1)}</strong></span>
-                <span className="nota-linha"><small>Ponderada (60%)</small><strong>{fmtNota(nf1Ponderada)}</strong></span>
-              </div>
-            </div>
-            <div className="nota-box">
-              <span className="nota-rotulo">Fase II</span>
-              <div className="nota-linhas">
-                <span className="nota-linha"><small>Média normal</small><strong>{fmtNota(nf2)}</strong></span>
-                <span className="nota-linha"><small>Ponderada (40%)</small><strong>{fmtNota(nf2Ponderada)}</strong></span>
-              </div>
-            </div>
-            <div className="nota-box nota-box-destaque">
-              <span className="nota-rotulo">Nota final</span>
-              <div className="nota-linhas">
-                <span className="nota-linha"><small>Normal</small><strong>{fmtNota(mediaFinalNormal)}</strong></span>
-                <span className="nota-linha"><small>Ponderada</small><strong>{fmtNota(nfFinalPonderada)}</strong></span>
-              </div>
-            </div>
-            <div className={`nota-box ${tcc.resultado === 'APROVADO' ? 'nota-aprovado' : tcc.resultado === 'REPROVADO' ? 'nota-reprovado' : ''}`}>
-              <span className="nota-rotulo">Resultado</span><span className="nota-num">{tcc.resultado ?? '—'}</span>
-            </div>
-          </div>
-        </section>
-      )}
+      {/* Notas Finais (topo) — coordenador vê as notas assim que existem. */}
+      <CardNotasFinais tcc={tcc} />
 
       {/* Informações gerais — aluno e orientação */}
       <div className="grade-detalhe bloco">

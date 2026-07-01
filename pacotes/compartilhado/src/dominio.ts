@@ -67,9 +67,13 @@ export function mediaNotas(notas: number[]): number {
   return notas.reduce((soma, n) => soma + n, 0) / notas.length;
 }
 
+// Pesos da nota final: NF = PESO_NF1·NF1 + PESO_NF2·NF2. Fonte única para cálculo e exibição.
+export const PESO_NF1 = 0.6;
+export const PESO_NF2 = 0.4;
+
 // Nota final ponderada: NF = 0,6·NF1 + 0,4·NF2.
 export function notaFinal(nf1: number, nf2: number): number {
-  return 0.6 * nf1 + 0.4 * nf2;
+  return PESO_NF1 * nf1 + PESO_NF2 * nf2;
 }
 
 export const aprovadoFase1 = (nf1: number): boolean => nf1 >= 6;

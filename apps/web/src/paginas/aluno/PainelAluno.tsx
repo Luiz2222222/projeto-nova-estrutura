@@ -5,6 +5,7 @@ import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
+import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
@@ -116,6 +117,9 @@ export function PainelAluno() {
           </button>
         )}
       </div>
+
+      {/* Notas Finais (topo) — só aparece quando a nota final já foi confirmada/liberada. */}
+      <CardNotasFinais tcc={tcc} />
 
       {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
       {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
