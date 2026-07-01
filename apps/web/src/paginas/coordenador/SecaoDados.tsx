@@ -1,13 +1,7 @@
-import { useState } from 'react';
-import { apiPost, type ErroApi } from '../../api';
+import { useEffect, useState } from 'react';
+import { apiGet, apiPost, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ModalBaixarDados } from '../../componentes/ModalBaixarDados';
-
-// Semestre atual no mesmo formato do backend (ex.: "2026.1").
-function semestreAtual(): string {
-  const d = new Date();
-  return `${d.getFullYear()}.${d.getMonth() + 1 <= 6 ? 1 : 2}`;
-}
 
 // Seção do Planejamento: exportar backup dos dados e resetar o período (ação destrutiva).
 export function SecaoDados() {
@@ -17,6 +11,11 @@ export function SecaoDados() {
   const [senha, setSenha] = useState('');
   const [erro, setErro] = useState('');
   const [resetando, setResetando] = useState(false);
+  // Período ativo (manual) — usado no nome do arquivo de backup.
+  const [periodo, setPeriodo] = useState('');
+  useEffect(() => {
+    apiGet('/semestre-ativo').then((r: any) => setPeriodo(r?.semestre ?? '')).catch(() => {});
+  }, []);
 
   function abrir() {
     setConfirmacao('');
@@ -64,7 +63,7 @@ export function SecaoDados() {
         <ModalBaixarDados
           titulo="Baixar dados"
           caminhoBase="/exportar"
-          nomeArquivo={`TCCs_${semestreAtual()}.zip`}
+          nomeArquivo={`TCCs_${periodo || 'periodo'}.zip`}
           aoFechar={() => setModalBaixar(false)}
         />
       )}

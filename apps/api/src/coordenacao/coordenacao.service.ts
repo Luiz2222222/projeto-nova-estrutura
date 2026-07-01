@@ -11,6 +11,7 @@ import * as bcrypt from 'bcryptjs';
 import AdmZip from 'adm-zip';
 import { PrismaService } from '../prisma/prisma.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
+import { resolverSemestreAtivo, gravarSemestreAtivo } from '../comum/semestre';
 import {
   MARCOS_CALENDARIO,
   DESTINATARIOS_AVISO,
@@ -31,24 +32,31 @@ import {
 // Opções do download em ZIP (cada parte é incluída se true).
 export type OpcoesExport = { dados: boolean; monografia: boolean; documentos: boolean };
 
-function semestreAtual(): string {
-  const d = new Date();
-  const s = d.getMonth() + 1 <= 6 ? 1 : 2;
-  return `${d.getFullYear()}.${s}`;
-}
-
 @Injectable()
 export class CoordenacaoService {
   constructor(private readonly prisma: PrismaService) {}
 
+  // ---------- Período/semestre ativo (definido manualmente pela coordenação) ----------
+
+  // Período ativo atual do sistema (persistido; não muda sozinho pela data).
+  async obterSemestreAtivo() {
+    return { semestre: await resolverSemestreAtivo(this.prisma) };
+  }
+
+  // Define o período ativo. NÃO altera o semestre de TCCs já existentes.
+  async definirSemestreAtivo(semestre: string) {
+    return { semestre: await gravarSemestreAtivo(this.prisma, semestre) };
+  }
+
   // ---------- Calendário ----------
 
-  calendario() {
-    return this.prisma.calendario.findUnique({ where: { semestre: semestreAtual() } });
+  async calendario() {
+    const semestre = await resolverSemestreAtivo(this.prisma);
+    return this.prisma.calendario.findUnique({ where: { semestre } });
   }
 
   async salvarCalendario(dados: Record<string, string | null | undefined>) {
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const data: Record<string, Date | null> = {};
     for (const marco of MARCOS_CALENDARIO) {
       const valor = dados[marco];
@@ -71,7 +79,7 @@ export class CoordenacaoService {
 
   // Salva os pesos por critério (Fase I e II). Cada conjunto deve somar 10.
   async salvarPesos(dados: Record<string, unknown>) {
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const ler = (criterios: typeof CRITERIOS_FASE1) =>
       criterios.map((c) => {
         const v = Number(dados[colunaPeso(c.chave)]);
@@ -304,7 +312,7 @@ export class CoordenacaoService {
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
       },
     });
-    return { geradoEm: new Date().toISOString(), semestre: semestreAtual(), total: tccs.length, tccs };
+    return { geradoEm: new Date().toISOString(), semestre: await resolverSemestreAtivo(this.prisma), total: tccs.length, tccs };
   }
 
   // ----- Download em ZIP (dados.txt + monografia aprovada + documentos gerais) -----
@@ -320,7 +328,7 @@ export class CoordenacaoService {
 
   // ZIP geral: todos os TCCs do semestre atual, uma pasta por aluno.
   async exportarZipGeral(opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const tccs = await this.prisma.tcc.findMany({
       where: { semestre },
       orderBy: { aluno: { nomeCompleto: 'asc' } },
@@ -624,7 +632,7 @@ export class CoordenacaoService {
   // Lista TODOS os alunos e cruza com o TCC do semestre atual, classificando o
   // envio inicial pelo fluxo de Solicitação (não por documento, como era no antigo).
   async listaDoPeriodo() {
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const calendario = await this.prisma.calendario.findUnique({ where: { semestre } });
 
     const alunos = await this.prisma.usuario.findMany({
@@ -681,7 +689,7 @@ export class CoordenacaoService {
       throw new BadRequestException({ mensagem: 'Senha incorreta.', erros: [{ campo: 'senha', mensagem: 'Senha incorreta' }] });
     }
 
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const backup = await this.exportarDados(); // backup antes de apagar
     const docs = await this.prisma.documentoTcc.findMany({
       where: { tcc: { semestre } },

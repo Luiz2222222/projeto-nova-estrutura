@@ -1,5 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { resolverSemestreAtivo } from '../comum/semestre';
 import {
   CAMPO_CALENDARIO_ETAPA,
   ETAPAS_PRAZO,
@@ -120,12 +121,6 @@ export class PrazosService {
     return true;
   }
 
-  semestreAtual(): string {
-    const d = new Date();
-    const s = d.getMonth() + 1 <= 6 ? 1 : 2;
-    return `${d.getFullYear()}.${s}`;
-  }
-
   // ----- Wrappers usados pelo controller (buscam o TCC e validam a etapa) -----
 
   private async tccBasico(tccId: string) {
@@ -152,7 +147,7 @@ export class PrazosService {
   // Lista os alunos com o estado da liberação de ABERTURA (ENVIO_DOCUMENTOS) no semestre
   // atual — permite liberar antes de o TCC existir.
   async listaAlunosAbertura() {
-    const semestre = this.semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const alunos = await this.prisma.usuario.findMany({
       where: { papel: 'ALUNO' },
       select: { id: true, nomeCompleto: true, email: true, curso: true },
@@ -171,7 +166,7 @@ export class PrazosService {
 
   // Estado da ABERTURA (ENVIO_DOCUMENTOS) para o próprio aluno consultar no semestre atual.
   async aberturaParaAluno(alunoId: string) {
-    const semestre = this.semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const data = await this.dataMarco(semestre, 'ENVIO_DOCUMENTOS');
     const vencido = this.prazoEncerrado(data);
     const liberado = await this.liberacaoAtiva({ etapa: 'ENVIO_DOCUMENTOS', semestre, alunoId });
@@ -179,7 +174,7 @@ export class PrazosService {
   }
 
   async alternarAberturaAluno(alunoId: string) {
-    const semestre = this.semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
     const aluno = await this.prisma.usuario.findUnique({ where: { id: alunoId }, select: { papel: true } });
     if (!aluno || aluno.papel !== 'ALUNO') throw new BadRequestException({ mensagem: 'Aluno inválido.' });
     const liberado = await this.alternarAbertura(alunoId, semestre);

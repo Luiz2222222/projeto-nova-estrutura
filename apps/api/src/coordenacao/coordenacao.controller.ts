@@ -68,6 +68,21 @@ export class CoordenacaoController {
     return this.email.atualizarConfig(dados);
   }
 
+  // ---------- Período/semestre ativo (definido manualmente pela coordenação) ----------
+
+  @Get('semestre-ativo')
+  @UseGuards(GuardaJwt)
+  semestreAtivo() {
+    return this.coord.obterSemestreAtivo();
+  }
+
+  @Put('semestre-ativo')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  definirSemestreAtivo(@Body('semestre') semestre: string) {
+    return this.coord.definirSemestreAtivo(semestre);
+  }
+
   // ---------- Calendário ----------
 
   @Get('calendario')

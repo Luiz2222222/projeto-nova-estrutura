@@ -11,14 +11,9 @@ import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
+import { resolverSemestreAtivo } from '../comum/semestre';
 import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
-
-function semestreAtual(): string {
-  const d = new Date();
-  const s = d.getMonth() + 1 <= 6 ? 1 : 2;
-  return `${d.getFullYear()}.${s}`;
-}
 
 @Injectable()
 export class TccsService {
@@ -211,7 +206,7 @@ export class TccsService {
   }
 
   async abrir(alunoId: string, dados: DadosAbrirTcc) {
-    const semestre = semestreAtual();
+    const semestre = await resolverSemestreAtivo(this.prisma);
 
     const jaTem = await this.prisma.tcc.findUnique({
       where: { alunoId_semestre: { alunoId, semestre } },
@@ -305,9 +300,10 @@ export class TccsService {
 
   // TCCs do período atual (visão do coordenador), com dados pra gerir banca/fase
   // e abrir o detalhe (aluno, orientador, coorientador, documentos, banca + notas).
-  todos() {
+  async todos() {
+    const semestre = await resolverSemestreAtivo(this.prisma);
     return this.prisma.tcc.findMany({
-      where: { semestre: semestreAtual() },
+      where: { semestre },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },

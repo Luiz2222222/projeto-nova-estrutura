@@ -89,6 +89,17 @@ model ConfiguracaoEmail {
   @@map("configuracao_email")
 }
 
+// Configuração geral do sistema (linha única, id "global"). Guarda o período/semestre ATIVO
+// definido MANUALMENTE pela coordenação — o sistema não troca de semestre pela data do relógio.
+model ConfiguracaoSistema {
+  id            String   @id @default("global")
+  semestreAtivo String?
+  atualizadoEm  DateTime @updatedAt
+  criadoEm      DateTime @default(now())
+
+  @@map("configuracao_sistema")
+}
+
 // Preferência individual por usuário e tipo de evento (só vale para e-mails de
 // fluxo; recuperação de senha não depende disso). Sem linha = padrão LIGADO.
 model PreferenciaEmail {
