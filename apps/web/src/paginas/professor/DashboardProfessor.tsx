@@ -57,7 +57,7 @@ const ETAPAS = [
   { nome: 'Finalização', cor: 'verde' },
 ];
 
-const FASES_AVALIACAO = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1', 'AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'];
+const FASES_AVALIACAO = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1', 'VALIDACAO_FASE_1', 'AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2', 'VALIDACAO_FASE_2'];
 const FASES_FINAL = ['AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO'];
 
 // Pendência de banca: só conta quando o TCC está na fase de avaliação correspondente
@@ -122,6 +122,15 @@ export function DashboardProfessor() {
       }
       if (t.faseAtual === 'AGENDAMENTO_DEFESA_FASE_2') {
         items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Liberar defesa (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
+      }
+      // Ajuste solicitado ao ORIENTADOR na banca da Fase II: a avaliação dele fica na página
+      // do orientando, então a pendência aparece aqui (e não em "Participações em bancas").
+      if (t.faseAtual === 'VALIDACAO_FASE_2') {
+        const bancaF2 = (t.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
+        const meuMembro = bancaF2?.membros?.find((m: any) => m.avaliadorId === usuario?.id);
+        if (meuMembro?.status === 'AJUSTE_SOLICITADO') {
+          items.push({ id: 'ajuste-orient' + t.id, cor: 'amarelo', titulo: 'Ajustar avaliação — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
+        }
       }
       if (t.faseAtual === 'VALIDACAO_VERSAO_FINAL') {
         items.push({ id: 'vf' + t.id, cor: 'verde', titulo: 'Validar versão final', sub: `${nome(t)} · ${t.titulo}`, link: alvo });

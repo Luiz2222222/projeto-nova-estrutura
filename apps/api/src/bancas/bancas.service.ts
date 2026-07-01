@@ -444,9 +444,9 @@ export class BancasService {
       if (!tcc) throw new NotFoundException();
       // Só dá para trocar os avaliadores da Fase I ANTES de a Fase I ser validada — depois
       // disso a NF1 já foi calculada e trocar avaliadores deixaria histórico/nota inconsistentes.
-      if (!['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(tcc.faseAtual)) {
+      if (!['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(tcc.faseAtual)) {
         throw new BadRequestException({
-          mensagem: 'A Fase I já foi validada — não é possível trocar os avaliadores depois que a NF1 foi calculada.',
+          mensagem: 'A coordenação já iniciou a análise da Fase I — não é possível trocar os avaliadores a partir daqui.',
         });
       }
       const bancaF1 = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase: 'FASE_1' } }, include: { membros: true } });

@@ -179,11 +179,13 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
   const fase = tcc.faseAtual as string;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
 
+  // Edição administrativa normal só ANTES de a coordenação iniciar a análise (VALIDACAO_*).
+  // Depois disso o backend bloqueia; o coordenador usa "Aprovar" / "Solicitar ajuste".
   const podeEditarBanca = (bancaFase: string) =>
     bancaFase === 'FASE_1'
-      ? ['AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase)
-      : ['AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'].includes(fase);
-  const podeTrocarAvaliadores = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'].includes(fase);
+      ? ['AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(fase)
+      : ['AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2'].includes(fase);
+  const podeTrocarAvaliadores = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(fase);
 
   if (bancas.length === 0) return <p className="nota-vazio">Banca ainda não formada.</p>;
 
