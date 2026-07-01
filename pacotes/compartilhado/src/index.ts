@@ -415,13 +415,20 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   // coord_solicitacao_corrigida removido por ora: o "Corrigir e reenviar" apaga o TCC recusado
   // e cria um novo (vira coord_nova_solicitacao); não há como distinguir reabertura sem mudar o fluxo.
   { chave: 'coord_formar_banca_fase1', rotulo: 'Monografia aprovada + continuidade: formar banca Fase I', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
-  { chave: 'coord_validar_fase1', rotulo: 'Notas da Fase I completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
-  { chave: 'coord_validar_fase2', rotulo: 'Notas da Fase II completas: validar', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_validar_fase1', rotulo: 'Fase I: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_validar_fase2', rotulo: 'Fase II: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_avaliacao_reenviada', rotulo: 'Avaliador reenviou a avaliação após ajuste', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   // Avaliadores / membros da banca (professor ou avaliador)
   { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase1_liberada', rotulo: 'Avaliação da Fase I liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_adicionado_fase2', rotulo: 'Adicionado à banca da Fase II', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase2_liberada', rotulo: 'Avaliação da Fase II liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'avaliador_ajuste_solicitado', rotulo: 'Coordenação solicitou ajuste na sua avaliação', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'avaliador_ajuste_cancelado', rotulo: 'Solicitação de ajuste cancelada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  // Progresso da fase (aluno + orientador + membros da banca)
+  { chave: 'fase_avaliacoes_concluidas', rotulo: 'Avaliações da banca concluídas (segue para análise)', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR'] },
+  { chave: 'fase_analise_iniciada', rotulo: 'Coordenação iniciou a análise das avaliações', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR'] },
+  { chave: 'fase_validada', rotulo: 'Fase validada pela coordenação', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR'] },
   // Coorientador (professor ou avaliador)
   { chave: 'coorientador_indicado', rotulo: 'Indicado como coorientador', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'coorientador_mudanca_fase', rotulo: 'Mudança de fase importante do TCC', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },

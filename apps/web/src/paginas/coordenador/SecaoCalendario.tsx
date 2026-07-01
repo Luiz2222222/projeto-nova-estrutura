@@ -76,54 +76,49 @@ export function SecaoCalendario() {
   }
 
   return (
-    <>
-      <section className="cartao-secao bloco">
-        <h2>Período ativo do sistema</h2>
-        <p className="legenda" style={{ marginBottom: 18 }}>
-          Defina manualmente o período letivo ativo (ex.: <strong>2026.1</strong>). É ele que o sistema usa
-          para listar TCCs, calendário, exportações e pesos. O sistema não troca de período sozinho pela data,
-          e mudar o período aqui <strong>não altera</strong> o semestre de TCCs já existentes.
-        </p>
-        <div className="acoes" style={{ justifyContent: 'flex-start', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label className="campo" style={{ maxWidth: 200 }}>
-            <span>Período ativo</span>
-            <input
-              type="text"
-              value={periodo}
-              placeholder="2026.1"
-              maxLength={7}
-              onChange={(e) => setPeriodo(e.target.value)}
-            />
-            <small className="muted">Formato: AAAA.1 ou AAAA.2</small>
-          </label>
+    <section className="cartao-secao bloco">
+      {/* Título à esquerda; à direita, o período ativo (campo + botão) alinhado ao título. */}
+      <div className="cabecalho-secao" style={{ alignItems: 'flex-end', gap: 16, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0 }}>Calendário do período</h2>
+        <div className="acoes" style={{ margin: 0, alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--tinta-2)' }}>Período:</span>
+          <input
+            type="text"
+            value={periodo}
+            placeholder="2026.1"
+            maxLength={7}
+            onChange={(e) => setPeriodo(e.target.value)}
+            style={{ width: 110 }}
+          />
           <button className="botao" disabled={salvandoPeriodo || !periodo.trim() || periodo.trim() === periodoAtivo} onClick={salvarPeriodo}>
-            {salvandoPeriodo ? 'Definindo…' : 'Definir período'}
-          </button>
-          {msgPeriodo && <span className="nota-vazio" style={{ margin: 0, alignSelf: 'center' }}>{msgPeriodo}</span>}
-        </div>
-      </section>
-
-      <section className="cartao-secao bloco">
-        <h2>Calendário do período {periodoAtivo && <span className="muted">({periodoAtivo})</span>}</h2>
-        <p className="legenda" style={{ marginBottom: 18 }}>
-          Defina as datas-marco do período ativo. Elas aparecem na aba “Informações” dos alunos.
-        </p>
-        <div className="calendario-grid">
-          {MARCOS_CALENDARIO.map((m) => (
-            <label key={m} className="campo">
-              <span>{ROTULO_MARCO[m]}</span>
-              <input type="date" value={datas[m] ?? ''} onChange={(e) => mudar(m, e.target.value)} />
-              <small className="muted">{DESC_MARCO[m]}</small>
-            </label>
-          ))}
-        </div>
-        <div className="acoes">
-          {mensagem && <span className="nota-vazio" style={{ margin: 0, alignSelf: 'center' }}>{mensagem}</span>}
-          <button className="botao" disabled={salvando} onClick={salvar}>
-            {salvando ? 'Salvando…' : 'Salvar calendário'}
+            {salvandoPeriodo ? 'Definindo…' : 'Definir'}
           </button>
         </div>
-      </section>
-    </>
+      </div>
+      <p className="legenda" style={{ marginTop: 8, marginBottom: 4 }}>
+        O <strong>período ativo</strong> (formato AAAA.1 / AAAA.2) é definido manualmente e usado para listar TCCs,
+        calendário, exportações e pesos. O sistema não troca de período sozinho pela data, e mudar aqui
+        <strong> não altera</strong> o semestre de TCCs já existentes.
+      </p>
+      {msgPeriodo && <p className="nota-vazio" style={{ marginTop: 0 }}>{msgPeriodo}</p>}
+      <p className="legenda" style={{ marginBottom: 18 }}>
+        Defina as datas-marco do período. Elas aparecem na aba “Informações” dos alunos.
+      </p>
+      <div className="calendario-grid">
+        {MARCOS_CALENDARIO.map((m) => (
+          <label key={m} className="campo">
+            <span>{ROTULO_MARCO[m]}</span>
+            <input type="date" value={datas[m] ?? ''} onChange={(e) => mudar(m, e.target.value)} />
+            <small className="muted">{DESC_MARCO[m]}</small>
+          </label>
+        ))}
+      </div>
+      <div className="acoes">
+        {mensagem && <span className="nota-vazio" style={{ margin: 0, alignSelf: 'center' }}>{mensagem}</span>}
+        <button className="botao" disabled={salvando} onClick={salvar}>
+          {salvando ? 'Salvando…' : 'Salvar calendário'}
+        </button>
+      </div>
+    </section>
   );
 }

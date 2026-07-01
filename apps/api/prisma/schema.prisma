@@ -275,9 +275,18 @@ model MembroBanca {
   avaliadorId String
   nota        Float? // total (soma dos critérios), 0–10, null em rascunho/não enviada
 
-  // Status da avaliação: PENDENTE (rascunho/não enviada) | ENVIADO (enviada, ainda
-  // editável até a coordenação validar) | BLOQUEADO | CONCLUIDO (travada, sem edição).
+  // Status da avaliação:
+  //  PENDENTE          rascunho/não enviada (editável na fase de avaliação)
+  //  ENVIADO           enviada (editável enquanto AVALIACAO/AGUARDANDO_ANALISE)
+  //  EM_ANALISE        coordenação iniciou a análise (travada; sem edição do avaliador)
+  //  AJUSTE_SOLICITADO coordenação pediu ajuste a este membro (só ele pode reenviar)
+  //  APROVADO          avaliação aprovada pela coordenação
+  //  BLOQUEADO         prazo vencido sem liberação | CONCLUIDO fase validada (travada)
   status      String @default("PENDENTE")
+
+  // Motivo do último ajuste solicitado pela coordenação (mostrado ao avaliador). Null quando
+  // não há ajuste pendente. Não vaza nota; é texto livre do coordenador.
+  ajusteMotivo String?
 
   // Notas por critério (Fase I usa os 5 primeiros; Fase II usa os 5 últimos).
   notaResumo          Float?

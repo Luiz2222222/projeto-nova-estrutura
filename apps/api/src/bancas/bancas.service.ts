@@ -191,14 +191,24 @@ export class BancasService {
       const tcc = membro.banca.tcc;
       const ehF1 = membro.banca.fase === 'FASE_1';
       const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+      const faseAguardando = ehF1 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
       const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
       const emAvaliacao = tcc.faseAtual === faseAval;
+      const emAguardando = tcc.faseAtual === faseAguardando;
       const emValidacao = tcc.faseAtual === faseValid;
-      if (!emAvaliacao && !emValidacao) {
+      // Durante a VALIDAÇÃO a banca está travada: só o membro com AJUSTE_SOLICITADO reenviar
+      // (exceção controlada pela coordenação). Nas outras fases, edição normal.
+      if (emValidacao) {
+        if (membro.status !== 'AJUSTE_SOLICITADO') {
+          throw new BadRequestException({ mensagem: 'A coordenação já iniciou a análise. Você só pode editar se houver um ajuste solicitado para você.' });
+        }
+        if (!finalizar) {
+          throw new BadRequestException({ mensagem: 'Envie a avaliação ajustada (rascunho não é permitido nesta etapa).' });
+        }
+      } else if (!emAvaliacao && !emAguardando) {
         throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
-      }
-      if (!finalizar && !emAvaliacao) {
-        throw new BadRequestException({ mensagem: 'A avaliação já foi enviada por todos; não é possível voltar para rascunho.' });
+      } else if (!finalizar && !emAvaliacao) {
+        throw new BadRequestException({ mensagem: 'A avaliação já foi enviada por todos; reabra antes de salvar rascunho.' });
       }
 
       // Pesos: do Calendário do semestre; se não houver, usa os defaults dos critérios.
@@ -229,38 +239,48 @@ export class BancasService {
         data.nota = soma(valores); // total do membro (0–10)
         data.status = 'ENVIADO';
         data.avaliadoEm = new Date();
+        if (emValidacao) data.ajusteMotivo = null; // reenvio após ajuste: limpa o motivo
       } else {
         data.nota = null; // rascunho NÃO conta como avaliação final
         data.status = 'PENDENTE';
         data.avaliadoEm = null;
       }
 
-      // Update CONDICIONAL: só se ainda editável (barra corrida e edição de travada).
+      // Update CONDICIONAL: em VALIDACAO só reenvia quem está AJUSTE_SOLICITADO; fora dela,
+      // apenas rascunho/enviado (barra corrida contra o travamento pela coordenação).
+      const statusEditaveis = emValidacao ? ['AJUSTE_SOLICITADO'] : ['PENDENTE', 'ENVIADO'];
       const atualizado = await tx.membroBanca.updateMany({
-        where: { id: membro.id, status: { notIn: ['BLOQUEADO', 'CONCLUIDO'] } },
+        where: { id: membro.id, status: { in: statusEditaveis } },
         data,
       });
       if (atualizado.count !== 1) {
-        throw new BadRequestException({ mensagem: 'Não foi possível salvar — a avaliação foi bloqueada.' });
+        throw new BadRequestException({ mensagem: 'Não foi possível salvar — a avaliação foi travada pela coordenação. Atualize a página.' });
       }
 
-      // A fase só avança quando TODOS enviaram (ENVIADO ou superior). Rascunho não conta.
+      // Quando TODOS enviam (durante a avaliação), a fase vai para "aguardando análise da
+      // coordenação" — NÃO direto para validação (que exige o coordenador iniciar a análise).
       let completou = false;
+      let reenvioAjuste = false;
       if (finalizar && emAvaliacao) {
         const membros = await tx.membroBanca.findMany({ where: { bancaId } });
         if (membros.every((mm) => ['ENVIADO', 'BLOQUEADO', 'CONCLUIDO'].includes(mm.status))) {
-          await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseValid } });
+          await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAguardando } });
           completou = true;
         }
+      } else if (finalizar && emValidacao) {
+        reenvioAjuste = true; // reenvio de um ajuste solicitado → avisa a coordenação
       }
-      return { completou, fase: membro.banca.fase, titulo: tcc.titulo, finalizar, tccId: tcc.id };
+      return { completou, reenvioAjuste, fase: membro.banca.fase as 'FASE_1' | 'FASE_2', titulo: tcc.titulo, finalizar, tccId: tcc.id };
     });
 
-    // Quando a fase fecha (todos avaliaram), avisa a coordenação para validar (link direto).
+    // Todos enviaram → fase "aguardando análise". Notifica coordenação, aluno, orientador e
+    // banca (sem vazar notas).
     if (res.completou) {
-      const faseNome = res.fase === 'FASE_1' ? 'Fase I' : 'Fase II';
-      const evento = res.fase === 'FASE_1' ? 'coord_validar_fase1' : 'coord_validar_fase2';
-      await this.eventos.emitirParaCoordenadores(evento, `Avaliações da ${faseNome} completas`, `Todas as avaliações da ${faseNome} do TCC "${res.titulo}" foram enviadas — é preciso validar.`, `/coordenador/tccs/${res.tccId}#validacao`);
+      await this.notificarAvaliacoesConcluidas(res.tccId, res.fase);
+    } else if (res.reenvioAjuste) {
+      // Reenvio de um ajuste: só a coordenação é avisada.
+      const faseNome = this.faseNomePt(res.fase);
+      await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `Avaliação reenviada (${faseNome})`, `Um avaliador reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.`, `/coordenador/tccs/${res.tccId}#validacao`);
     }
     return { ok: true, status: res.finalizar ? 'ENVIADO' : 'PENDENTE' };
   }
@@ -298,17 +318,19 @@ export class BancasService {
       const tcc = membro.banca.tcc;
       const ehF1 = membro.banca.fase === 'FASE_1';
       const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
-      const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
-      if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseValid) {
-        throw new BadRequestException({ mensagem: 'Esta fase não está mais aberta para edição.' });
+      const faseAguardando = ehF1 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
+      // O avaliador só reabre por conta própria enquanto está em AVALIACAO ou AGUARDANDO
+      // (antes de o coordenador iniciar a análise). Em VALIDACAO a banca está travada.
+      if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseAguardando) {
+        throw new BadRequestException({ mensagem: 'A coordenação já iniciou a análise; não é possível reabrir a avaliação por conta própria.' });
       }
       const atualizado = await tx.membroBanca.updateMany({
         where: { id: membro.id, status: 'ENVIADO' },
         data: { status: 'PENDENTE', nota: null, avaliadoEm: null },
       });
       if (atualizado.count !== 1) throw new BadRequestException({ mensagem: 'Não foi possível reabrir a avaliação.' });
-      // Banca estava completa (em validação) → volta para avaliação.
-      if (tcc.faseAtual === faseValid) {
+      // Estava aguardando análise (todos enviaram) → deixa de estar pronta: volta para avaliação.
+      if (tcc.faseAtual === faseAguardando) {
         await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAval } });
       }
     });
@@ -333,14 +355,17 @@ export class BancasService {
   ) {
     const ehF1 = banca.fase === 'FASE_1';
     const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
+    const faseAguardando = ehF1 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
     const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
-    if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseValid) return;
+    if (![faseAval, faseAguardando, faseValid].includes(tcc.faseAtual)) return;
     const membros = await tx.membroBanca.findMany({ where: { bancaId: banca.id } });
     if (membros.length === 0) return;
-    const todosEnviaram = membros.every((m) => ['ENVIADO', 'BLOQUEADO', 'CONCLUIDO'].includes(m.status));
+    const todosEnviaram = membros.every((m) => ['ENVIADO', 'EM_ANALISE', 'APROVADO', 'BLOQUEADO', 'CONCLUIDO'].includes(m.status));
     if (tcc.faseAtual === faseAval && todosEnviaram) {
-      await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseValid } });
-    } else if (tcc.faseAtual === faseValid && !todosEnviaram) {
+      // Todos enviaram → aguarda a análise da coordenação (não entra em validação sozinho).
+      await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAguardando } });
+    } else if ((tcc.faseAtual === faseAguardando || tcc.faseAtual === faseValid) && !todosEnviaram) {
+      // Alguém deixou de ter avaliação enviada (ex.: novo avaliador) → volta para avaliação.
       await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAval } });
     }
   }
@@ -360,12 +385,14 @@ export class BancasService {
       // Só permite editar enquanto a fase NÃO foi validada/concluída — senão mexer nas
       // notas deixaria NF1/NF2/NF/resultado inconsistentes (recálculo não é feito aqui).
       const ehF1banca = membro.banca.fase === 'FASE_1';
-      const fasesEditaveis = ehF1banca ? ['AVALIACAO_FASE_1', 'VALIDACAO_FASE_1'] : ['AVALIACAO_FASE_2', 'VALIDACAO_FASE_2'];
+      // Edição administrativa livre só antes de a coordenação iniciar a análise. Depois disso
+      // (VALIDACAO) a banca está travada — o coordenador usa aprovar/solicitar ajuste.
+      const fasesEditaveis = ehF1banca
+        ? ['AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1']
+        : ['AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2'];
       if (!fasesEditaveis.includes(tcc.faseAtual)) {
         throw new BadRequestException({
-          mensagem: ehF1banca
-            ? 'A Fase I já foi validada — editar a avaliação exigiria recalcular NF1/NF2/NF. Edição administrativa bloqueada.'
-            : 'A Fase II já foi validada — editar a avaliação exigiria recalcular NF2/NF e o resultado. Edição administrativa bloqueada.',
+          mensagem: 'A análise da coordenação já foi iniciada (ou a fase já foi validada). Use "Aprovar avaliação" ou "Solicitar ajuste".',
         });
       }
       const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
@@ -463,6 +490,153 @@ export class BancasService {
     return { ok: true };
   }
 
+  // ----- Análise da coordenação (estado intermediário entre avaliação e validação) -----
+
+  private faseNomePt(fase: 'FASE_1' | 'FASE_2') {
+    return fase === 'FASE_1' ? 'Fase I' : 'Fase II';
+  }
+
+  private async carregarBancaParaAviso(tccId: string, fase: 'FASE_1' | 'FASE_2') {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    const banca = await this.prisma.banca.findUnique({
+      where: { tccId_fase: { tccId, fase } },
+      include: { membros: { select: { avaliadorId: true } } },
+    });
+    return { tcc, membros: banca?.membros ?? [] };
+  }
+
+  // Todos enviaram → coordenação, aluno, orientador e banca (sem vazar notas).
+  private async notificarAvaliacoesConcluidas(tccId: string, fase: 'FASE_1' | 'FASE_2') {
+    const { tcc, membros } = await this.carregarBancaParaAviso(tccId, fase);
+    if (!tcc) return;
+    const faseNome = this.faseNomePt(fase);
+    const eventoCoord = fase === 'FASE_1' ? 'coord_validar_fase1' : 'coord_validar_fase2';
+    await this.eventos.emitirParaCoordenadores(eventoCoord, `Avaliações da ${faseNome} concluídas`, `Avaliações da ${faseNome} concluídas: aguardando análise da coordenação — TCC "${tcc.titulo}".`, `/coordenador/tccs/${tccId}#validacao`);
+    const msg = `As avaliações da ${faseNome} do TCC "${tcc.titulo}" foram concluídas; as análises seguem para avaliação da coordenação.`;
+    const alvos = new Set<string>();
+    if (tcc.alunoId) alvos.add(tcc.alunoId);
+    if (tcc.orientadorId) alvos.add(tcc.orientadorId);
+    membros.forEach((m) => m.avaliadorId && alvos.add(m.avaliadorId));
+    for (const uid of alvos) {
+      await this.eventos.emitirParaUsuario('fase_avaliacoes_concluidas', uid, `Avaliações da ${faseNome} concluídas`, msg);
+    }
+  }
+
+  // Coordenação iniciou a análise → banca, orientador e aluno (sem vazar notas).
+  private async notificarAnaliseIniciada(tccId: string, fase: 'FASE_1' | 'FASE_2') {
+    const { tcc, membros } = await this.carregarBancaParaAviso(tccId, fase);
+    if (!tcc) return;
+    const faseNome = this.faseNomePt(fase);
+    const msg = `A coordenação iniciou a análise das avaliações da ${faseNome} do TCC "${tcc.titulo}".`;
+    const alvos = new Set<string>();
+    if (tcc.alunoId) alvos.add(tcc.alunoId);
+    if (tcc.orientadorId) alvos.add(tcc.orientadorId);
+    membros.forEach((m) => m.avaliadorId && alvos.add(m.avaliadorId));
+    for (const uid of alvos) {
+      await this.eventos.emitirParaUsuario('fase_analise_iniciada', uid, `Análise iniciada — ${faseNome}`, msg);
+    }
+  }
+
+  // Fase validada → orientador e banca (aluno recebe o evento próprio de resultado). Sem notas.
+  private async notificarFaseValidada(tccId: string, fase: 'FASE_1' | 'FASE_2', titulo: string, orientadorId: string | null) {
+    const { membros } = await this.carregarBancaParaAviso(tccId, fase);
+    const faseNome = this.faseNomePt(fase);
+    const msg = `A coordenação validou a ${faseNome} do TCC "${titulo}".`;
+    const alvos = new Set<string>();
+    if (orientadorId) alvos.add(orientadorId);
+    membros.forEach((m) => m.avaliadorId && alvos.add(m.avaliadorId));
+    for (const uid of alvos) {
+      await this.eventos.emitirParaUsuario('fase_validada', uid, `${faseNome} validada`, msg);
+    }
+  }
+
+  private faseFromAguardando(faseAtual: string): 'FASE_1' | 'FASE_2' | null {
+    if (faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1') return 'FASE_1';
+    if (faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') return 'FASE_2';
+    return null;
+  }
+
+  // Coordenador inicia a análise: AGUARDANDO_ANALISE_* → VALIDACAO_*, travando as avaliações
+  // (EM_ANALISE). Só funciona se, no momento, TODOS os membros ainda estiverem ENVIADO — se
+  // alguém reabriu, a fase já saiu de AGUARDANDO e retorna erro amigável.
+  async iniciarAnalise(tccId: string) {
+    const fase = await this.prisma.$transaction(async (tx) => {
+      const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
+      if (!tcc) throw new NotFoundException();
+      const fase = this.faseFromAguardando(tcc.faseAtual);
+      if (!fase) {
+        throw new BadRequestException({ mensagem: 'Uma avaliação foi reaberta. Atualize a página antes de iniciar a análise.' });
+      }
+      const banca = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase } }, include: { membros: true } });
+      if (!banca || banca.membros.length === 0) {
+        throw new BadRequestException({ mensagem: 'Não há avaliações para analisar.' });
+      }
+      if (!banca.membros.every((m) => m.status === 'ENVIADO')) {
+        throw new BadRequestException({ mensagem: 'Uma avaliação foi reaberta. Atualize a página antes de iniciar a análise.' });
+      }
+      // Trava só o que ainda está ENVIADO (barra corrida contra uma reabertura simultânea).
+      const travadas = await tx.membroBanca.updateMany({ where: { bancaId: banca.id, status: 'ENVIADO' }, data: { status: 'EM_ANALISE' } });
+      if (travadas.count !== banca.membros.length) {
+        throw new BadRequestException({ mensagem: 'Uma avaliação foi reaberta. Atualize a página antes de iniciar a análise.' });
+      }
+      const faseValid = fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+      await tx.tcc.update({ where: { id: tccId }, data: { faseAtual: faseValid } });
+      return fase;
+    });
+    await this.notificarAnaliseIniciada(tccId, fase);
+    return { ok: true };
+  }
+
+  // Guard comum das ações individuais da análise: exige o TCC em VALIDACAO_* da fase do membro.
+  private async carregarMembroEmValidacao(membroId: string) {
+    const membro = await this.prisma.membroBanca.findUnique({
+      where: { id: membroId },
+      include: { banca: { include: { tcc: true } }, avaliador: { select: { papel: true } } },
+    });
+    if (!membro) throw new NotFoundException();
+    const ehF1 = membro.banca.fase === 'FASE_1';
+    const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+    if (membro.banca.tcc.faseAtual !== faseValid) {
+      throw new BadRequestException({ mensagem: 'A análise da coordenação ainda não foi iniciada nesta fase.' });
+    }
+    return { membro, ehF1 };
+  }
+
+  // Coordenador aprova a avaliação de um membro (sem notificação, conforme regra).
+  async aprovarAvaliacaoMembro(membroId: string) {
+    const { membro } = await this.carregarMembroEmValidacao(membroId);
+    if (membro.nota == null) throw new BadRequestException({ mensagem: 'Não é possível aprovar uma avaliação sem nota.' });
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'APROVADO', ajusteMotivo: null } });
+    return { ok: true };
+  }
+
+  // Coordenador solicita ajuste a um membro (motivo obrigatório). Só aquele avaliador pode
+  // reenviar; a fase continua em VALIDACAO_*. Notifica somente o avaliador (interno + e-mail).
+  async solicitarAjuste(membroId: string, motivo: string) {
+    const texto = (motivo ?? '').trim();
+    if (!texto) throw new BadRequestException({ mensagem: 'Informe o motivo do ajuste.' });
+    const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto } });
+    const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
+    const base = membro.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}". Motivo: ${texto}`, `${base}/${membroId}`);
+    return { ok: true };
+  }
+
+  // Coordenador cancela/desfaz a solicitação de ajuste: o membro volta a ficar travado
+  // (EM_ANALISE), sem poder reenviar por conta própria. Notifica somente o avaliador.
+  async cancelarAjuste(membroId: string) {
+    const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
+    if (membro.status !== 'AJUSTE_SOLICITADO') {
+      throw new BadRequestException({ mensagem: 'Não há solicitação de ajuste para cancelar neste membro.' });
+    }
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'EM_ANALISE', ajusteMotivo: null } });
+    const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
+    const base = membro.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_cancelado', membro.avaliadorId, `Solicitação de ajuste cancelada — ${faseNome}`, `A solicitação de ajuste da sua avaliação foi cancelada pela coordenação.`, `${base}/${membroId}`);
+    return { ok: true };
+  }
+
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
   // depois a nota final NF = 0,6·NF1 + 0,4·NF2, ≥7 → concluído.
   async validar(tccId: string) {
@@ -478,8 +652,15 @@ export class BancasService {
       where: { tccId_fase: { tccId, fase } },
       include: { membros: true },
     });
-    if (!banca || banca.membros.length === 0 || banca.membros.some((m) => m.nota === null)) {
+    if (!banca || banca.membros.length === 0) {
       throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
+    }
+    // Só valida quando TODAS as avaliações foram aprovadas individualmente na análise.
+    if (!banca.membros.every((m) => m.status === 'APROVADO')) {
+      throw new BadRequestException({ mensagem: 'Aprove todas as avaliações da banca antes de validar a fase.' });
+    }
+    if (banca.membros.some((m) => m.nota === null)) {
+      throw new BadRequestException({ mensagem: 'Ainda faltam notas na banca.' });
     }
     // Ao validar, trava as avaliações desta banca (não podem mais ser editadas).
     await this.prisma.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO' } });
@@ -494,6 +675,7 @@ export class BancasService {
         });
         // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
         await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
+        await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
         return { ok: true, fase, nf1: media, aprovado };
       }
       // Banca da Fase II NÃO é formada do zero: orientador + os 2 avaliadores da Fase I.
@@ -517,6 +699,7 @@ export class BancasService {
       // ação/notificação depois que a defesa for liberada.
       await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Liberar a defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Libere a defesa da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a liberação da defesa.`);
+      await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
       return { ok: true, fase, nf1: media, aprovado };
     }
 
@@ -544,6 +727,7 @@ export class BancasService {
       await this.eventos.emitirParaUsuario('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
     }
+    await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
     return { ok: true, fase, nf2, nf, aprovado };
   }
 

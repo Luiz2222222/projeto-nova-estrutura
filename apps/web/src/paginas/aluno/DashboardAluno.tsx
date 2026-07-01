@@ -78,8 +78,10 @@ function faseMacroSub(tcc: any): { macro: string; sub: string } {
     case 'AGENDAMENTO_DEFESA_FASE_2': return { macro: 'Fase II', sub: 'Aguardando liberação da defesa' };
     case 'FORMACAO_BANCA_FASE_1': return { macro: 'Fase I', sub: 'Formação da banca' };
     case 'AVALIACAO_FASE_1': return { macro: 'Fase I', sub: 'Avaliação da banca' };
+    case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1': return { macro: 'Fase I', sub: 'Aguardando análise da coordenação' };
     case 'VALIDACAO_FASE_1': return { macro: 'Fase I', sub: 'Validação da Fase I' };
     case 'AVALIACAO_FASE_2': return { macro: 'Fase II', sub: 'Avaliação da banca' };
+    case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2': return { macro: 'Fase II', sub: 'Aguardando análise da coordenação' };
     case 'VALIDACAO_FASE_2': return { macro: 'Fase II', sub: 'Validação da Fase II' };
     case 'AGUARDANDO_AJUSTES_FINAIS': return { macro: 'Finalização', sub: 'Envio da versão final' };
     case 'VALIDACAO_VERSAO_FINAL': return { macro: 'Finalização', sub: 'Versão final aguardando orientador' };

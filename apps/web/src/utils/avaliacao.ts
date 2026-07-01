@@ -51,6 +51,9 @@ export const notaSalva = (membro: any, criterio: Criterio) => membro?.[colunaNot
 export const STATUS_AVAL: Record<string, { rotulo: string; classe: string }> = {
   PENDENTE: { rotulo: 'Pendente', classe: 'status-atencao' },
   ENVIADO: { rotulo: 'Enviado', classe: 'status-normal' },
+  EM_ANALISE: { rotulo: 'Em análise', classe: 'status-atencao' },
+  AJUSTE_SOLICITADO: { rotulo: 'Ajuste solicitado', classe: 'status-urgente' },
+  APROVADO: { rotulo: 'Aprovado pela coordenação', classe: 'status-normal' },
   BLOQUEADO: { rotulo: 'Bloqueado', classe: 'status-urgente' },
   CONCLUIDO: { rotulo: 'Concluído', classe: 'status-normal' },
 };

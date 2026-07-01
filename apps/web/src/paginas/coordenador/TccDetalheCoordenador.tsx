@@ -15,6 +15,7 @@ import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
+import { Modal } from '../../componentes/Modal';
 import { LiberacoesPrazo } from '../../componentes/LiberacoesPrazo';
 
 const ic = (d: string) => (
@@ -71,7 +72,10 @@ export function TccDetalheCoordenador() {
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<any | null>(null);
   const [erroAcao, setErroAcao] = useState('');
-  const [confirmando, setConfirmando] = useState<null | 'banca' | 'validar'>(null);
+  const [confirmando, setConfirmando] = useState<null | 'banca' | 'validar' | 'iniciar' | 'cancelarAjuste'>(null);
+  const [ajusteMembro, setAjusteMembro] = useState<string | null>(null); // membroId p/ solicitar ajuste
+  const [ajusteMotivo, setAjusteMotivo] = useState('');
+  const [cancelarMembro, setCancelarMembro] = useState<string | null>(null); // membroId p/ cancelar ajuste
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [pesos, setPesos] = useState<any | null>(null);
@@ -164,6 +168,66 @@ export function TccDetalheCoordenador() {
       carregar();
     } catch (e) {
       setErroAcao((e as ErroApi).mensagem || 'Não foi possível validar.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Coordenador inicia a análise (AGUARDANDO_ANALISE_* → VALIDACAO_*, trava a banca).
+  async function iniciarAnalise() {
+    setErroAcao('');
+    setEnviando(true);
+    try {
+      await apiPost(`/tccs/${tcc.id}/banca/iniciar-analise`, {});
+      setConfirmando(null);
+      carregar();
+    } catch (e) {
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível iniciar a análise.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Aprova a avaliação de um membro (ação direta, sem modal).
+  async function aprovarMembro(membroId: string) {
+    setErroAcao('');
+    try {
+      await apiPost(`/bancas/membros/${membroId}/aprovar`, {});
+      carregar();
+    } catch (e) {
+      window.alert((e as ErroApi).mensagem || 'Não foi possível aprovar a avaliação.');
+    }
+  }
+
+  // Envia a solicitação de ajuste (motivo obrigatório) para o membro selecionado.
+  async function enviarAjuste() {
+    if (!ajusteMembro) return;
+    setErroAcao('');
+    setEnviando(true);
+    try {
+      await apiPost(`/bancas/membros/${ajusteMembro}/solicitar-ajuste`, { motivo: ajusteMotivo });
+      setAjusteMembro(null);
+      setAjusteMotivo('');
+      carregar();
+    } catch (e) {
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível solicitar o ajuste.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Cancela/desfaz a solicitação de ajuste (o membro volta a ficar travado).
+  async function confirmarCancelarAjuste() {
+    if (!cancelarMembro) return;
+    setErroAcao('');
+    setEnviando(true);
+    try {
+      await apiPost(`/bancas/membros/${cancelarMembro}/cancelar-ajuste`, {});
+      setCancelarMembro(null);
+      setConfirmando(null);
+      carregar();
+    } catch (e) {
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível cancelar a solicitação.');
     } finally {
       setEnviando(false);
     }
@@ -268,9 +332,25 @@ export function TccDetalheCoordenador() {
         </section>
       )}
 
+      {(fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' || fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') && (() => {
+        const ehF2 = fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
+        return (
+          <section id="validacao" className="cartao-secao bloco secao-acao">
+            <h2>{icoBanca} {ehF2 ? 'Análise da Fase II' : 'Análise da Fase I'}</h2>
+            <p className="legenda">Todos os membros enviaram as avaliações. Ao iniciar a análise, a banca é travada (os avaliadores não podem mais reabrir sozinhos) e você poderá aprovar cada avaliação ou solicitar ajustes.</p>
+            <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+              <button className="botao" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('iniciar'); }}>
+                {ehF2 ? 'Iniciar análise da Fase II' : 'Iniciar análise da Fase I'}
+              </button>
+            </div>
+          </section>
+        );
+      })()}
+
       {(fase === 'VALIDACAO_FASE_1' || fase === 'VALIDACAO_FASE_2') && (() => {
         const ehF2 = fase === 'VALIDACAO_FASE_2';
         const { membros, media } = blocoNotas(ehF2 ? 'FASE_2' : 'FASE_1');
+        const todosAprovados = membros.length > 0 && membros.every((m: any) => m.status === 'APROVADO');
         const nfFinal = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media) : null;
         return (
           <section id="validacao" className="cartao-secao bloco secao-acao">
@@ -301,9 +381,14 @@ export function TccDetalheCoordenador() {
                       : `Reprovado na Fase II. Nota final NF ${Number(resultado.nf).toFixed(2)}.`)}
               </div>
             ) : (
-              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                <button className="botao" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
-              </div>
+              <>
+                {!todosAprovados && (
+                  <p className="legenda" style={{ color: 'var(--reprovado)' }}>Aprove todas as avaliações da banca (abaixo, em “Banca e notas”) para liberar a validação da fase.</p>
+                )}
+                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                  <button className="botao" disabled={enviando || !todosAprovados} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
+                </div>
+              </>
             )}
           </section>
         );
@@ -329,6 +414,8 @@ export function TccDetalheCoordenador() {
             const ehF2 = b.fase === 'FASE_2';
             const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
             const membros = b.membros ?? [];
+            // Esta banca está na análise da coordenação (fase de validação correspondente)?
+            const emAnalise = (b.fase === 'FASE_1' && fase === 'VALIDACAO_FASE_1') || (b.fase === 'FASE_2' && fase === 'VALIDACAO_FASE_2');
             return (
               <div key={b.id} className="banca-fase">
                 <div className="banca-fase-cab">
@@ -363,6 +450,23 @@ export function TccDetalheCoordenador() {
                         <div className="aval-rodape">
                           <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
                         </div>
+                        {m.ajusteMotivo && (
+                          <p className="aval-parecer" style={{ color: 'var(--reprovado)' }}><strong>Ajuste solicitado:</strong> {m.ajusteMotivo}</p>
+                        )}
+                        {emAnalise && (
+                          <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+                            {m.status === 'AJUSTE_SOLICITADO' ? (
+                              <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setCancelarMembro(m.id); setConfirmando('cancelarAjuste'); }}>Cancelar solicitação de ajuste</button>
+                            ) : (
+                              <>
+                                {m.status !== 'APROVADO' && (
+                                  <button className="botao" onClick={() => aprovarMembro(m.id)}>Aprovar avaliação</button>
+                                )}
+                                <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setAjusteMotivo(''); setAjusteMembro(m.id); }}>Solicitar ajuste</button>
+                              </>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })
@@ -440,6 +544,50 @@ export function TccDetalheCoordenador() {
           erro={erroAcao}
           aoConfirmar={validar}
           aoCancelar={() => setConfirmando(null)}
+        />
+      )}
+
+      {confirmando === 'iniciar' && (
+        <ModalConfirmacao
+          titulo="Iniciar análise"
+          mensagem="Ao iniciar a análise, a banca é travada: os avaliadores não poderão mais reabrir a avaliação por conta própria. Deseja continuar?"
+          textoConfirmar="Iniciar análise"
+          textoProcessando="Iniciando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={iniciarAnalise}
+          aoCancelar={() => setConfirmando(null)}
+        />
+      )}
+
+      {ajusteMembro && (
+        <Modal
+          titulo="Solicitar ajuste"
+          subtitulo="O avaliador poderá reenviar a avaliação. Informe o motivo do ajuste."
+          aoFechar={() => !enviando && setAjusteMembro(null)}
+        >
+          {erroAcao && <div className="erro-geral">{erroAcao}</div>}
+          <label className="campo">
+            <span>Motivo do ajuste</span>
+            <textarea rows={4} value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} placeholder="Descreva o que precisa ser ajustado…" />
+          </label>
+          <div className="acoes">
+            <button className="botao botao-secundario" disabled={enviando} onClick={() => setAjusteMembro(null)}>Cancelar</button>
+            <button className="botao" disabled={enviando || !ajusteMotivo.trim()} onClick={enviarAjuste}>{enviando ? 'Enviando…' : 'Solicitar ajuste'}</button>
+          </div>
+        </Modal>
+      )}
+
+      {confirmando === 'cancelarAjuste' && (
+        <ModalConfirmacao
+          titulo="Cancelar solicitação de ajuste"
+          mensagem="A solicitação de ajuste será desfeita e o avaliador voltará a ficar travado (sem poder reenviar por conta própria). Confirma?"
+          textoConfirmar="Cancelar solicitação"
+          textoProcessando="Cancelando…"
+          processando={enviando}
+          erro={erroAcao}
+          aoConfirmar={confirmarCancelarAjuste}
+          aoCancelar={() => { setConfirmando(null); setCancelarMembro(null); }}
         />
       )}
     </>

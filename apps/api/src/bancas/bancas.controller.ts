@@ -102,6 +102,38 @@ export class BancasController {
     return this.bancas.reabrir(req.usuario.sub, bancaId);
   }
 
+  // Coordenador inicia a análise: AGUARDANDO_ANALISE_* → VALIDACAO_* (trava a banca).
+  @Post('tccs/:id/banca/iniciar-analise')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  iniciarAnalise(@Param('id') id: string) {
+    return this.bancas.iniciarAnalise(id);
+  }
+
+  // Coordenador aprova a avaliação de um membro (durante a análise).
+  @Post('bancas/membros/:membroId/aprovar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  aprovarAvaliacao(@Param('membroId') membroId: string) {
+    return this.bancas.aprovarAvaliacaoMembro(membroId);
+  }
+
+  // Coordenador solicita ajuste a um membro (motivo obrigatório).
+  @Post('bancas/membros/:membroId/solicitar-ajuste')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  solicitarAjuste(@Param('membroId') membroId: string, @Body('motivo') motivo: string) {
+    return this.bancas.solicitarAjuste(membroId, motivo);
+  }
+
+  // Coordenador cancela/desfaz a solicitação de ajuste de um membro.
+  @Post('bancas/membros/:membroId/cancelar-ajuste')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  cancelarAjuste(@Param('membroId') membroId: string) {
+    return this.bancas.cancelarAjuste(membroId);
+  }
+
   @Post('tccs/:id/banca/validar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')

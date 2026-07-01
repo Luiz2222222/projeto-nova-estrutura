@@ -62,14 +62,19 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
   const status: string = m?.status ?? 'PENDENTE';
   const faseAval = ehF2 ? 'AVALIACAO_FASE_2' : 'AVALIACAO_FASE_1';
+  const faseAguardando = ehF2 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1';
   const faseValid = ehF2 ? 'VALIDACAO_FASE_2' : 'VALIDACAO_FASE_1';
   const faseAtual: string | undefined = m?.banca?.tcc?.faseAtual;
   const emAvaliacao = faseAtual === faseAval;
+  const emAguardando = faseAtual === faseAguardando;
   const emValidacao = faseAtual === faseValid;
-  // Só PENDENTE é editável. ENVIADO fica em leitura e mostra "Editar" (reabre).
-  const editavel = !!m && status === 'PENDENTE' && (emAvaliacao || emValidacao);
-  const podeRascunho = editavel && emAvaliacao;
-  const podeReabrir = !!m && status === 'ENVIADO' && (emAvaliacao || emValidacao);
+  // Janela de edição normal: durante a avaliação ou enquanto aguarda a análise da coordenação.
+  const emAberto = emAvaliacao || emAguardando;
+  // Em VALIDACAO a banca está travada; só reenvia quem tem ajuste solicitado pela coordenação.
+  const ajusteSolicitado = status === 'AJUSTE_SOLICITADO' && emValidacao;
+  const editavel = !!m && ((status === 'PENDENTE' && emAberto) || ajusteSolicitado);
+  const podeRascunho = !!m && status === 'PENDENTE' && emAvaliacao; // rascunho só durante a avaliação
+  const podeReabrir = !!m && status === 'ENVIADO' && emAberto; // reabrir só antes da análise
   const leitura = !editavel;
   const bloqueadoPrazo = !!m?.bloqueado;
   const numCor = ehF2 ? 'var(--roxo)' : 'var(--azul-forte)';
@@ -173,15 +178,25 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       {bloqueadoPrazo && (
         <div className="aviso-prazo">⏰ O prazo desta etapa venceu. Para salvar/enviar a avaliação, peça à coordenação uma liberação individual deste TCC.</div>
       )}
+      {ajusteSolicitado && (
+        <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
+          <strong>A coordenação solicitou um ajuste na sua avaliação.</strong> Faça os ajustes e reenvie.
+          {m?.ajusteMotivo ? <><br />Motivo: {m.ajusteMotivo}</> : null}
+        </div>
+      )}
       {leitura && (
         <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
           {status === 'ENVIADO'
-            ? 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Editar".'
-            : status === 'BLOQUEADO'
-              ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
-              : status === 'CONCLUIDO'
-                ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
-                : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
+            ? (emValidacao ? 'Avaliação reenviada — aguardando a análise da coordenação (somente leitura).' : 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Editar".')
+            : status === 'EM_ANALISE'
+              ? 'A coordenação iniciou a análise das avaliações — sua avaliação está travada (somente leitura).'
+              : status === 'APROVADO'
+                ? 'Sua avaliação foi aprovada pela coordenação (somente leitura).'
+                : status === 'BLOQUEADO'
+                  ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
+                  : status === 'CONCLUIDO'
+                    ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
+                    : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
         </div>
       )}
       <div className="criterios-lista">

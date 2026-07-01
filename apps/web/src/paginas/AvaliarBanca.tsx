@@ -64,6 +64,9 @@ export function AvaliarBanca() {
   const temRascunhoSalvo = criterios.some((c) => m[colunaNota(c.chave)] != null) || !!m.parecer;
   const STATUS_INFO: Record<string, { rotulo: string; classe: string }> = {
     ENVIADO: { rotulo: 'Enviada', classe: 'status-normal' },
+    EM_ANALISE: { rotulo: 'Em análise', classe: 'status-atencao' },
+    AJUSTE_SOLICITADO: { rotulo: 'Ajuste solicitado', classe: 'status-urgente' },
+    APROVADO: { rotulo: 'Aprovada', classe: 'status-normal' },
     BLOQUEADO: { rotulo: 'Bloqueada', classe: 'status-urgente' },
     CONCLUIDO: { rotulo: 'Concluída', classe: 'status-normal' },
   };
