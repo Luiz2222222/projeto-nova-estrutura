@@ -610,6 +610,21 @@ export class BancasService {
     return { ok: true };
   }
 
+  // Link para o membro editar/ver a própria avaliação. O ORIENTADOR na banca da Fase II avalia
+  // na página do orientando (#acao-fase2), não em "Participações em bancas".
+  private linkDaAvaliacao(membro: {
+    id: string;
+    avaliadorId: string;
+    avaliador: { papel: string };
+    banca: { fase: string; tcc: { id: string; orientadorId: string | null } };
+  }): string {
+    if (membro.banca.fase === 'FASE_2' && membro.banca.tcc.orientadorId === membro.avaliadorId) {
+      return `/professor/orientandos/${membro.banca.tcc.id}#acao-fase2`;
+    }
+    const base = membro.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
+    return `${base}/${membro.id}`;
+  }
+
   // Coordenador solicita ajuste a um membro (motivo obrigatório). Só aquele avaliador pode
   // reenviar; a fase continua em VALIDACAO_*. Notifica somente o avaliador (interno + e-mail).
   async solicitarAjuste(membroId: string, motivo: string) {
@@ -618,8 +633,7 @@ export class BancasService {
     const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
     await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
-    const base = membro.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
-    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}". Motivo: ${texto}`, `${base}/${membroId}`);
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}". Motivo: ${texto}`, this.linkDaAvaliacao(membro));
     return { ok: true };
   }
 
@@ -632,8 +646,7 @@ export class BancasService {
     }
     await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'EM_ANALISE', ajusteMotivo: null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
-    const base = membro.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
-    await this.eventos.emitirParaUsuario('avaliador_ajuste_cancelado', membro.avaliadorId, `Solicitação de ajuste cancelada — ${faseNome}`, `A solicitação de ajuste da sua avaliação foi cancelada pela coordenação.`, `${base}/${membroId}`);
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_cancelado', membro.avaliadorId, `Solicitação de ajuste cancelada — ${faseNome}`, `A solicitação de ajuste da sua avaliação foi cancelada pela coordenação.`, this.linkDaAvaliacao(membro));
     return { ok: true };
   }
 

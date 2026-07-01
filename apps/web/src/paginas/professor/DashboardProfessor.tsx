@@ -67,6 +67,12 @@ function bancaPendente(m: any): boolean {
   return m.banca?.tcc?.faseAtual === faseAval && m.nota === null;
 }
 
+// Ajuste pedido pela coordenação: só este avaliador pode reenviar, com o TCC em validação.
+function ajustePendente(m: any): boolean {
+  const faseValid = m.banca?.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+  return m.banca?.tcc?.faseAtual === faseValid && m.status === 'AJUSTE_SOLICITADO';
+}
+
 export function DashboardProfessor() {
   const navegar = useNavigate();
   const { usuario, atualizarUsuario } = useAuth();
@@ -126,9 +132,11 @@ export function DashboardProfessor() {
     bancas.forEach((m: any) => {
       const t = m.banca?.tcc;
       if (t?.orientadorId === usuario?.id || t?.coorientadorId === usuario?.id) return; // próprio orientando: fica na página do orientando
+      const ehF2 = m.banca?.fase === 'FASE_2';
       if (bancaPendente(m)) {
-        const ehF2 = m.banca?.fase === 'FASE_2';
         items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${nome(t)} · ${t?.titulo ?? ''}`, link: `/professor/bancas/${m.id}` });
+      } else if (ajustePendente(m)) {
+        items.push({ id: 'ajuste' + m.id, cor: 'amarelo', titulo: `Ajustar avaliação — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${nome(t)} · ${t?.titulo ?? ''}`, link: `/professor/bancas/${m.id}` });
       }
     });
     return items;

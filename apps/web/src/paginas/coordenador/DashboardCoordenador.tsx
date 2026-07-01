@@ -93,7 +93,9 @@ export function DashboardCoordenador() {
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
     pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/solicitacoes?tccId=${t.id}` }));
     tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#banca` }));
+    tccs.filter((t) => t.faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1').forEach((t) => items.push({ id: 'a1' + t.id, cor: 'amarelo', titulo: 'Iniciar análise — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
     tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
+    tccs.filter((t) => t.faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2').forEach((t) => items.push({ id: 'a2' + t.id, cor: 'amarelo', titulo: 'Iniciar análise — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
     tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
     return items;
   }, [tccs, pendentes]);

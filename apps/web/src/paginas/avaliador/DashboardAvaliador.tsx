@@ -63,6 +63,12 @@ function bancaPendente(m: any): boolean {
   return m.banca?.tcc?.faseAtual === faseAval && m.nota === null;
 }
 
+// Ajuste pedido pela coordenação: só este avaliador pode reenviar, com o TCC em validação.
+function ajustePendente(m: any): boolean {
+  const faseValid = m.banca?.fase === 'FASE_1' ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
+  return m.banca?.tcc?.faseAtual === faseValid && m.status === 'AJUSTE_SOLICITADO';
+}
+
 export function DashboardAvaliador() {
   const navegar = useNavigate();
   const { usuario } = useAuth();
@@ -103,10 +109,12 @@ export function DashboardAvaliador() {
   const acoes = useMemo(() => {
     const items: { id: string; cor: string; titulo: string; sub: string; link: string }[] = [];
     bancasReais.forEach((m: any) => {
+      const t = m.banca?.tcc;
+      const ehF2 = m.banca?.fase === 'FASE_2';
       if (bancaPendente(m)) {
-        const t = m.banca?.tcc;
-        const ehF2 = m.banca?.fase === 'FASE_2';
         items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
+      } else if (ajustePendente(m)) {
+        items.push({ id: 'ajuste' + m.id, cor: 'amarelo', titulo: `Ajustar avaliação — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
       }
     });
     return items;

@@ -34,6 +34,10 @@ function estadoFase(membro: any, tcc: any, faseAval: string) {
   const st = membro.status;
   if (st === 'CONCLUIDO') return { classe: 'feito', status: 'Concluída', clicavel: true, feito: true };
   if (st === 'BLOQUEADO') return { classe: 'feito', status: 'Bloqueada', clicavel: true, feito: true };
+  // Ajuste solicitado pela coordenação: ação pendente do avaliador (abre e reenvia).
+  if (st === 'AJUSTE_SOLICITADO') return { classe: 'disponivel', status: 'Ajuste solicitado', clicavel: true, feito: false };
+  if (st === 'EM_ANALISE') return { classe: 'feito', status: 'Em análise da coordenação', clicavel: true, feito: true };
+  if (st === 'APROVADO') return { classe: 'feito', status: 'Aprovada pela coordenação', clicavel: true, feito: true };
   if (st === 'ENVIADO') return { classe: 'feito', status: 'Avaliação enviada', clicavel: true, feito: true };
   // PENDENTE
   if (temRascunho(membro)) return { classe: 'disponivel', status: 'Rascunho salvo', clicavel: true, feito: false };

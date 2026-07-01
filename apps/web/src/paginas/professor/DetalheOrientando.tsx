@@ -181,7 +181,7 @@ export function DetalheOrientando() {
   const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
   const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
   const podeAgendarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2';
-  const podeAvaliarFase2 = (fase === 'AVALIACAO_FASE_2' || fase === 'VALIDACAO_FASE_2') && !!meuMembroF2;
+  const podeAvaliarFase2 = (fase === 'AVALIACAO_FASE_2' || fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' || fase === 'VALIDACAO_FASE_2') && !!meuMembroF2;
   const avisoPrazo = (rot: string) => <div className="aviso-prazo">⏰ O prazo de {rot} venceu. Peça à coordenação uma liberação individual deste TCC.</div>;
   const coorient = tcc.coorientador
     ? `${nomeComTrat(tcc.coorientador)}${tcc.coorientador.afiliacao ? ' · ' + tcc.coorientador.afiliacao : ''}`
