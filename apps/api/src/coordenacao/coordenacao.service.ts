@@ -326,7 +326,7 @@ export class CoordenacaoService {
     bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
   };
 
-  // ZIP geral: todos os TCCs do semestre atual, uma pasta por aluno.
+  // ZIP geral: todos os TCCs do período ativo, uma pasta por aluno.
   async exportarZipGeral(opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
     const semestre = await resolverSemestreAtivo(this.prisma);
     const tccs = await this.prisma.tcc.findMany({
@@ -629,7 +629,7 @@ export class CoordenacaoService {
 
   // ---------- Lista do período (espelha a tela do original) ----------
 
-  // Lista TODOS os alunos e cruza com o TCC do semestre atual, classificando o
+  // Lista TODOS os alunos e cruza com o TCC do período ativo, classificando o
   // envio inicial pelo fluxo de Solicitação (não por documento, como era no antigo).
   async listaDoPeriodo() {
     const semestre = await resolverSemestreAtivo(this.prisma);
@@ -676,7 +676,7 @@ export class CoordenacaoService {
     return { semestre, prazoEnvio: calendario?.envioDocumentos ?? null, alunos: lista };
   }
 
-  // Reseta o período: apaga os TCCs do semestre atual (cascade) e seus arquivos.
+  // Reseta o período: apaga os TCCs do período ativo (cascade) e seus arquivos.
   // Segurança: exige a senha do coordenador e o texto de confirmação "APAGAR".
   async resetarPeriodo(usuarioId: string, senha: string, confirmacao: string) {
     if (confirmacao !== 'APAGAR') {

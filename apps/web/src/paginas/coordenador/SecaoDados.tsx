@@ -52,7 +52,7 @@ export function SecaoDados() {
     <section className="cartao-secao bloco">
       <h2>Dados do período</h2>
       <p className="legenda" style={{ marginBottom: 18 }}>
-        Baixe um backup completo dos TCCs ou reinicie o período. O reset apaga os TCCs do semestre atual.
+        Baixe um backup completo dos TCCs ou reinicie o período. O reset apaga os TCCs do período ativo{periodo ? ` (${periodo})` : ''}, definido no Planejamento.
       </p>
       <div className="acoes" style={{ justifyContent: 'flex-start' }}>
         <button className="botao botao-secundario" onClick={() => setModalBaixar(true)}>Baixar dados</button>
@@ -71,7 +71,7 @@ export function SecaoDados() {
       {modalReset && (
         <Modal
           titulo="Resetar período"
-          subtitulo="Esta ação apaga todos os TCCs do semestre atual e seus arquivos. Não pode ser desfeita — um backup será baixado antes."
+          subtitulo={`Esta ação apaga todos os TCCs do período ativo${periodo ? ` (${periodo})` : ''} e seus arquivos. Não pode ser desfeita — um backup será baixado antes.`}
           aoFechar={() => !resetando && setModalReset(false)}
         >
           {erro && <div className="erro-geral">{erro}</div>}
