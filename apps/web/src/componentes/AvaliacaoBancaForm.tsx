@@ -180,14 +180,14 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       )}
       {ajusteSolicitado && (
         <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
-          <strong>A coordenação solicitou um ajuste na sua avaliação.</strong> Faça os ajustes e reenvie.
+          <strong>A coordenação solicitou um ajuste na sua avaliação.</strong>
           {m?.ajusteMotivo ? <><br />Motivo: {m.ajusteMotivo}</> : null}
         </div>
       )}
-      {leitura && (
-        <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
-          {status === 'ENVIADO'
-            ? (emValidacao ? 'Avaliação reenviada — aguardando a análise da coordenação (somente leitura).' : 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Editar".')
+      {leitura && (() => {
+        const msgLeitura =
+          status === 'ENVIADO'
+            ? (emValidacao ? '' : 'Avaliação enviada. Para alterar as notas ou o parecer, clique em "Editar".')
             : status === 'EM_ANALISE'
               ? 'A coordenação iniciou a análise das avaliações — sua avaliação está travada (somente leitura).'
               : status === 'APROVADO'
@@ -196,9 +196,11 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
                   ? 'Avaliação bloqueada pela coordenação — não é possível editar.'
                   : status === 'CONCLUIDO'
                     ? 'Fase concluída — esta avaliação está encerrada (somente leitura).'
-                    : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.'}
-        </div>
-      )}
+                    : 'Esta fase ainda não está liberada para avaliação. Você poderá avaliar quando o TCC chegar à fase correspondente.';
+        return msgLeitura ? (
+          <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>{msgLeitura}</div>
+        ) : null;
+      })()}
       <div className="criterios-lista">
         {criterios.map((c, i) => (
           <div key={c.chave} className="criterio-card">

@@ -34,9 +34,6 @@ export function ModalEditarTcc({ tcc, pesos, aoFechar, aoSalvo }: { tcc: any; pe
 
         <section className="edicao-secao">
           <h3 className="titulo-bloco">Avaliações da banca</h3>
-          <p className="legenda" style={{ marginTop: 0 }}>
-            Notas por critério, comentários/pareceres e status de cada avaliador — Fase I e Fase II.
-          </p>
           <PainelBancaTcc tcc={tcc} pesos={pesosBanca} aoSalvo={aoSalvo} />
         </section>
       </div>

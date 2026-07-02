@@ -380,7 +380,14 @@ export function TccDetalheCoordenador() {
               ? (media >= 6 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' })
               : (nfEstimada == null ? { txt: 'Pendente', cls: 'pend' } : (nfEstimada >= 7 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' }));
           const resultadoDaFase = resultado && resultado.fase === b.fase ? resultado : null;
-          let nAval = 0;
+          // Papel de cada membro (mesma ordem no nome e no resumo): Fase II → Orientador +
+          // Avaliador 1/2; Fase I → Avaliador 1/2.
+          let contaAval = 0;
+          const papelDe = new Map<string, string>();
+          for (const mm of membros) {
+            const ehOri = ehF2 && mm.avaliadorId === tcc.orientadorId;
+            papelDe.set(mm.id, ehOri ? 'Orientador' : `Avaliador ${++contaAval}`);
+          }
           return (
             <section key={b.id} id={b.fase === faseCardAtiva ? 'validacao' : undefined} className="cartao-secao bloco">
               <div className="banca-fase-cab" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
@@ -392,8 +399,6 @@ export function TccDetalheCoordenador() {
                   )}
                 </div>
               </div>
-              {ehF2 && <p className="legenda" style={{ marginTop: 6 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
-
               {membros.length === 0 ? (
                 <p className="nota-vazio">Sem membros nesta banca.</p>
               ) : (
@@ -403,7 +408,7 @@ export function TccDetalheCoordenador() {
                   return (
                     <div key={m.id} className="aval-card">
                       <div className="aval-card-top">
-                        <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
+                        <span className="aval-nome">{nomeComTrat(m.avaliador)} ({papelDe.get(m.id)})</span>
                         <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                       </div>
                       <div className="aval-criterios">
@@ -442,16 +447,12 @@ export function TccDetalheCoordenador() {
               {/* Resumo da fase */}
               {membros.length > 0 && (
                 <div className="resumo-fase">
-                  {membros.map((m: any) => {
-                    const ehOrient = ehF2 && m.avaliadorId === tcc.orientadorId;
-                    const rot = ehOrient ? 'Orientador' : `Avaliador ${++nAval}`;
-                    return (
-                      <div key={m.id} className="resumo-item">
-                        <span className="resumo-item-rot">{rot}</span>
-                        <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
-                      </div>
-                    );
-                  })}
+                  {membros.map((m: any) => (
+                    <div key={m.id} className="resumo-item">
+                      <span className="resumo-item-rot">{papelDe.get(m.id)}</span>
+                      <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
+                    </div>
+                  ))}
                   <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'}</span></div>
                   <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({ehF2 ? '40%' : '60%'})</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'}</span></div>
                   <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>

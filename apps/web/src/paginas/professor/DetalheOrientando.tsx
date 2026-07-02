@@ -12,6 +12,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
+import { useAuth } from '../../autenticacao/contexto';
 import { Modal } from '../../componentes/Modal';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../../utils/fases';
@@ -72,6 +73,7 @@ function ItemDoc({ d, comOlho }: { d: Doc; comOlho?: boolean }) {
 export function DetalheOrientando() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { usuario } = useAuth();
 
   const [tccs, setTccs] = useState<any[]>([]);
   const [bancasMinhas, setBancasMinhas] = useState<any[]>([]);
@@ -232,7 +234,11 @@ export function DetalheOrientando() {
           <h2>{icoUser} Orientação</h2>
           <div className="info-lista">
             <div className="info-campo"><span className="info-rotulo">Orientador</span><span className="info-valor">Você</span></div>
+            <div className="info-campo"><span className="info-rotulo">E-mail do orientador</span><span className="info-valor">{usuario?.email ?? '—'}</span></div>
             <div className="info-campo"><span className="info-rotulo">Coorientador</span><span className="info-valor">{coorient ?? 'Sem coorientador'}</span></div>
+            {tcc.coorientador?.email && (
+              <div className="info-campo"><span className="info-rotulo">E-mail do coorientador</span><span className="info-valor">{tcc.coorientador.email}</span></div>
+            )}
           </div>
         </section>
         {descricao && (
@@ -331,9 +337,6 @@ export function DetalheOrientando() {
       {podeAvaliarFase2 && (
         <section id="acao-fase2" className="cartao-secao bloco secao-acao">
           <h2>{icoBanca} Sua avaliação da Fase II</h2>
-          <p className="nota-vazio" style={{ marginTop: 0 }}>
-            Como orientador, você também avalia a Fase II (apresentação). Avalie aqui mesmo — não em "Participações em bancas".
-          </p>
           {meuMembroFase2
             ? <AvaliacaoBancaForm membro={meuMembroFase2} aoAtualizar={carregar} />
             : <p className="nota-vazio">Carregando o formulário de avaliação…</p>}

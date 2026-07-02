@@ -106,9 +106,9 @@ function FormAvaliacao({ membro, fase, pesos, aoSalvo, aoFechar }: { membro: any
         <strong>{total != null ? fmtNum(Number(total.toFixed(2))) : '—'}</strong>
         <span className="nota-total-max">/ 10,0</span>
       </div>
-      <div className="acoes" style={{ justifyContent: 'flex-end' }}>
+      <div className="acoes" style={{ justifyContent: 'space-between' }}>
         <button className="botao botao-secundario" disabled={salvando} onClick={aoFechar}>Cancelar</button>
-        <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar avaliação'}</button>
+        <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</button>
       </div>
     </div>
   );
@@ -210,10 +210,6 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
               )}
             </div>
             {aberta && (<>
-            {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
-            {!editavelB && membros.length > 0 && (
-              <p className="legenda" style={{ marginTop: 0 }}>Fase já validada — edição administrativa bloqueada para preservar as notas finais.</p>
-            )}
             {!ehF2 && trocando && <FormTrocar tccId={tcc.id} membrosFase1={membros} aoSalvo={aoSalvo} aoFechar={() => setTrocando(false)} />}
             {membros.length === 0 ? (
               <p className="nota-vazio">Sem membros nesta banca.</p>
@@ -221,35 +217,38 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
               membros.map((m: any) => {
                 const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
                 const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
+                // Por padrão em leitura; "Editar" abre o formulário (que traz Cancelar/Salvar).
+                const editando = editavelB && editandoMembro === m.id;
                 return (
                   <div key={m.id} className="aval-card">
                     <div className="aval-card-top">
                       <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
                       <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                     </div>
-                    <div className="aval-criterios">
-                      {criterios.map((c) => {
-                        const com = extrairSecao(m.parecer ?? '', c.rotulo);
-                        return (
-                          <div key={c.chave} className="aval-criterio">
-                            <span className="aval-criterio-rot">{c.rotulo}</span>
-                            <span className="aval-criterio-nota">{fmtNota(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
-                            {com && <span className="aval-criterio-com">{com}</span>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                    {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
-                    <div className="aval-rodape">
-                      <span className="aval-total">Nota total: <strong>{fmtNota(m.nota)}</strong> / 10</span>
-                      {editavelB && (
-                        <button className="botao botao-secundario" onClick={() => setEditandoMembro(editandoMembro === m.id ? null : m.id)}>
-                          {editandoMembro === m.id ? 'Fechar' : 'Editar avaliação'}
-                        </button>
-                      )}
-                    </div>
-                    {editavelB && editandoMembro === m.id && (
-                      <FormAvaliacao membro={m} fase={b.fase} pesos={pesos} aoSalvo={aoSalvo} aoFechar={() => setEditandoMembro(null)} />
+                    {editando ? (
+                      <FormAvaliacao membro={m} fase={b.fase} pesos={pesos} aoSalvo={() => { setEditandoMembro(null); aoSalvo(); }} aoFechar={() => setEditandoMembro(null)} />
+                    ) : (
+                      <>
+                        <div className="aval-criterios">
+                          {criterios.map((c) => {
+                            const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                            return (
+                              <div key={c.chave} className="aval-criterio">
+                                <span className="aval-criterio-rot">{c.rotulo}</span>
+                                <span className="aval-criterio-nota">{fmtNota(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
+                                {com && <span className="aval-criterio-com">{com}</span>}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                        <div className="aval-rodape">
+                          <span className="aval-total">Nota total: <strong>{fmtNota(m.nota)}</strong> / 10</span>
+                          {editavelB && (
+                            <button className="botao botao-secundario" onClick={() => setEditandoMembro(m.id)}>Editar</button>
+                          )}
+                        </div>
+                      </>
                     )}
                   </div>
                 );
