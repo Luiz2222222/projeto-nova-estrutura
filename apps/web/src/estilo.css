@@ -1113,6 +1113,11 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .nota-bloco-obs { font-size: 11px; color: var(--tinta-3); }
 .nota-bloco .selo { align-self: flex-start; }
 
+/* Botão principal de fechamento de fase (maior/destacado). */
+.botao.botao-grande { padding: 13px 26px; font-size: 16px; font-weight: 700; border-radius: var(--raio-1); }
+/* Variante do botão principal do card da fase: centralizado e largo (sem ocupar 100%). */
+.botao.botao-fase { width: 100%; max-width: 460px; }
+
 /* Resumo horizontal por fase (card da fase, na página do coordenador). */
 .resumo-fase { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
 .resumo-item { flex: 1 1 110px; min-width: 96px; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-1); }

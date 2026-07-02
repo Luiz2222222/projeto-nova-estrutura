@@ -155,16 +155,28 @@ export function TccDetalheCoordenador() {
     }
   }
 
+  // "Aprovar avaliações" da fase: aprova o CONJUNTO (endpoint de aprovar já existente, por
+  // membro) e em seguida valida a fase (mesma validação de sempre). Não há mais aprovação
+  // individual pela UI. Bloqueia se houver ajuste pendente (evita aprovar avaliação em ajuste).
   async function validar() {
     setErroAcao('');
+    const bancaAtiva = bancas.find((b: any) => b.fase === faseCardAtiva);
+    const membros = bancaAtiva?.membros ?? [];
+    if (membros.some((m: any) => m.status === 'AJUSTE_SOLICITADO')) {
+      setErroAcao('Há avaliação com ajuste solicitado ainda pendente. Cancele o ajuste ou aguarde o reenvio antes de aprovar as avaliações.');
+      return;
+    }
     setEnviando(true);
     try {
+      for (const m of membros) {
+        if (m.status !== 'APROVADO') await apiPost(`/bancas/membros/${m.id}/aprovar`, {});
+      }
       const r = await apiPost(`/tccs/${tcc.id}/banca/validar`, {});
       setResultado(r);
       setConfirmando(null);
       carregar();
     } catch (e) {
-      setErroAcao((e as ErroApi).mensagem || 'Não foi possível validar.');
+      setErroAcao((e as ErroApi).mensagem || 'Não foi possível aprovar as avaliações.');
     } finally {
       setEnviando(false);
     }
@@ -182,17 +194,6 @@ export function TccDetalheCoordenador() {
       setErroAcao((e as ErroApi).mensagem || 'Não foi possível iniciar a análise.');
     } finally {
       setEnviando(false);
-    }
-  }
-
-  // Aprova a avaliação de um membro (ação direta, sem modal).
-  async function aprovarMembro(membroId: string) {
-    setErroAcao('');
-    try {
-      await apiPost(`/bancas/membros/${membroId}/aprovar`, {});
-      carregar();
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível aprovar a avaliação.');
     }
   }
 
@@ -378,7 +379,6 @@ export function TccDetalheCoordenador() {
             : !ehF2
               ? (media >= 6 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' })
               : (nfEstimada == null ? { txt: 'Pendente', cls: 'pend' } : (nfEstimada >= 7 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' }));
-          const todosAprovados = membros.length > 0 && membros.every((m: any) => m.status === 'APROVADO');
           const resultadoDaFase = resultado && resultado.fase === b.fase ? resultado : null;
           let nAval = 0;
           return (
@@ -426,16 +426,11 @@ export function TccDetalheCoordenador() {
                         <p className="aval-parecer" style={{ color: 'var(--reprovado)' }}><strong>Ajuste solicitado:</strong> {m.ajusteMotivo}</p>
                       )}
                       {emValidacao && (
-                        <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+                        <div className="acoes" style={{ justifyContent: 'flex-end', marginTop: 8 }}>
                           {m.status === 'AJUSTE_SOLICITADO' ? (
                             <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setCancelarMembro(m.id); setConfirmando('cancelarAjuste'); }}>Cancelar solicitação de ajuste</button>
                           ) : (
-                            <>
-                              {m.status !== 'APROVADO' && (
-                                <button className="botao" onClick={() => aprovarMembro(m.id)}>Aprovar avaliação</button>
-                              )}
-                              <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setAjusteMotivo(''); setAjusteMembro(m.id); }}>Solicitar ajuste</button>
-                            </>
+                            <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setAjusteMotivo(''); setAjusteMembro(m.id); }}>Solicitar ajuste</button>
                           )}
                         </div>
                       )}
@@ -478,16 +473,11 @@ export function TccDetalheCoordenador() {
                 </div>
               )}
 
-              {/* Validar a fase (dentro do card, abaixo do resumo) */}
+              {/* Aprovar as avaliações da fase (dentro do card, abaixo do resumo) */}
               {emValidacao && !resultadoDaFase && (
-                <>
-                  {!todosAprovados && (
-                    <p className="legenda" style={{ color: 'var(--reprovado)', marginBottom: 0 }}>Aprove todas as avaliações para validar a fase.</p>
-                  )}
-                  <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 12 }}>
-                    <button className="botao" disabled={enviando || !todosAprovados} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
-                  </div>
-                </>
+                <div className="acoes" style={{ justifyContent: 'center', marginTop: 14 }}>
+                  <button className="botao botao-grande botao-fase" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Aprovando…' : 'Aprovar avaliações'}</button>
+                </div>
               )}
             </section>
           );
@@ -549,14 +539,14 @@ export function TccDetalheCoordenador() {
 
       {confirmando === 'validar' && (
         <ModalConfirmacao
-          titulo={fase === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
+          titulo="Aprovar avaliações"
           mensagem={
             fase === 'VALIDACAO_FASE_2'
-              ? 'Deseja validar a Fase II? Essa ação calcula a NF2 e o resultado da fase.'
-              : 'Deseja validar a Fase I? Essa ação calcula a NF1 e muda o fluxo do TCC.'
+              ? 'Deseja aprovar as avaliações e fechar a Fase II? Essa ação calcula a NF2 e o resultado da fase.'
+              : 'Deseja aprovar as avaliações e fechar a Fase I? Essa ação calcula a NF1 e muda o fluxo do TCC.'
           }
-          textoConfirmar={fase === 'VALIDACAO_FASE_2' ? 'Validar Fase II' : 'Validar Fase I'}
-          textoProcessando="Validando…"
+          textoConfirmar="Aprovar avaliações"
+          textoProcessando="Aprovando…"
           processando={enviando}
           erro={erroAcao}
           aoConfirmar={validar}

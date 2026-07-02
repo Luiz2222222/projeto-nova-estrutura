@@ -214,7 +214,7 @@ export const ROTULO_MARCO: Record<MarcoCalendario, string> = {
   submissaoMonografia: 'Submissão da monografia',
   preparacaoBancasFase1: 'Preparação das bancas (Fase I)',
   avaliacaoFase1: 'Avaliação - Fase I',
-  preparacaoBancasFase2: 'Liberação da defesa (Fase II)',
+  preparacaoBancasFase2: 'Preparação das bancas (Fase II)',
   apresentacaoFase2: 'Apresentação dos trabalhos (Fase II)',
   ajustesFinais: 'Ajustes finais / versão final',
 };
@@ -372,7 +372,7 @@ export const DESC_MARCO: Record<MarcoCalendario, string> = {
   submissaoMonografia: 'Entrega da monografia para avaliação',
   preparacaoBancasFase1: 'Período de formação das bancas avaliadoras',
   avaliacaoFase1: 'Prazo final para avaliação pela banca',
-  preparacaoBancasFase2: 'Preparação da apresentação; banca composta pelo orientador + 2 avaliadores da Fase I.',
+  preparacaoBancasFase2: 'Formação das bancas para apresentação',
   apresentacaoFase2: 'Prazo final para apresentações orais',
   ajustesFinais: 'Prazo para correções pós-defesa',
 };
