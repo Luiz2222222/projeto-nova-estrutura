@@ -73,7 +73,7 @@ export function subfaseTcc(tcc: any): string {
     case 'AVALIACAO_FASE_1': return 'Avaliação da banca';
     case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1': return 'Aguardando análise da coordenação';
     case 'VALIDACAO_FASE_1': return 'Validação da Fase I';
-    case 'AGENDAMENTO_DEFESA_FASE_2': return 'Aguardando liberação da defesa';
+    case 'AGENDAMENTO_DEFESA_FASE_2': return 'Aguardando preparação das bancas';
     case 'AVALIACAO_FASE_2': return 'Avaliação da banca';
     case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2': return 'Aguardando análise da coordenação';
     case 'VALIDACAO_FASE_2': return 'Validação da Fase II';

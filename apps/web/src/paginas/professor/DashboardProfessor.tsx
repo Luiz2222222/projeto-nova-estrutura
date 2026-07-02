@@ -121,7 +121,7 @@ export function DashboardProfessor() {
         }
       }
       if (t.faseAtual === 'AGENDAMENTO_DEFESA_FASE_2') {
-        items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Liberar defesa (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
+        items.push({ id: 'def' + t.id, cor: 'roxo', titulo: 'Preparar bancas (Fase II)', sub: `${nome(t)} · ${t.titulo}`, link: `/professor/orientandos/${t.id}#acao-fase2` });
       }
       // Ajuste solicitado ao ORIENTADOR na banca da Fase II: a avaliação dele fica na página
       // do orientando, então a pendência aparece aqui (e não em "Participações em bancas").

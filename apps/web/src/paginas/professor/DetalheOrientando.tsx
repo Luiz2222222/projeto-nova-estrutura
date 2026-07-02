@@ -5,8 +5,8 @@
 // documentos iniciais, monografias, continuidade, versão final e notas.
 // Regras do projeto NOVO:
 //  - a banca da Fase II é o orientador + os 2 avaliadores da Fase I (o orientador
-//    libera a defesa e avalia a Fase II AQUI mesmo, nesta página do orientando,
-//    não em "Participações em bancas");
+//    prepara as bancas / libera a avaliação e avalia a Fase II AQUI mesmo, nesta
+//    página do orientando, não em "Participações em bancas");
 //  - a versão final pós-Fase II é validada pelo ORIENTADOR (aqui), não pelo coordenador;
 //  - sem nenhuma etapa de análise final do coordenador.
 import { useEffect, useMemo, useState } from 'react';
@@ -176,7 +176,7 @@ export function DetalheOrientando() {
   const blkCont = !!tcc.bloqueios?.AVALIACAO_CONTINUIDADE;
   const blkMono = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
   const blkVf = !!tcc.bloqueios?.VERSAO_FINAL;
-  // Fase II: o orientador também é membro da banca. A liberação da defesa e a avaliação
+  // Fase II: o orientador também é membro da banca. A preparação das bancas e a avaliação
   // do orientador acontecem AQUI (não em "Participações em bancas").
   const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
   const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
@@ -310,19 +310,19 @@ export function DetalheOrientando() {
         </section>
       )}
 
-      {/* Ação: liberar a defesa da Fase II (orientador). Hoje é só liberar — não há
-          data/hora/local de defesa no sistema. */}
+      {/* Ação: preparação das bancas da Fase II (orientador). Ao liberar, a avaliação da
+          Fase II é habilitada para os avaliadores. */}
       {podeAgendarDefesa && (
         <section id="acao-fase2" className="cartao-secao bloco secao-acao">
-          <h2>{icoBanca} Liberação da defesa (Fase II)</h2>
+          <h2>{icoBanca} Preparação das bancas (Fase II)</h2>
           <div className="aviso-cabecalho">
             <p className="nota-vazio" style={{ margin: 0 }}>
-              A Fase I foi aprovada. Combine a defesa com a banca e libere-a aqui — só então os avaliadores poderão avaliar a Fase II.
+              Formação das bancas para apresentação. Ao liberar, os avaliadores poderão avaliar a Fase II.
             </p>
-            <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando liberação</span>
+            <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando preparação</span>
           </div>
           <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" disabled={enviando} onClick={() => pedirConfirmacao('liberardefesa')}>Liberar defesa da Fase II</button>
+            <button className="botao" disabled={enviando} onClick={() => pedirConfirmacao('liberardefesa')}>Liberar avaliação da Fase II</button>
           </div>
         </section>
       )}
@@ -474,9 +474,9 @@ export function DetalheOrientando() {
 
       {confirmarAcao === 'liberardefesa' && (
         <ModalConfirmacao
-          titulo="Liberar defesa da Fase II"
-          mensagem="Deseja liberar a defesa da Fase II? O TCC entra em avaliação e os avaliadores serão notificados para avaliar."
-          textoConfirmar="Liberar defesa"
+          titulo="Liberar avaliação da Fase II"
+          mensagem="Deseja liberar a avaliação da Fase II? O TCC entra em avaliação e os avaliadores serão notificados para avaliar."
+          textoConfirmar="Liberar avaliação"
           textoProcessando="Liberando…"
           processando={enviando}
           erro={erroAcao}

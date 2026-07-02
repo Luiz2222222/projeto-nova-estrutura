@@ -406,7 +406,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'orientador_definido', rotulo: 'Definido como orientador de um TCC aprovado', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_monografia_enviada', rotulo: 'Aluno enviou/reenviou monografia', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_confirmar_continuidade', rotulo: 'Precisa confirmar continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
-  { chave: 'orientador_agendar_defesa', rotulo: 'Liberar a defesa da Fase II', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_agendar_defesa', rotulo: 'Preparar as bancas / liberar a avaliação da Fase II', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_enviada', rotulo: 'Aluno enviou versão final', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_reenviada', rotulo: 'Versão final reenviada após ajustes', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_tcc_concluido', rotulo: 'TCC concluído', grupo: 'Orientação', papeis: ['PROFESSOR'] },

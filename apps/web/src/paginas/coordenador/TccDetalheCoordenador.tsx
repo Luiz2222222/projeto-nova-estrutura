@@ -247,7 +247,7 @@ export function TccDetalheCoordenador() {
       if (fase === 'REPROVADO_FASE_1') return { rotulo: 'Reprovada', classe: 'status-urgente' };
       return { rotulo: 'Validada', classe: 'status-normal' };
     }
-    if (fase === 'AGENDAMENTO_DEFESA_FASE_2') return { rotulo: 'Aguardando liberação da defesa', classe: 'status-atencao' };
+    if (fase === 'AGENDAMENTO_DEFESA_FASE_2') return { rotulo: 'Aguardando preparação das bancas', classe: 'status-atencao' };
     if (fase === 'AVALIACAO_FASE_2') return { rotulo: 'Avaliação da banca', classe: 'status-atencao' };
     if (fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') return { rotulo: 'Aguardando análise', classe: 'status-atencao' };
     if (fase === 'VALIDACAO_FASE_2') return { rotulo: 'Em análise da coordenação', classe: 'status-atencao' };
