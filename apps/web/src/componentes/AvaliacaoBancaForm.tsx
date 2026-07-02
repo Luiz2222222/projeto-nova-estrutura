@@ -73,7 +73,9 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   // Em VALIDACAO a banca está travada; só reenvia quem tem ajuste solicitado pela coordenação.
   const ajusteSolicitado = status === 'AJUSTE_SOLICITADO' && emValidacao;
   const editavel = !!m && ((status === 'PENDENTE' && emAberto) || ajusteSolicitado);
-  const podeRascunho = !!m && status === 'PENDENTE' && emAvaliacao; // rascunho só durante a avaliação
+  // Rascunho: na avaliação normal (PENDENTE) OU durante um ajuste solicitado pela coordenação
+  // (o avaliador pode salvar o progresso antes de reenviar).
+  const podeRascunho = !!m && ((status === 'PENDENTE' && emAvaliacao) || ajusteSolicitado);
   const podeReabrir = !!m && status === 'ENVIADO' && emAberto; // reabrir só antes da análise
   const leitura = !editavel;
   const bloqueadoPrazo = !!m?.bloqueado;
@@ -264,7 +266,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       {confirmacao === 'enviar' && (
         <ModalConfirmacao
           titulo="Enviar avaliação"
-          mensagem="Deseja enviar esta avaliação? Ela poderá ser editada apenas enquanto a fase permitir."
+          mensagem="Deseja confirmar o envio da avaliação?"
           textoConfirmar="Confirmar envio"
           textoProcessando="Enviando…"
           processando={enviando}

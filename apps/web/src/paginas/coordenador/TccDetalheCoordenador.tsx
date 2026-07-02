@@ -408,7 +408,7 @@ export function TccDetalheCoordenador() {
                   return (
                     <div key={m.id} className="aval-card">
                       <div className="aval-card-top">
-                        <span className="aval-nome">{nomeComTrat(m.avaliador)} ({papelDe.get(m.id)})</span>
+                        <span className="aval-nome">{nomeComTrat(m.avaliador)} <span className="aval-papel">({papelDe.get(m.id)})</span></span>
                         <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                       </div>
                       <div className="aval-criterios">

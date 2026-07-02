@@ -1112,6 +1112,13 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .nota-bloco-val.aguardando { font-size: 14px; font-weight: 600; color: var(--tinta-4); }
 .nota-bloco-obs { font-size: 11px; color: var(--tinta-3); }
 .nota-bloco .selo { align-self: flex-start; }
+/* Nota estimada (coordenador) ainda não confirmada: rótulo destacado + valor em cor própria
+   (roxo, adaptado por tema) para não se confundir com a nota já confirmada (azul). */
+.nota-bloco-pend { font-size: 11px; font-weight: 700; color: var(--roxo); }
+.nota-bloco-val.estimada { color: var(--roxo); }
+
+/* Papel do avaliador ao lado do nome: texto secundário (cinza/menor, adapta ao tema). */
+.aval-papel { color: var(--tinta-3); font-size: 12px; font-weight: 400; }
 
 /* Botão principal de fechamento de fase (maior/destacado). */
 .botao.botao-grande { padding: 13px 26px; font-size: 16px; font-weight: 700; border-radius: var(--raio-1); }

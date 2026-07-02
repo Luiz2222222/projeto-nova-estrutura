@@ -202,9 +202,7 @@ export class BancasService {
         if (membro.status !== 'AJUSTE_SOLICITADO') {
           throw new BadRequestException({ mensagem: 'A coordenação já iniciou a análise. Você só pode editar se houver um ajuste solicitado para você.' });
         }
-        if (!finalizar) {
-          throw new BadRequestException({ mensagem: 'Envie a avaliação ajustada (rascunho não é permitido nesta etapa).' });
-        }
+        // AJUSTE_SOLICITADO: pode salvar rascunho (mantém status e motivo) ou enviar (finaliza).
       } else if (!emAvaliacao && !emAguardando) {
         throw new BadRequestException({ mensagem: 'Esta banca não está em fase de avaliação.' });
       } else if (!finalizar && !emAvaliacao) {
@@ -242,8 +240,10 @@ export class BancasService {
         if (emValidacao) data.ajusteMotivo = null; // reenvio após ajuste: limpa o motivo
       } else {
         data.nota = null; // rascunho NÃO conta como avaliação final
-        data.status = 'PENDENTE';
         data.avaliadoEm = null;
+        // Rascunho durante um ajuste solicitado: NÃO muda o status nem limpa o motivo (o
+        // avaliador segue "em ajuste" até ENVIAR). Fora disso, rascunho normal → PENDENTE.
+        data.status = emValidacao ? 'AJUSTE_SOLICITADO' : 'PENDENTE';
       }
 
       // Update CONDICIONAL: em VALIDACAO só reenvia quem está AJUSTE_SOLICITADO; fora dela,
@@ -382,22 +382,12 @@ export class BancasService {
       });
       if (!membro) throw new NotFoundException();
       const tcc = membro.banca.tcc;
-      // Só permite editar enquanto a fase NÃO foi validada/concluída — senão mexer nas
-      // notas deixaria NF1/NF2/NF/resultado inconsistentes (recálculo não é feito aqui).
-      const ehF1banca = membro.banca.fase === 'FASE_1';
-      // Edição administrativa livre só antes de a coordenação iniciar a análise. Depois disso
-      // (VALIDACAO) a banca está travada — o coordenador usa aprovar/solicitar ajuste.
-      const fasesEditaveis = ehF1banca
-        ? ['AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1']
-        : ['AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2'];
-      if (!fasesEditaveis.includes(tcc.faseAtual)) {
-        throw new BadRequestException({
-          mensagem: 'A análise da coordenação já foi iniciada (ou a fase já foi validada). Use "Aprovar avaliação" ou "Solicitar ajuste".',
-        });
-      }
+      // Edição administrativa do COORDENADOR (endpoint @Papeis('COORDENADOR')) é permitida em
+      // QUALQUER fase, inclusive já validada/concluída. As notas apuradas (NF1/NF2/NF/resultado)
+      // são recalculadas ao final para manter a consistência com as notas atuais da banca.
       const criterios = membro.banca.fase === 'FASE_1' ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
       const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
-      const exigeCompleto = status === 'ENVIADO' || status === 'BLOQUEADO' || status === 'CONCLUIDO';
+      const exigeCompleto = ['ENVIADO', 'EM_ANALISE', 'APROVADO', 'BLOQUEADO', 'CONCLUIDO'].includes(status);
 
       const data: Record<string, number | string | Date | null> = {};
       const valores: number[] = [];
@@ -427,8 +417,44 @@ export class BancasService {
 
       await tx.membroBanca.update({ where: { id: membroId }, data });
       await this.ajustarFasePorBanca(tx, membro.banca, { id: tcc.id, faseAtual: tcc.faseAtual });
+      await this.recalcularNotasApuradas(tx, tcc.id);
     });
     return { ok: true };
+  }
+
+  // Após uma edição administrativa do coordenador, recalcula NF1/NF2/NF/resultado que JÁ
+  // haviam sido apurados, mantendo-os consistentes com as notas atuais da banca. NÃO mexe na
+  // fase/fluxo — só nos números já existentes (fases ainda não validadas têm NF null e são
+  // ignoradas aqui; a apuração inicial continua sendo feita na validação da coordenação).
+  private async recalcularNotasApuradas(tx: Prisma.TransactionClient, tccId: string) {
+    const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) return;
+    const mediaDaBanca = async (fase: 'FASE_1' | 'FASE_2'): Promise<number | null> => {
+      const banca = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase } }, include: { membros: true } });
+      const membros = banca?.membros ?? [];
+      if (membros.length === 0 || membros.some((m) => m.nota == null)) return null;
+      return mediaNotas(membros.map((m) => m.nota ?? 0));
+    };
+    const data: Record<string, number | string | null> = {};
+    if (tcc.nf1 != null) {
+      const m = await mediaDaBanca('FASE_1');
+      if (m != null) data.nf1 = m;
+    }
+    if (tcc.nf2 != null) {
+      const m = await mediaDaBanca('FASE_2');
+      if (m != null) data.nf2 = m;
+    }
+    const nf1n = (data.nf1 as number | undefined) ?? tcc.nf1;
+    const nf2n = (data.nf2 as number | undefined) ?? tcc.nf2;
+    if (tcc.nf != null && nf1n != null && nf2n != null) {
+      const nf = notaFinal(nf1n, nf2n);
+      data.nf = nf;
+      // Só recomputa o resultado FINAL já definido (aprovado/reprovado na Fase II).
+      if (tcc.resultado === 'APROVADO' || tcc.resultado === 'REPROVADO') {
+        data.resultado = aprovadoFinal(nf) ? 'APROVADO' : 'REPROVADO';
+      }
+    }
+    if (Object.keys(data).length > 0) await tx.tcc.update({ where: { id: tccId }, data });
   }
 
   // Coordenador troca os 2 avaliadores da banca da Fase I. Preserva os que continuarem;

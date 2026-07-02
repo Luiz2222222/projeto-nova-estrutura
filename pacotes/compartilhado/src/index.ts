@@ -336,12 +336,13 @@ export const esquemaAvaliarBanca = z.object({
 });
 export type DadosAvaliarBanca = z.infer<typeof esquemaAvaliarBanca>;
 
-// Edição administrativa de uma avaliação de membro pelo COORDENADOR (notas por
-// critério + parecer estruturado + status). Notas parciais só com status PENDENTE.
+// Edição administrativa de uma avaliação de membro pelo COORDENADOR (notas por critério +
+// parecer estruturado + status). Aceita também os status da análise da coordenação, para
+// permitir editar em fases já validadas mantendo o status atual do membro.
 export const esquemaEditarAvaliacaoMembro = z.object({
   notas: z.record(z.coerce.number()),
   parecer: z.string().trim().optional(),
-  status: z.enum(['PENDENTE', 'ENVIADO', 'BLOQUEADO', 'CONCLUIDO']),
+  status: z.enum(['PENDENTE', 'ENVIADO', 'EM_ANALISE', 'AJUSTE_SOLICITADO', 'APROVADO', 'BLOQUEADO', 'CONCLUIDO']),
 });
 export type DadosEditarAvaliacaoMembro = z.infer<typeof esquemaEditarAvaliacaoMembro>;
 

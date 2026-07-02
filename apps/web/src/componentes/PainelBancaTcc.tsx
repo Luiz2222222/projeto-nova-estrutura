@@ -11,6 +11,9 @@ import { clampScore, construirParecer, extrairSecao, fmtNota, fmtNum, numToStr, 
 const STATUS_OPCOES = [
   { v: 'PENDENTE', r: 'Pendente (rascunho — aceita parcial)' },
   { v: 'ENVIADO', r: 'Enviado' },
+  { v: 'EM_ANALISE', r: 'Em análise da coordenação' },
+  { v: 'AJUSTE_SOLICITADO', r: 'Ajuste solicitado' },
+  { v: 'APROVADO', r: 'Aprovado pela coordenação' },
   { v: 'BLOQUEADO', r: 'Bloqueado' },
   { v: 'CONCLUIDO', r: 'Concluído' },
 ];
@@ -179,12 +182,8 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
   const fase = tcc.faseAtual as string;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
 
-  // Edição administrativa normal só ANTES de a coordenação iniciar a análise (VALIDACAO_*).
-  // Depois disso o backend bloqueia; o coordenador usa "Aprovar" / "Solicitar ajuste".
-  const podeEditarBanca = (bancaFase: string) =>
-    bancaFase === 'FASE_1'
-      ? ['AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(fase)
-      : ['AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2'].includes(fase);
+  // Edição administrativa do coordenador é SEMPRE permitida neste modal (endpoint só de
+  // coordenador; o backend recalcula NF1/NF2/NF/resultado ao editar fases já validadas).
   const podeTrocarAvaliadores = ['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(fase);
 
   if (bancas.length === 0) return <p className="nota-vazio">Banca ainda não formada.</p>;
@@ -195,7 +194,6 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
         const ehF2 = b.fase === 'FASE_2';
         const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
         const membros = b.membros ?? [];
-        const editavelB = podeEditarBanca(b.fase);
         const aberta = !colapsadas.has(b.id);
         // Papel de cada membro: Fase II → Orientador + Avaliador 1/2; Fase I → Avaliador 1/2.
         let contaAval = 0;
@@ -224,11 +222,11 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
                 const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
                 const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
                 // Por padrão em leitura; "Editar" abre o formulário (que traz Cancelar/Salvar).
-                const editando = editavelB && editandoMembro === m.id;
+                const editando = editandoMembro === m.id;
                 return (
                   <div key={m.id} className="aval-card">
                     <div className="aval-card-top">
-                      <span className="aval-nome">{nomeComTrat(m.avaliador)} ({papelDe.get(m.id)})</span>
+                      <span className="aval-nome">{nomeComTrat(m.avaliador)} <span className="aval-papel">({papelDe.get(m.id)})</span></span>
                       <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                     </div>
                     {editando ? (
@@ -250,9 +248,7 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
                         {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
                         <div className="aval-rodape">
                           <span className="aval-total">Nota total: <strong>{fmtNota(m.nota)}</strong> / 10</span>
-                          {editavelB && (
-                            <button className="botao botao-secundario" onClick={() => setEditandoMembro(m.id)}>Editar</button>
-                          )}
+                          <button className="botao botao-secundario" onClick={() => setEditandoMembro(m.id)}>Editar</button>
                         </div>
                       </>
                     )}
