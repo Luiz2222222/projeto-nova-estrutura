@@ -53,7 +53,10 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   const [parecerGeral, setParecerGeral] = useState('');
   const [erro, setErro] = useState('');
   const [mensagem, setMensagem] = useState('');
-  const [enviando, setEnviando] = useState(false);
+  // Ação em curso: só o botão da própria ação mostra "…"; os outros ficam desativados
+  // (sem trocar o texto para o loading de outra ação).
+  const [acaoEmCurso, setAcaoEmCurso] = useState<null | 'rascunho' | 'enviar' | 'editar'>(null);
+  const enviando = acaoEmCurso !== null;
   const [confirmacao, setConfirmacao] = useState<null | 'enviar' | 'reabrir'>(null);
   const [erroConfirmacao, setErroConfirmacao] = useState('');
 
@@ -81,18 +84,30 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   const bloqueadoPrazo = !!m?.bloqueado;
   const numCor = ehF2 ? 'var(--roxo)' : 'var(--azul-forte)';
 
-  // Carrega o que estiver salvo (rascunho ou avaliação enviada).
+  // Carrega o que estiver salvo: rascunho PRIVADO (se houver) ou a avaliação enviada (colunas
+  // oficiais). O rascunho fica na coluna `rascunho` (JSON), separado das colunas oficiais.
   useEffect(() => {
     if (!m) return;
+    let notasFonte: Record<string, any> = {};
+    let parecerFonte: string = m.parecer ?? '';
+    let temRascunho = false;
+    if (m.rascunho) {
+      try {
+        const r = JSON.parse(m.rascunho);
+        notasFonte = r?.notas ?? {};
+        parecerFonte = r?.parecer ?? '';
+        temRascunho = true;
+      } catch { /* rascunho inválido: usa as colunas oficiais */ }
+    }
     const ns: Record<string, string> = {};
     const cs: Record<string, string> = {};
     for (const c of criterios) {
-      ns[c.chave] = numToStr(m[colunaNota(c.chave)]);
-      cs[c.chave] = extrairSecao(m.parecer ?? '', c.rotulo);
+      ns[c.chave] = numToStr(temRascunho ? notasFonte[c.chave] : m[colunaNota(c.chave)]);
+      cs[c.chave] = extrairSecao(parecerFonte, c.rotulo);
     }
     setNotas(ns);
     setComentarios(cs);
-    setParecerGeral(extrairSecao(m.parecer ?? '', 'Parecer geral'));
+    setParecerGeral(extrairSecao(parecerFonte, 'Parecer geral'));
   }, [m?.id, m?.status]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const peso = (c: Criterio) => Number(m?.pesos?.[colunaPeso(c.chave)] ?? c.pesoPadrao);
@@ -132,7 +147,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       if (n < 0 || n > peso(c)) { reportar(`A nota de "${c.rotulo}" deve estar entre 0 e ${fmt(peso(c))}.`); return false; }
       corpo[c.chave] = n;
     }
-    setEnviando(true);
+    setAcaoEmCurso(finalizar ? 'enviar' : 'rascunho');
     try {
       await apiPost(`/bancas/${m.bancaId}/avaliar`, { notas: corpo, parecer: construirParecer() || undefined, finalizar });
       await aoAtualizar();
@@ -142,7 +157,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       reportar((e as ErroApi).mensagem || 'Não foi possível salvar.');
       return false;
     } finally {
-      setEnviando(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -150,7 +165,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   async function reabrir(reportar: (msg: string) => void): Promise<boolean> {
     reportar('');
     setMensagem('');
-    setEnviando(true);
+    setAcaoEmCurso('editar');
     try {
       await apiPost(`/bancas/${m.bancaId}/reabrir`, {});
       await aoAtualizar();
@@ -160,7 +175,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       reportar((e as ErroApi).mensagem || 'Não foi possível reabrir a avaliação.');
       return false;
     } finally {
-      setEnviando(false);
+      setAcaoEmCurso(null);
     }
   }
 
@@ -249,16 +264,16 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       <div className="acoes" style={{ justifyContent: 'flex-start' }}>
         {podeRascunho && !bloqueadoPrazo && (
           <button className="botao botao-secundario" disabled={enviando} onClick={() => salvar(false, setErro)}>
-            {enviando ? 'Salvando…' : 'Salvar rascunho'}
+            {acaoEmCurso === 'rascunho' ? 'Salvando…' : 'Salvar rascunho'}
           </button>
         )}
         {podeReabrir ? (
           <button className="botao" disabled={enviando || bloqueadoPrazo} onClick={() => { setErro(''); setMensagem(''); setErroConfirmacao(''); setConfirmacao('reabrir'); }}>
-            {enviando ? 'Editando…' : 'Editar'}
+            {acaoEmCurso === 'editar' ? 'Editando…' : 'Editar'}
           </button>
         ) : editavel ? (
           <button className="botao" disabled={enviando || total == null || bloqueadoPrazo} onClick={() => { setErro(''); setMensagem(''); setErroConfirmacao(''); setConfirmacao('enviar'); }}>
-            {enviando ? 'Enviando…' : 'Enviar'}
+            {acaoEmCurso === 'enviar' ? 'Enviando…' : 'Enviar'}
           </button>
         ) : null}
       </div>

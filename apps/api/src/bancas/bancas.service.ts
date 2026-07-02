@@ -210,16 +210,17 @@ export class BancasService {
       }
 
       // Pesos: do Calendário do semestre; se não houver, usa os defaults dos critérios.
+      // Valida cada nota (0..peso). Ausentes são OK no rascunho; no envio, exige todas.
       const criterios = ehF1 ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
       const calendario: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
-      const data: Record<string, number | string | Date | null> = {};
+      const notasLimpas: Record<string, number | null> = {};
       const valores: number[] = [];
       let faltam = false;
       for (const c of criterios) {
         const peso = calendario?.[colunaPeso(c.chave)] ?? c.pesoPadrao;
         const bruto = notas?.[c.chave];
         if (bruto === undefined || bruto === null || Number.isNaN(Number(bruto))) {
-          data[colunaNota(c.chave)] = null; // ausente: ok no rascunho; erro no envio (abaixo)
+          notasLimpas[c.chave] = null;
           faltam = true;
           continue;
         }
@@ -227,22 +228,27 @@ export class BancasService {
         if (!Number.isFinite(nota) || nota < 0 || nota > peso) {
           throw new BadRequestException({ mensagem: `Nota de "${c.rotulo}" deve estar entre 0 e ${peso}.` });
         }
-        data[colunaNota(c.chave)] = nota;
+        notasLimpas[c.chave] = nota;
         valores.push(nota);
       }
-      data.parecer = parecer ?? null;
 
+      const data: Record<string, number | string | Date | null> = {};
       if (finalizar) {
         if (faltam) throw new BadRequestException({ mensagem: 'Para enviar, preencha todas as notas dos critérios.' });
+        // ENVIO: grava as colunas OFICIAIS (visíveis ao coordenador) e limpa o rascunho.
+        for (const c of criterios) data[colunaNota(c.chave)] = notasLimpas[c.chave];
+        data.parecer = parecer ?? null;
         data.nota = soma(valores); // total do membro (0–10)
         data.status = 'ENVIADO';
         data.avaliadoEm = new Date();
+        data.rascunho = null;
         if (emValidacao) data.ajusteMotivo = null; // reenvio após ajuste: limpa o motivo
       } else {
-        data.nota = null; // rascunho NÃO conta como avaliação final
-        data.avaliadoEm = null;
-        // Rascunho durante um ajuste solicitado: NÃO muda o status nem limpa o motivo (o
-        // avaliador segue "em ajuste" até ENVIAR). Fora disso, rascunho normal → PENDENTE.
+        // RASCUNHO PRIVADO: guarda em coluna separada; NÃO toca nas colunas oficiais nem no
+        // total/status de envio — assim o coordenador não vê o rascunho antes do envio final.
+        data.rascunho = JSON.stringify({ notas: notasLimpas, parecer: parecer ?? '' });
+        // Mantém o status: PENDENTE (avaliação normal) ou AJUSTE_SOLICITADO (em ajuste — não
+        // muda o status nem limpa o motivo; só o ENVIAR final faz isso).
         data.status = emValidacao ? 'AJUSTE_SOLICITADO' : 'PENDENTE';
       }
 
@@ -324,9 +330,20 @@ export class BancasService {
       if (tcc.faseAtual !== faseAval && tcc.faseAtual !== faseAguardando) {
         throw new BadRequestException({ mensagem: 'A coordenação já iniciou a análise; não é possível reabrir a avaliação por conta própria.' });
       }
+      // Reabrir volta a avaliação a ser um RASCUNHO PRIVADO do avaliador: move as notas/parecer
+      // enviados para a coluna `rascunho` e LIMPA as colunas oficiais, para o coordenador deixar
+      // de ver essa avaliação (ela não está mais "recebida").
+      const criterios = ehF1 ? CRITERIOS_FASE1 : CRITERIOS_FASE2;
+      const notasRasc: Record<string, number | null> = {};
+      const limparColunas: Record<string, null> = {};
+      for (const c of criterios) {
+        notasRasc[c.chave] = (membro as any)[colunaNota(c.chave)] ?? null;
+        limparColunas[colunaNota(c.chave)] = null;
+      }
+      const rascunho = JSON.stringify({ notas: notasRasc, parecer: membro.parecer ?? '' });
       const atualizado = await tx.membroBanca.updateMany({
         where: { id: membro.id, status: 'ENVIADO' },
-        data: { status: 'PENDENTE', nota: null, avaliadoEm: null },
+        data: { status: 'PENDENTE', nota: null, avaliadoEm: null, parecer: null, rascunho, ...limparColunas },
       });
       if (atualizado.count !== 1) throw new BadRequestException({ mensagem: 'Não foi possível reabrir a avaliação.' });
       // Estava aguardando análise (todos enviaram) → deixa de estar pronta: volta para avaliação.

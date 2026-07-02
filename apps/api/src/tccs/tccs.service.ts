@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
-import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
+import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
 import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
@@ -302,7 +302,7 @@ export class TccsService {
   // e abrir o detalhe (aluno, orientador, coorientador, documentos, banca + notas).
   async todos() {
     const semestre = await resolverSemestreAtivo(this.prisma);
-    return this.prisma.tcc.findMany({
+    const tccs = await this.prisma.tcc.findMany({
       where: { semestre },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
@@ -314,6 +314,8 @@ export class TccsService {
       },
       orderBy: { criadoEm: 'desc' },
     });
+    // Coordenador vê as notas oficiais, mas NUNCA o rascunho privado do avaliador.
+    return tccs.map((t) => ocultarRascunho(t));
   }
 
   pendentes() {
@@ -498,7 +500,7 @@ export class TccsService {
     });
     // Orientador não é coordenador: esconde NF1/NF2/NF, resultado e as notas/parecer dos
     // membros da banca até a confirmação da nota final da Fase II (tcc.nf).
-    return Promise.all(tccs.map(async (t) => ({ ...sanitizarNotasTcc(t), bloqueios: await this.prazos.bloqueiosDoTcc(t) })));
+    return Promise.all(tccs.map(async (t) => ({ ...ocultarRascunho(sanitizarNotasTcc(t)), bloqueios: await this.prazos.bloqueiosDoTcc(t) })));
   }
 
   // Lista os TCCs em que o usuário é coorientador (visão de leitura: aluno, orientador e docs).

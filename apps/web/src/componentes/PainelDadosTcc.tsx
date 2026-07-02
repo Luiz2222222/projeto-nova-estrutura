@@ -35,6 +35,22 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
     apiGet('/usuarios/coorientadores').then((r: any) => setCoorientadores(r ?? [])).catch(() => setCoorientadores([]));
   }, []);
 
+  // Continuidade em 3 estados (derivada de faseAtual + continuidadeConfirmada). Mudar de
+  // estado só ajusta esses dois campos — NÃO apaga notas/documentos/banca/histórico (o backend
+  // apenas atualiza os campos do TCC). Voltar o status mantém tudo o que já existia.
+  const continuidadeEstado = faseAtual === 'DESCONTINUADO' ? 'descontinuado' : continuidadeConfirmada ? 'confirmada' : 'pendente';
+  function mudarContinuidade(v: string) {
+    if (v === 'descontinuado') {
+      setContinuidadeConfirmada(false);
+      setFaseAtual('DESCONTINUADO');
+    } else {
+      setContinuidadeConfirmada(v === 'confirmada');
+      // Ao sair de "Descontinuado", volta para uma fase ativa (o coordenador ajusta a fase
+      // exata no seletor "Fase atual" acima, se necessário). Os dados continuam salvos.
+      if (faseAtual === 'DESCONTINUADO') setFaseAtual('DESENVOLVIMENTO');
+    }
+  }
+
   async function salvar() {
     setErro('');
     setMsg('');
@@ -92,11 +108,16 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
           <div className="pref-texto"><span className="pref-rotulo">Monografia aprovada</span><span className="pref-desc">Trilha da monografia concluída pelo orientador.</span></div>
           <button type="button" role="switch" aria-checked={monografiaAprovada} className={`pref-switch${monografiaAprovada ? ' on' : ''}`} onClick={() => setMonografiaAprovada((v) => !v)}><span className="pref-switch-bolinha" aria-hidden="true" /></button>
         </div>
-        <div className="pref-item">
-          <div className="pref-texto"><span className="pref-rotulo">Continuidade confirmada</span><span className="pref-desc">Trilha da continuidade confirmada pelo orientador.</span></div>
-          <button type="button" role="switch" aria-checked={continuidadeConfirmada} className={`pref-switch${continuidadeConfirmada ? ' on' : ''}`} onClick={() => setContinuidadeConfirmada((v) => !v)}><span className="pref-switch-bolinha" aria-hidden="true" /></button>
-        </div>
       </div>
+      <label className="campo" style={{ marginTop: 12 }}>
+        <span>Continuidade</span>
+        <select value={continuidadeEstado} onChange={(e) => mudarContinuidade(e.target.value)}>
+          <option value="pendente">Não respondido / pendente</option>
+          <option value="confirmada">Continuidade confirmada</option>
+          <option value="descontinuado">Descontinuado</option>
+        </select>
+        <small className="legenda">Pode marcar “Descontinuado” mesmo com o TCC em fase avançada. Isso não apaga notas, documentos, banca ou histórico — os dados ficam salvos e voltam se você mudar o status.</small>
+      </label>
       <label className="campo" style={{ marginTop: 12 }}><span>Parecer de continuidade</span><textarea rows={2} value={parecerContinuidade} onChange={(e) => setParecerContinuidade(e.target.value)} placeholder="Motivo (quando descontinuado)…" /></label>
 
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Pessoas / orientação</h3>

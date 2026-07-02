@@ -35,6 +35,7 @@
   --reprovado: #b91c1c;
   --reprovado-suave: rgba(239, 68, 68, 0.12);
   --roxo: #9333ea; /* destaque do card "Fase atual" (ajustado por tema) */
+  --aviso: #b45309; /* aguardando/estimado (amber) — ajustado por tema */
 
   /* Vidro claro (telas de acesso) */
   --vidro-bg: rgba(255, 255, 255, 0.72);
@@ -902,6 +903,7 @@ textarea { resize: vertical; min-height: 72px; }
   --reprovado: #f87171;
   --reprovado-suave: rgba(248, 113, 113, 0.16);
   --roxo: #c084fc; /* roxo mais claro p/ contraste no escuro */
+  --aviso: #fbbf24;
 
   --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.35);
   --sombra-2: 0 12px 34px rgba(0, 0, 0, 0.5);
@@ -939,6 +941,7 @@ textarea { resize: vertical; min-height: 72px; }
   --reprovado: #f87171;
   --reprovado-suave: rgba(248, 113, 113, 0.16);
   --roxo: #c084fc; /* roxo mais claro p/ contraste no preto */
+  --aviso: #fbbf24;
 
   --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.6);
   --sombra-2: 0 12px 34px rgba(0, 0, 0, 0.75);
@@ -1113,9 +1116,11 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .nota-bloco-obs { font-size: 11px; color: var(--tinta-3); }
 .nota-bloco .selo { align-self: flex-start; }
 /* Nota estimada (coordenador) ainda não confirmada: rótulo destacado + valor em cor própria
-   (roxo, adaptado por tema) para não se confundir com a nota já confirmada (azul). */
-.nota-bloco-pend { font-size: 11px; font-weight: 700; color: var(--roxo); }
-.nota-bloco-val.estimada { color: var(--roxo); }
+   (amber "--aviso", adaptado por tema) para não se confundir com a nota já confirmada (azul). */
+.nota-bloco-pend { font-size: 11px; font-weight: 700; color: var(--aviso); }
+.nota-bloco-val.estimada { color: var(--aviso); }
+/* Destaque leve no card inteiro quando a nota é estimada/aguardando confirmação. */
+.nota-bloco.pendente { border-color: var(--aviso); }
 
 /* Papel do avaliador ao lado do nome: texto secundário (cinza/menor, adapta ao tema). */
 .aval-papel { color: var(--tinta-3); font-size: 12px; font-weight: 400; }
@@ -1306,8 +1311,11 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .aval-criterio-rot { font-size: 13px; font-weight: 600; color: var(--tinta-2); }
 .aval-criterio-nota { font-size: 13px; font-weight: 700; color: var(--tinta-1); white-space: nowrap; }
 .aval-criterio-nota small { color: var(--tinta-3); font-weight: 500; }
-.aval-criterio-com { grid-column: 1 / -1; font-size: 12.5px; color: var(--tinta-3); }
-.aval-parecer { margin: 10px 0 0; font-size: 13px; color: var(--tinta-2); }
+.aval-criterio-com { grid-column: 1 / -1; min-width: 0; font-size: 12.5px; color: var(--tinta-3); overflow-wrap: anywhere; word-break: break-word; }
+.aval-parecer { margin: 10px 0 0; min-width: 0; font-size: 13px; color: var(--tinta-2); overflow-wrap: anywhere; word-break: break-word; }
+/* Comentários longos sem espaço não podem estourar o card horizontalmente. */
+.aval-card, .aval-criterio { min-width: 0; }
+.aval-criterio-rot { overflow-wrap: anywhere; }
 .aval-rodape { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--borda-suave); flex-wrap: wrap; }
 .aval-total { font-size: 14px; color: var(--tinta-2); }
 .aval-total strong { font-size: 16px; color: var(--azul-forte); }

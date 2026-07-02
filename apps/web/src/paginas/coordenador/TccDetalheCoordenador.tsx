@@ -411,22 +411,29 @@ export function TccDetalheCoordenador() {
                         <span className="aval-nome">{nomeComTrat(m.avaliador)} <span className="aval-papel">({papelDe.get(m.id)})</span></span>
                         <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                       </div>
-                      <div className="aval-criterios">
-                        {criterios.map((c) => {
-                          const com = extrairSecao(m.parecer ?? '', c.rotulo);
-                          return (
-                            <div key={c.chave} className="aval-criterio">
-                              <span className="aval-criterio-rot">{c.rotulo}</span>
-                              <span className="aval-criterio-nota">{fmtNotaAv(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
-                              {com && <span className="aval-criterio-com">{com}</span>}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
-                      <div className="aval-rodape">
-                        <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
-                      </div>
+                      {m.nota == null ? (
+                        // Recebida só quando ENVIADA: rascunho do avaliador não aparece aqui.
+                        <p className="nota-vazio" style={{ marginTop: 8 }}>Avaliação ainda não enviada.</p>
+                      ) : (
+                        <>
+                          <div className="aval-criterios">
+                            {criterios.map((c) => {
+                              const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                              return (
+                                <div key={c.chave} className="aval-criterio">
+                                  <span className="aval-criterio-rot">{c.rotulo}</span>
+                                  <span className="aval-criterio-nota">{fmtNotaAv(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
+                                  {com && <span className="aval-criterio-com">{com}</span>}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                          <div className="aval-rodape">
+                            <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
+                          </div>
+                        </>
+                      )}
                       {m.ajusteMotivo && (
                         <p className="aval-parecer" style={{ color: 'var(--reprovado)' }}><strong>Ajuste solicitado:</strong> {m.ajusteMotivo}</p>
                       )}
@@ -453,8 +460,8 @@ export function TccDetalheCoordenador() {
                       <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
                     </div>
                   ))}
-                  <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'}</span></div>
-                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({ehF2 ? '40%' : '60%'})</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'}</span></div>
+                  <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'} <small>/ 10,00</small></span></div>
+                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({ehF2 ? '40%' : '60%'})</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'} <small>/ {(ehF2 ? 4 : 6).toFixed(2).replace('.', ',')}</small></span></div>
                   <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>
                 </div>
               )}

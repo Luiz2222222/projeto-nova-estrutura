@@ -14,7 +14,7 @@
 const CAMPOS_NOTA_TCC = ['nf1', 'nf2', 'nf', 'resultado'] as const;
 
 // Zera, num registro de membro de banca, a nota total, todas as notas por critério
-// (colunas que começam com "nota") e o parecer da avaliação.
+// (colunas que começam com "nota"), o parecer e o rascunho privado da avaliação.
 function limparMembro(m: any): any {
   if (!m || typeof m !== 'object') return m;
   const out: any = { ...m };
@@ -22,7 +22,22 @@ function limparMembro(m: any): any {
     if (k === 'nota' || k.startsWith('nota')) out[k] = null;
   }
   if ('parecer' in out) out.parecer = null;
+  if ('rascunho' in out) out.rascunho = undefined;
   return out;
+}
+
+// Remove APENAS o rascunho privado do avaliador dos membros da banca. Só o próprio avaliador
+// (via /bancas/minhas) deve recebê-lo; coordenador e orientador nunca. Não mexe nas notas
+// oficiais (usar junto com sanitizarNotasTcc quando aplicável).
+export function ocultarRascunho<T extends Record<string, any> | null | undefined>(tcc: T): T {
+  if (!tcc || !Array.isArray((tcc as any).bancas)) return tcc;
+  return {
+    ...tcc,
+    bancas: (tcc as any).bancas.map((b: any) => ({
+      ...b,
+      membros: Array.isArray(b?.membros) ? b.membros.map((m: any) => ({ ...m, rascunho: undefined })) : b?.membros,
+    })),
+  } as T;
 }
 
 // Sanitiza um TCC (com ou sem bancas/membros inclusos). Devolve o mesmo objeto quando a

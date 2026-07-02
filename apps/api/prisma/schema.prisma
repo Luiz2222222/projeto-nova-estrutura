@@ -303,6 +303,11 @@ model MembroBanca {
   parecer     String?
   avaliadoEm  DateTime?
 
+  // Rascunho PRIVADO do avaliador (JSON: { notas, parecer }). NÃO é exposto ao coordenador —
+  // fica separado das colunas oficiais (notaX/parecer/nota) para que o rascunho só apareça
+  // para o próprio avaliador até o ENVIO final. Limpo (null) ao enviar.
+  rascunho    String?
+
   @@unique([bancaId, avaliadorId])
   @@map("membros_banca")
 }

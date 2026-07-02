@@ -233,19 +233,26 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
                       <FormAvaliacao membro={m} fase={b.fase} pesos={pesos} aoSalvo={() => { setEditandoMembro(null); aoSalvo(); }} aoFechar={() => setEditandoMembro(null)} />
                     ) : (
                       <>
-                        <div className="aval-criterios">
-                          {criterios.map((c) => {
-                            const com = extrairSecao(m.parecer ?? '', c.rotulo);
-                            return (
-                              <div key={c.chave} className="aval-criterio">
-                                <span className="aval-criterio-rot">{c.rotulo}</span>
-                                <span className="aval-criterio-nota">{fmtNota(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
-                                {com && <span className="aval-criterio-com">{com}</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                        {m.nota == null ? (
+                          // O rascunho privado do avaliador não aparece; só a avaliação enviada.
+                          <p className="nota-vazio" style={{ marginTop: 8 }}>Avaliação ainda não enviada.</p>
+                        ) : (
+                          <>
+                            <div className="aval-criterios">
+                              {criterios.map((c) => {
+                                const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                                return (
+                                  <div key={c.chave} className="aval-criterio">
+                                    <span className="aval-criterio-rot">{c.rotulo}</span>
+                                    <span className="aval-criterio-nota">{fmtNota(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
+                                    {com && <span className="aval-criterio-com">{com}</span>}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                          </>
+                        )}
                         <div className="aval-rodape">
                           <span className="aval-total">Nota total: <strong>{fmtNota(m.nota)}</strong> / 10</span>
                           <button className="botao botao-secundario" onClick={() => setEditandoMembro(m.id)}>Editar</button>

@@ -36,7 +36,7 @@ function mediaBancaCompleta(tcc: any, fase: string): number | null {
 // ainda não confirmada pela coordenação.
 function BlocoNotas({ titulo, pendente, destaque, linhas }: { titulo: string; pendente?: boolean; destaque?: boolean; linhas: { rot: string; valor: number | null; forte?: boolean }[] }) {
   return (
-    <div className={`nota-bloco${destaque ? ' nota-bloco-final' : ''}`}>
+    <div className={`nota-bloco${destaque ? ' nota-bloco-final' : ''}${pendente ? ' pendente' : ''}`}>
       <span className="nota-bloco-titulo">{titulo}{pendente && <span className="nota-bloco-pend"> (Aguardando confirmação)</span>}</span>
       {linhas.map((l) => (
         <div key={l.rot} className="nota-bloco-linha">
