@@ -275,8 +275,8 @@ export function TccDetalheCoordenador() {
         </div>
       </div>
 
-      {/* Notas Finais (topo) — coordenador vê as notas assim que existem. */}
-      <CardNotasFinais tcc={tcc} />
+      {/* Notas Finais (topo) — coordenador vê as notas (incl. estimativa antes da confirmação). */}
+      <CardNotasFinais tcc={tcc} coordenador />
 
       {/* Informações gerais — aluno e orientação */}
       <div className="grade-detalhe bloco">

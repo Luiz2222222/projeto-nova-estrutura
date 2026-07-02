@@ -197,13 +197,19 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
         const membros = b.membros ?? [];
         const editavelB = podeEditarBanca(b.fase);
         const aberta = !colapsadas.has(b.id);
+        // Papel de cada membro: Fase II → Orientador + Avaliador 1/2; Fase I → Avaliador 1/2.
+        let contaAval = 0;
+        const papelDe = new Map<string, string>();
+        for (const mm of membros) {
+          const ehOri = ehF2 && mm.avaliadorId === tcc.orientadorId;
+          papelDe.set(mm.id, ehOri ? 'Orientador' : `Avaliador ${++contaAval}`);
+        }
         return (
           <div key={b.id} className="banca-fase">
             <div className="banca-fase-cab">
               <button type="button" className="banca-fase-toggle" onClick={() => alternar(b.id)} aria-expanded={aberta}>
                 <span className="banca-caret">{aberta ? '▾' : '▸'}</span>
                 <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
-                <span className="banca-fase-contagem">({membros.length} {membros.length === 1 ? 'membro' : 'membros'})</span>
               </button>
               {aberta && !ehF2 && membros.length > 0 && podeTrocarAvaliadores && (
                 <button className="botao botao-secundario" onClick={() => setTrocando((v) => !v)}>{trocando ? 'Fechar' : 'Trocar avaliadores'}</button>
@@ -222,7 +228,7 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
                 return (
                   <div key={m.id} className="aval-card">
                     <div className="aval-card-top">
-                      <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
+                      <span className="aval-nome">{nomeComTrat(m.avaliador)} ({papelDe.get(m.id)})</span>
                       <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
                     </div>
                     {editando ? (

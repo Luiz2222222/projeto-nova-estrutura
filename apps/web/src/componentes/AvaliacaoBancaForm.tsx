@@ -245,9 +245,11 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       </div>
 
       <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-        <button className="botao botao-secundario" disabled={!podeRascunho || enviando || bloqueadoPrazo} onClick={() => salvar(false, setErro)}>
-          {enviando ? 'Salvando…' : 'Salvar rascunho'}
-        </button>
+        {podeRascunho && !bloqueadoPrazo && (
+          <button className="botao botao-secundario" disabled={enviando} onClick={() => salvar(false, setErro)}>
+            {enviando ? 'Salvando…' : 'Salvar rascunho'}
+          </button>
+        )}
         {podeReabrir ? (
           <button className="botao" disabled={enviando || bloqueadoPrazo} onClick={() => { setErro(''); setMensagem(''); setErroConfirmacao(''); setConfirmacao('reabrir'); }}>
             {enviando ? 'Editando…' : 'Editar'}

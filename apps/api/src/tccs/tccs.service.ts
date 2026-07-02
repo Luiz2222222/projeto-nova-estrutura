@@ -488,7 +488,7 @@ export class TccsService {
       where: { orientadorId: professorId },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
-        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, email: true } },
         bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true, tratamento: true } } } } } },
         // Documento interno da banca não aparece como metadado para o orientador.
         documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } }, orderBy: { criadoEm: 'desc' } },
