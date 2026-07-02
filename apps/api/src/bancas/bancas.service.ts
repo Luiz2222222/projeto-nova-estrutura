@@ -693,7 +693,7 @@ export class BancasService {
       }
       // Banca da Fase II NÃO é formada do zero: orientador + os 2 avaliadores da Fase I.
       // O TCC NÃO entra direto em avaliação: vai para AGENDAMENTO_DEFESA_FASE_2, e só o
-      // orientador (na página do orientando) libera a defesa → aí sim AVALIACAO_FASE_2.
+      // orientador (na página do orientando) libera a avaliação → aí sim AVALIACAO_FASE_2.
       const membrosFase2 = [tcc.orientadorId, ...banca.membros.map((m) => m.avaliadorId)].filter(
         (x): x is string => !!x,
       );
@@ -707,11 +707,11 @@ export class BancasService {
         }),
       ]);
       // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
-      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador liberar a defesa da Fase II. A nota final ainda não foi confirmada.`);
-      // Só o ORIENTADOR é avisado agora — para liberar a defesa. Os avaliadores só recebem
-      // ação/notificação depois que a defesa for liberada.
-      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Liberar a defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Libere a defesa da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
-      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a liberação da defesa.`);
+      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador liberar a avaliação da Fase II. A nota final ainda não foi confirmada.`);
+      // Só o ORIENTADOR é avisado agora — para preparar as bancas / liberar a avaliação. Os
+      // avaliadores só recebem ação/notificação depois que a avaliação for liberada.
+      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Preparar as bancas (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Prepare as bancas / libere a avaliação da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
+      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a preparação das bancas da Fase II.`);
       await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
       return { ok: true, fase, nf1: media, aprovado };
     }
@@ -744,14 +744,14 @@ export class BancasService {
     return { ok: true, fase, nf2, nf, aprovado };
   }
 
-  // Orientador libera a defesa da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
+  // Orientador libera a avaliação da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
   // Só o orientador do TCC. A partir daqui os AVALIADORES (não o orientador) recebem a ação.
   async liberarDefesa(profId: string, tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'AGENDAMENTO_DEFESA_FASE_2') {
-      throw new BadRequestException({ mensagem: 'A defesa só pode ser liberada após a Fase I ser validada e antes de iniciar a avaliação.' });
+      throw new BadRequestException({ mensagem: 'A avaliação da Fase II só pode ser liberada após a Fase I ser validada e antes de iniciar a avaliação.' });
     }
     const banca = await this.prisma.banca.findUnique({
       where: { tccId_fase: { tccId, fase: 'FASE_2' } },
@@ -763,7 +763,7 @@ export class BancasService {
       if (m.avaliadorId === tcc.orientadorId) continue;
       const base = m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
       await this.eventos.emitirParaUsuario('avaliador_adicionado_fase2', m.avaliadorId, 'Você está na banca da Fase II', `Você integra a banca da Fase II do TCC "${tcc.titulo}".`, `${base}/${m.id}`);
-      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" foi liberada — você já pode avaliar a Fase II.`, `${base}/${m.id}`);
+      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A avaliação da Fase II do TCC "${tcc.titulo}" foi liberada — você já pode avaliar.`, `${base}/${m.id}`);
     }
     return { ok: true };
   }
