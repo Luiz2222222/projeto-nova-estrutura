@@ -36,7 +36,6 @@ const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}
 // Rótulo do candidato no dropdown: nome (com tratamento) + tipo/afiliação.
 const rotuloCandidato = (c: any) =>
   `${c.tratamento ? c.tratamento + ' ' : ''}${c.nomeCompleto}${c.papel === 'AVALIADOR' ? ` (Externo${c.afiliacao ? ' · ' + c.afiliacao : ''})` : ' (Professor)'}`;
-const fmtNota = (v: any) => (v != null ? Number(v).toFixed(1).replace('.', ',') : '—');
 
 const ROTULO_DOC: Record<string, string> = {
   PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento',
@@ -48,8 +47,6 @@ const ROTULO_DOC: Record<string, string> = {
 const rotuloDoc = (t: string) => ROTULO_DOC[t] ?? t;
 const rotuloStatusDoc = (s: string) =>
   ({ PENDENTE: 'Aguardando', EM_ANALISE: 'Em análise', APROVADO: 'Aprovado', REJEITADO: 'Rejeitado', SUBSTITUIDA: 'Substituída' } as Record<string, string>)[s] ?? s;
-
-const bancaDe = (t: any, fase: 'FASE_1' | 'FASE_2') => t.bancas?.find((b: any) => b.fase === fase);
 
 // Status visual (igual ao antigo): urgente/atenção/normal conforme a fase.
 function statusDe(fase: string): { rotulo: string; classe: string } {
@@ -233,13 +230,29 @@ export function TccDetalheCoordenador() {
     }
   }
 
-  // ----- Seção de notas/média de uma banca, reutilizada na validação. -----
-  function blocoNotas(faseBanca: 'FASE_1' | 'FASE_2') {
-    const banca = bancaDe(tcc, faseBanca);
-    const membros = banca?.membros ?? [];
-    const notas: number[] = membros.map((m: any) => m.nota).filter((n: any) => n != null);
-    const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
-    return { banca, membros, media };
+  // Fase II fica ACIMA da Fase I quando o TCC já está na Fase II (ou em etapa posterior).
+  const fasesFaseIIouDepois = ['AGENDAMENTO_DEFESA_FASE_2', 'AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2', 'VALIDACAO_FASE_2', 'AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO', 'REPROVADO_FASE_2'];
+  const faseIIouDepois = fasesFaseIIouDepois.includes(fase);
+  const faseCardAtiva = faseIIouDepois ? 'FASE_2' : 'FASE_1';
+  const bancasOrdenadas = faseIIouDepois ? [...bancas].reverse() : bancas;
+
+  // Status (rótulo + cor) do card de cada fase, conforme a fase atual do TCC.
+  function statusFaseCard(bancaFase: 'FASE_1' | 'FASE_2'): { rotulo: string; classe: string } {
+    if (bancaFase === 'FASE_1') {
+      if (fase === 'FORMACAO_BANCA_FASE_1') return { rotulo: 'Formação da banca', classe: 'status-atencao' };
+      if (fase === 'AVALIACAO_FASE_1') return { rotulo: 'Avaliação da banca', classe: 'status-atencao' };
+      if (fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1') return { rotulo: 'Aguardando análise', classe: 'status-atencao' };
+      if (fase === 'VALIDACAO_FASE_1') return { rotulo: 'Em análise da coordenação', classe: 'status-atencao' };
+      if (fase === 'REPROVADO_FASE_1') return { rotulo: 'Reprovada', classe: 'status-urgente' };
+      return { rotulo: 'Validada', classe: 'status-normal' };
+    }
+    if (fase === 'AGENDAMENTO_DEFESA_FASE_2') return { rotulo: 'Aguardando liberação da defesa', classe: 'status-atencao' };
+    if (fase === 'AVALIACAO_FASE_2') return { rotulo: 'Avaliação da banca', classe: 'status-atencao' };
+    if (fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') return { rotulo: 'Aguardando análise', classe: 'status-atencao' };
+    if (fase === 'VALIDACAO_FASE_2') return { rotulo: 'Em análise da coordenação', classe: 'status-atencao' };
+    if (fase === 'REPROVADO_FASE_2') return { rotulo: 'Reprovada', classe: 'status-urgente' };
+    if (fase === 'AGUARDANDO_AJUSTES_FINAIS' || fase === 'VALIDACAO_VERSAO_FINAL' || fase === 'CONCLUIDO') return { rotulo: 'Validada', classe: 'status-normal' };
+    return { rotulo: '—', classe: 'status-atencao' };
   }
 
   return (
@@ -332,68 +345,6 @@ export function TccDetalheCoordenador() {
         </section>
       )}
 
-      {(fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' || fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') && (() => {
-        const ehF2 = fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
-        return (
-          <section id="validacao" className="cartao-secao bloco secao-acao">
-            <h2>{icoBanca} {ehF2 ? 'Análise da Fase II' : 'Análise da Fase I'}</h2>
-            <p className="legenda">Todos os membros enviaram as avaliações. Ao iniciar a análise, a banca é travada (os avaliadores não podem mais reabrir sozinhos) e você poderá aprovar cada avaliação ou solicitar ajustes.</p>
-            <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-              <button className="botao" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('iniciar'); }}>
-                {ehF2 ? 'Iniciar análise da Fase II' : 'Iniciar análise da Fase I'}
-              </button>
-            </div>
-          </section>
-        );
-      })()}
-
-      {(fase === 'VALIDACAO_FASE_1' || fase === 'VALIDACAO_FASE_2') && (() => {
-        const ehF2 = fase === 'VALIDACAO_FASE_2';
-        const { membros, media } = blocoNotas(ehF2 ? 'FASE_2' : 'FASE_1');
-        const todosAprovados = membros.length > 0 && membros.every((m: any) => m.status === 'APROVADO');
-        const nfFinal = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media) : null;
-        return (
-          <section id="validacao" className="cartao-secao bloco secao-acao">
-            <h2>{icoBanca} {ehF2 ? 'Validar Fase II' : 'Validar Fase I'}</h2>
-            {ehF2 && <p className="legenda">Banca da Fase II: orientador + os 2 avaliadores da Fase I.</p>}
-            <dl className="dados">
-              {membros.map((m: any) => (
-                <div key={m.id}><dt>{nomeComTrat(m.avaliador)}</dt><dd>{fmtNota(m.nota)}</dd></div>
-              ))}
-              <div><dt>{ehF2 ? 'NF2 (média)' : 'NF1 (média)'}</dt><dd><strong>{media != null ? media.toFixed(2) : '—'}</strong></dd></div>
-              {ehF2 && (
-                <div><dt>Nota final (NF)</dt><dd><strong>{nfFinal != null ? nfFinal.toFixed(2) : '—'}</strong>{nfFinal != null ? (nfFinal >= 7 ? ' · aprovado' : ' · reprovado') : ''}</dd></div>
-              )}
-              {!ehF2 && media != null && (
-                <div><dt>Corte</dt><dd>{media >= 6 ? 'aprovado (≥6)' : 'reprovado (<6)'}</dd></div>
-              )}
-            </dl>
-            {resultado ? (
-              <div className="alerta" style={resultado.aprovado
-                ? { background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginTop: 14 }
-                : { background: 'var(--reprovado-suave)', color: 'var(--reprovado)', marginTop: 14 }}>
-                {resultado.fase === 'FASE_1'
-                  ? (resultado.aprovado
-                      ? `Aprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}). Segue para a Fase II.`
-                      : `Reprovado na Fase I (NF1 ${Number(resultado.nf1).toFixed(2)}).`)
-                  : (resultado.aprovado
-                      ? `Aprovado na Fase II — NF ${Number(resultado.nf).toFixed(2)}. Agora o aluno deve enviar a versão final (validada pelo orientador).`
-                      : `Reprovado na Fase II. Nota final NF ${Number(resultado.nf).toFixed(2)}.`)}
-              </div>
-            ) : (
-              <>
-                {!todosAprovados && (
-                  <p className="legenda" style={{ color: 'var(--reprovado)' }}>Aprove todas as avaliações da banca (abaixo, em “Banca e notas”) para liberar a validação da fase.</p>
-                )}
-                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-                  <button className="botao" disabled={enviando || !todosAprovados} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
-                </div>
-              </>
-            )}
-          </section>
-        );
-      })()}
-
       {(fase === 'AGUARDANDO_AJUSTES_FINAIS' || fase === 'VALIDACAO_VERSAO_FINAL') && (
         <section className="cartao-secao bloco secao-acao">
           <h2>{icoBanca} Versão final</h2>
@@ -401,81 +352,147 @@ export function TccDetalheCoordenador() {
         </section>
       )}
 
-      {/* Banca e notas — visão (a edição fica no modal "Editar TCC" → aba Banca) */}
-      <section className="cartao-secao bloco">
-        <h2>{icoBanca} Banca e notas</h2>
-        {bancas.length > 0 && (
-          <p className="legenda" style={{ marginTop: 0 }}>Para editar notas, comentários, status ou trocar avaliadores, use <strong>Editar informações</strong>.</p>
-        )}
-        {bancas.length === 0 ? (
-          <p className="nota-vazio">Banca ainda não formada.</p>
-        ) : (
-          bancas.map((b: any) => {
-            const ehF2 = b.fase === 'FASE_2';
-            const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
-            const membros = b.membros ?? [];
-            // Esta banca está na análise da coordenação (fase de validação correspondente)?
-            const emAnalise = (b.fase === 'FASE_1' && fase === 'VALIDACAO_FASE_1') || (b.fase === 'FASE_2' && fase === 'VALIDACAO_FASE_2');
-            return (
-              <div key={b.id} className="banca-fase">
-                <div className="banca-fase-cab">
-                  <h3>{ehF2 ? 'Fase II' : 'Fase I'}</h3>
+      {/* Banca e avaliações — um card por fase (Fase II acima quando já estamos nela). */}
+      {bancas.length === 0 ? (
+        fase !== 'FORMACAO_BANCA_FASE_1' && (
+          <section className="cartao-secao bloco">
+            <h2>{icoBanca} Banca e avaliações</h2>
+            <p className="nota-vazio">Banca ainda não formada.</p>
+          </section>
+        )
+      ) : (
+        bancasOrdenadas.map((b: any) => {
+          const ehF2 = b.fase === 'FASE_2';
+          const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
+          const membros = b.membros ?? [];
+          const emAguardando = fase === (ehF2 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1');
+          const emValidacao = fase === (ehF2 ? 'VALIDACAO_FASE_2' : 'VALIDACAO_FASE_1');
+          const stFase = statusFaseCard(b.fase);
+          // Resumo da fase (só coordenador — esta tela). Média simples, nota com peso e resultado.
+          const notas: number[] = membros.map((m: any) => m.nota).filter((n: any) => n != null);
+          const media = notas.length ? notas.reduce((s: number, n: number) => s + n, 0) / notas.length : null;
+          const notaPeso = media != null ? media * (ehF2 ? 0.4 : 0.6) : null;
+          const nfEstimada = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media) : null;
+          const resFase = media == null
+            ? { txt: 'Pendente', cls: 'pend' }
+            : !ehF2
+              ? (media >= 6 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' })
+              : (nfEstimada == null ? { txt: 'Pendente', cls: 'pend' } : (nfEstimada >= 7 ? { txt: 'Aprovado', cls: 'ok' } : { txt: 'Reprovado', cls: 'bad' }));
+          const todosAprovados = membros.length > 0 && membros.every((m: any) => m.status === 'APROVADO');
+          const resultadoDaFase = resultado && resultado.fase === b.fase ? resultado : null;
+          let nAval = 0;
+          return (
+            <section key={b.id} id={b.fase === faseCardAtiva ? 'validacao' : undefined} className="cartao-secao bloco">
+              <div className="banca-fase-cab" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <h2 style={{ margin: 0 }}>{icoBanca} {ehF2 ? 'Fase II' : 'Fase I'}</h2>
+                <div className="acoes" style={{ margin: 0, alignItems: 'center', gap: 8 }}>
+                  <span className={`status-pill ${stFase.classe}`}>{stFase.rotulo}</span>
+                  {emAguardando && (
+                    <button className="botao" disabled={enviando} onClick={() => { setErroAcao(''); setConfirmando('iniciar'); }}>Iniciar análise</button>
+                  )}
                 </div>
-                {ehF2 && <p className="legenda" style={{ marginTop: 0 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
-                {membros.length === 0 ? (
-                  <p className="nota-vazio">Sem membros nesta banca.</p>
-                ) : (
-                  membros.map((m: any) => {
-                    const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
-                    const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
+              </div>
+              {ehF2 && <p className="legenda" style={{ marginTop: 6 }}>Banca derivada: <strong>orientador + os 2 avaliadores da Fase I</strong> (não é escolhida livremente).</p>}
+
+              {membros.length === 0 ? (
+                <p className="nota-vazio">Sem membros nesta banca.</p>
+              ) : (
+                membros.map((m: any) => {
+                  const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+                  const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
+                  return (
+                    <div key={m.id} className="aval-card">
+                      <div className="aval-card-top">
+                        <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
+                        <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
+                      </div>
+                      <div className="aval-criterios">
+                        {criterios.map((c) => {
+                          const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                          return (
+                            <div key={c.chave} className="aval-criterio">
+                              <span className="aval-criterio-rot">{c.rotulo}</span>
+                              <span className="aval-criterio-nota">{fmtNotaAv(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
+                              {com && <span className="aval-criterio-com">{com}</span>}
+                            </div>
+                          );
+                        })}
+                      </div>
+                      {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                      <div className="aval-rodape">
+                        <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
+                      </div>
+                      {m.ajusteMotivo && (
+                        <p className="aval-parecer" style={{ color: 'var(--reprovado)' }}><strong>Ajuste solicitado:</strong> {m.ajusteMotivo}</p>
+                      )}
+                      {emValidacao && (
+                        <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
+                          {m.status === 'AJUSTE_SOLICITADO' ? (
+                            <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setCancelarMembro(m.id); setConfirmando('cancelarAjuste'); }}>Cancelar solicitação de ajuste</button>
+                          ) : (
+                            <>
+                              {m.status !== 'APROVADO' && (
+                                <button className="botao" onClick={() => aprovarMembro(m.id)}>Aprovar avaliação</button>
+                              )}
+                              <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setAjusteMotivo(''); setAjusteMembro(m.id); }}>Solicitar ajuste</button>
+                            </>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+
+              {/* Resumo da fase */}
+              {membros.length > 0 && (
+                <div className="resumo-fase">
+                  {membros.map((m: any) => {
+                    const ehOrient = ehF2 && m.avaliadorId === tcc.orientadorId;
+                    const rot = ehOrient ? 'Orientador' : `Avaliador ${++nAval}`;
                     return (
-                      <div key={m.id} className="aval-card">
-                        <div className="aval-card-top">
-                          <span className="aval-nome">{nomeComTrat(m.avaliador)}</span>
-                          <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
-                        </div>
-                        <div className="aval-criterios">
-                          {criterios.map((c) => {
-                            const com = extrairSecao(m.parecer ?? '', c.rotulo);
-                            return (
-                              <div key={c.chave} className="aval-criterio">
-                                <span className="aval-criterio-rot">{c.rotulo}</span>
-                                <span className="aval-criterio-nota">{fmtNotaAv(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, pesos).toFixed(1)))}</small></span>
-                                {com && <span className="aval-criterio-com">{com}</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                        {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
-                        <div className="aval-rodape">
-                          <span className="aval-total">Nota total: <strong>{fmtNotaAv(m.nota)}</strong> / 10</span>
-                        </div>
-                        {m.ajusteMotivo && (
-                          <p className="aval-parecer" style={{ color: 'var(--reprovado)' }}><strong>Ajuste solicitado:</strong> {m.ajusteMotivo}</p>
-                        )}
-                        {emAnalise && (
-                          <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 8 }}>
-                            {m.status === 'AJUSTE_SOLICITADO' ? (
-                              <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setCancelarMembro(m.id); setConfirmando('cancelarAjuste'); }}>Cancelar solicitação de ajuste</button>
-                            ) : (
-                              <>
-                                {m.status !== 'APROVADO' && (
-                                  <button className="botao" onClick={() => aprovarMembro(m.id)}>Aprovar avaliação</button>
-                                )}
-                                <button className="botao botao-secundario" onClick={() => { setErroAcao(''); setAjusteMotivo(''); setAjusteMembro(m.id); }}>Solicitar ajuste</button>
-                              </>
-                            )}
-                          </div>
-                        )}
+                      <div key={m.id} className="resumo-item">
+                        <span className="resumo-item-rot">{rot}</span>
+                        <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
                       </div>
                     );
-                  })
-                )}
-              </div>
-            );
-          })
-        )}
-      </section>
+                  })}
+                  <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'}</span></div>
+                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({ehF2 ? '40%' : '60%'})</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'}</span></div>
+                  <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>
+                </div>
+              )}
+
+              {/* Confirmação do resultado (logo após validar) */}
+              {resultadoDaFase && (
+                <div className="alerta" style={resultadoDaFase.aprovado
+                  ? { background: 'var(--aprovado-suave)', color: 'var(--aprovado)', marginTop: 14 }
+                  : { background: 'var(--reprovado-suave)', color: 'var(--reprovado)', marginTop: 14 }}>
+                  {resultadoDaFase.fase === 'FASE_1'
+                    ? (resultadoDaFase.aprovado
+                        ? `Aprovado na Fase I (NF1 ${Number(resultadoDaFase.nf1).toFixed(2)}). Segue para a Fase II.`
+                        : `Reprovado na Fase I (NF1 ${Number(resultadoDaFase.nf1).toFixed(2)}).`)
+                    : (resultadoDaFase.aprovado
+                        ? `Aprovado na Fase II — NF ${Number(resultadoDaFase.nf).toFixed(2)}. Agora o aluno deve enviar a versão final (validada pelo orientador).`
+                        : `Reprovado na Fase II. Nota final NF ${Number(resultadoDaFase.nf).toFixed(2)}.`)}
+                </div>
+              )}
+
+              {/* Validar a fase (dentro do card, abaixo do resumo) */}
+              {emValidacao && !resultadoDaFase && (
+                <>
+                  {!todosAprovados && (
+                    <p className="legenda" style={{ color: 'var(--reprovado)', marginBottom: 0 }}>Aprove todas as avaliações para validar a fase.</p>
+                  )}
+                  <div className="acoes" style={{ justifyContent: 'flex-start', marginTop: 12 }}>
+                    <button className="botao" disabled={enviando || !todosAprovados} onClick={() => { setErroAcao(''); setConfirmando('validar'); }}>{enviando ? 'Validando…' : (ehF2 ? 'Validar Fase II' : 'Validar Fase I')}</button>
+                  </div>
+                </>
+              )}
+            </section>
+          );
+        })
+      )}
 
       {/* Conteúdo inferior: trilha do fluxo + documentos */}
       <div className="grade-detalhe-inferior bloco">

@@ -1113,6 +1113,19 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .nota-bloco-obs { font-size: 11px; color: var(--tinta-3); }
 .nota-bloco .selo { align-self: flex-start; }
 
+/* Resumo horizontal por fase (card da fase, na página do coordenador). */
+.resumo-fase { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 16px; }
+.resumo-item { flex: 1 1 110px; min-width: 96px; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-1); }
+.resumo-item-rot { font-size: 11px; font-weight: 600; color: var(--tinta-3); text-transform: uppercase; letter-spacing: 0.02em; }
+.resumo-item-val { font-size: 18px; font-weight: 700; color: var(--azul-forte); font-variant-numeric: tabular-nums; }
+.resumo-item.destaque { background: var(--azul-suave); border-color: var(--azul-anel); }
+.resumo-item.destaque .resumo-item-val { color: var(--azul-escuro); }
+.resumo-item.ok { background: var(--aprovado-suave); border-color: var(--aprovado-suave); }
+.resumo-item.ok .resumo-item-val { color: var(--aprovado); }
+.resumo-item.bad { background: var(--reprovado-suave); border-color: var(--reprovado-suave); }
+.resumo-item.bad .resumo-item-val { color: var(--reprovado); }
+.resumo-item.pend .resumo-item-val { color: var(--tinta-3); }
+
 /* Grids do detalhe */
 .grade-detalhe { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 .grade-detalhe .det-largura-total { grid-column: 1 / -1; }
