@@ -131,6 +131,9 @@ export function TccDetalheCoordenador() {
       : null;
   const descricao = tcc.resumo || tcc.descricao || tcc.objetivos || null;
   const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+  // Pesos das fases (configuráveis pela coordenação) — do calendário do semestre; default 60/40.
+  const pesoF1c = Number(pesos?.pesoFase1 ?? 0.6);
+  const pesoF2c = Number(pesos?.pesoFase2 ?? 0.4);
 
   async function formarBanca() {
     setErroAcao('');
@@ -276,7 +279,7 @@ export function TccDetalheCoordenador() {
       </div>
 
       {/* Notas Finais (topo) — coordenador vê as notas (incl. estimativa antes da confirmação). */}
-      <CardNotasFinais tcc={tcc} coordenador />
+      <CardNotasFinais tcc={tcc} coordenador pesoF1={pesoF1c} pesoF2={pesoF2c} />
 
       {/* Informações gerais — aluno e orientação */}
       <div className="grade-detalhe bloco">
@@ -372,8 +375,9 @@ export function TccDetalheCoordenador() {
           // Resumo da fase (só coordenador — esta tela). Média simples, nota com peso e resultado.
           const notas: number[] = membros.map((m: any) => m.nota).filter((n: any) => n != null);
           const media = notas.length ? notas.reduce((s: number, n: number) => s + n, 0) / notas.length : null;
-          const notaPeso = media != null ? media * (ehF2 ? 0.4 : 0.6) : null;
-          const nfEstimada = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media) : null;
+          const pesoFase = ehF2 ? pesoF2c : pesoF1c;
+          const notaPeso = media != null ? media * pesoFase : null;
+          const nfEstimada = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media, pesoF1c, pesoF2c) : null;
           const resFase = media == null
             ? { txt: 'Pendente', cls: 'pend' }
             : !ehF2
@@ -461,7 +465,7 @@ export function TccDetalheCoordenador() {
                     </div>
                   ))}
                   <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'} <small>/ 10,00</small></span></div>
-                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({ehF2 ? '40%' : '60%'})</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'} <small>/ {(ehF2 ? 4 : 6).toFixed(2).replace('.', ',')}</small></span></div>
+                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({Math.round(pesoFase * 100)}%)</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'} <small>/ {(pesoFase * 10).toFixed(2).replace('.', ',')}</small></span></div>
                   <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>
                 </div>
               )}
@@ -578,17 +582,17 @@ export function TccDetalheCoordenador() {
       {ajusteMembro && (
         <Modal
           titulo="Solicitar ajuste"
-          subtitulo="O avaliador poderá reenviar a avaliação. Informe o motivo do ajuste."
+          subtitulo="O avaliador poderá reenviar a avaliação. O motivo é opcional."
           aoFechar={() => !enviando && setAjusteMembro(null)}
         >
           {erroAcao && <div className="erro-geral">{erroAcao}</div>}
           <label className="campo">
-            <span>Motivo do ajuste</span>
+            <span>Motivo do ajuste (opcional)</span>
             <textarea rows={4} value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} placeholder="Descreva o que precisa ser ajustado…" />
           </label>
           <div className="acoes">
             <button className="botao botao-secundario" disabled={enviando} onClick={() => setAjusteMembro(null)}>Cancelar</button>
-            <button className="botao" disabled={enviando || !ajusteMotivo.trim()} onClick={enviarAjuste}>{enviando ? 'Enviando…' : 'Solicitar ajuste'}</button>
+            <button className="botao" disabled={enviando} onClick={enviarAjuste}>{enviando ? 'Enviando…' : 'Solicitar ajuste'}</button>
           </div>
         </Modal>
       )}

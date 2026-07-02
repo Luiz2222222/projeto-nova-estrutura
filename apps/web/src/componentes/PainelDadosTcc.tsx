@@ -14,6 +14,11 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
   const [titulo, setTitulo] = useState(tcc.titulo ?? '');
   const [semestre, setSemestre] = useState(tcc.semestre ?? '');
   const [faseAtual, setFaseAtual] = useState(tcc.faseAtual ?? '');
+  // Fase preservada para restaurar ao sair de "Descontinuado". Vem do banco
+  // (faseAnteriorDescontinuacao) ou, se o TCC não está descontinuado, é a fase atual.
+  const [faseAntes, setFaseAntes] = useState<string>(
+    tcc.faseAnteriorDescontinuacao || (tcc.faseAtual && tcc.faseAtual !== 'DESCONTINUADO' ? tcc.faseAtual : 'DESENVOLVIMENTO'),
+  );
   const [monografiaAprovada, setMonografiaAprovada] = useState(!!tcc.monografiaAprovada);
   const [continuidadeConfirmada, setContinuidadeConfirmada] = useState(!!tcc.continuidadeConfirmada);
   const [parecerContinuidade, setParecerContinuidade] = useState(tcc.parecerContinuidade ?? '');
@@ -41,13 +46,14 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
   const continuidadeEstado = faseAtual === 'DESCONTINUADO' ? 'descontinuado' : continuidadeConfirmada ? 'confirmada' : 'pendente';
   function mudarContinuidade(v: string) {
     if (v === 'descontinuado') {
+      if (faseAtual !== 'DESCONTINUADO') setFaseAntes(faseAtual); // preserva a fase atual
       setContinuidadeConfirmada(false);
       setFaseAtual('DESCONTINUADO');
     } else {
       setContinuidadeConfirmada(v === 'confirmada');
-      // Ao sair de "Descontinuado", volta para uma fase ativa (o coordenador ajusta a fase
-      // exata no seletor "Fase atual" acima, se necessário). Os dados continuam salvos.
-      if (faseAtual === 'DESCONTINUADO') setFaseAtual('DESENVOLVIMENTO');
+      // Ao sair de "Descontinuado", restaura a FASE ANTERIOR preservada (não sempre
+      // DESENVOLVIMENTO). Se o TCC não estava descontinuado, a fase atual é mantida.
+      if (faseAtual === 'DESCONTINUADO') setFaseAtual(faseAntes || 'DESENVOLVIMENTO');
     }
   }
 

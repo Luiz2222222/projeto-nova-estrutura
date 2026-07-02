@@ -10,6 +10,8 @@ import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
 import {
   mediaNotas,
   notaFinal,
+  PESO_NF1,
+  PESO_NF2,
   aprovadoFase1,
   aprovadoFinal,
   CRITERIOS_FASE1,
@@ -276,7 +278,7 @@ export class BancasService {
       } else if (finalizar && emValidacao) {
         reenvioAjuste = true; // reenvio de um ajuste solicitado → avisa a coordenação
       }
-      return { completou, reenvioAjuste, fase: membro.banca.fase as 'FASE_1' | 'FASE_2', titulo: tcc.titulo, finalizar, tccId: tcc.id };
+      return { completou, reenvioAjuste, fase: membro.banca.fase as 'FASE_1' | 'FASE_2', titulo: tcc.titulo, finalizar, tccId: tcc.id, statusSalvo: data.status as string };
     });
 
     // Todos enviaram → fase "aguardando análise". Notifica coordenação, aluno, orientador e
@@ -288,7 +290,9 @@ export class BancasService {
       const faseNome = this.faseNomePt(res.fase);
       await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `Avaliação reenviada (${faseNome})`, `Um avaliador reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.`, `/coordenador/tccs/${res.tccId}#validacao`);
     }
-    return { ok: true, status: res.finalizar ? 'ENVIADO' : 'PENDENTE' };
+    // Devolve o status REAL salvo: ENVIADO (finalizar), AJUSTE_SOLICITADO (rascunho durante
+    // ajuste) ou PENDENTE (rascunho normal).
+    return { ok: true, status: res.statusSalvo };
   }
 
   // Reabre a própria avaliação ENVIADO → PENDENTE (preserva notas/parecer; a nota total
@@ -431,6 +435,9 @@ export class BancasService {
       data.status = status;
       data.nota = faltam ? null : soma(valores);
       data.avaliadoEm = exigeCompleto ? new Date() : null;
+      // Edição administrativa grava as colunas OFICIAIS: descarta qualquer rascunho privado
+      // stale para não sobrescrever/esconder visualmente a edição do coordenador.
+      data.rascunho = null;
 
       await tx.membroBanca.update({ where: { id: membroId }, data });
       await this.ajustarFasePorBanca(tx, membro.banca, { id: tcc.id, faseAtual: tcc.faseAtual });
@@ -464,7 +471,8 @@ export class BancasService {
     const nf1n = (data.nf1 as number | undefined) ?? tcc.nf1;
     const nf2n = (data.nf2 as number | undefined) ?? tcc.nf2;
     if (tcc.nf != null && nf1n != null && nf2n != null) {
-      const nf = notaFinal(nf1n, nf2n);
+      const cal: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
+      const nf = notaFinal(nf1n, nf2n, cal?.pesoFase1 ?? PESO_NF1, cal?.pesoFase2 ?? PESO_NF2);
       data.nf = nf;
       // Só recomputa o resultado FINAL já definido (aprovado/reprovado na Fase II).
       if (tcc.resultado === 'APROVADO' || tcc.resultado === 'REPROVADO') {
@@ -671,12 +679,13 @@ export class BancasService {
   // Coordenador solicita ajuste a um membro (motivo obrigatório). Só aquele avaliador pode
   // reenviar; a fase continua em VALIDACAO_*. Notifica somente o avaliador (interno + e-mail).
   async solicitarAjuste(membroId: string, motivo: string) {
+    // Motivo é OPCIONAL: o coordenador pode solicitar ajuste sem escrever nada.
     const texto = (motivo ?? '').trim();
-    if (!texto) throw new BadRequestException({ mensagem: 'Informe o motivo do ajuste.' });
     const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
-    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto } });
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto || null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
-    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}". Motivo: ${texto}`, this.linkDaAvaliacao(membro));
+    const base = `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}".`;
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, texto ? `${base} Motivo: ${texto}` : base, this.linkDaAvaliacao(membro));
     return { ok: true };
   }
 
@@ -687,7 +696,9 @@ export class BancasService {
     if (membro.status !== 'AJUSTE_SOLICITADO') {
       throw new BadRequestException({ mensagem: 'Não há solicitação de ajuste para cancelar neste membro.' });
     }
-    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'EM_ANALISE', ajusteMotivo: null } });
+    // Descarta o rascunho privado do ajuste em andamento: a avaliação volta ao que estava
+    // ENVIADO (colunas oficiais), travada, sem o rascunho cancelado.
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'EM_ANALISE', ajusteMotivo: null, rascunho: null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
     await this.eventos.emitirParaUsuario('avaliador_ajuste_cancelado', membro.avaliadorId, `Solicitação de ajuste cancelada — ${faseNome}`, `A solicitação de ajuste da sua avaliação foi cancelada pela coordenação.`, this.linkDaAvaliacao(membro));
     return { ok: true };
@@ -763,7 +774,9 @@ export class BancasService {
       throw new BadRequestException({ mensagem: 'NF1 ausente — a Fase I precisa ter sido validada antes.' });
     }
     const nf2 = media;
-    const nf = notaFinal(tcc.nf1, nf2);
+    // Pesos das fases configuráveis pela coordenação (calendário do semestre); default 60/40.
+    const calFase: any = await this.prisma.calendario.findUnique({ where: { semestre: tcc.semestre } });
+    const nf = notaFinal(tcc.nf1, nf2, calFase?.pesoFase1 ?? PESO_NF1, calFase?.pesoFase2 ?? PESO_NF2);
     const aprovado = aprovadoFinal(nf);
     // Aprovado na defesa ainda NÃO conclui: vai pra ajustes finais (aluno sobe a versão final).
     await this.prisma.tcc.update({

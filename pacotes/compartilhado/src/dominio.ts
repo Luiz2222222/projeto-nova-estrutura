@@ -73,13 +73,14 @@ export function mediaNotas(notas: number[]): number {
   return notas.reduce((soma, n) => soma + n, 0) / notas.length;
 }
 
-// Pesos da nota final: NF = PESO_NF1·NF1 + PESO_NF2·NF2. Fonte única para cálculo e exibição.
+// Pesos PADRÃO da nota final (usados quando o calendário do semestre não define outros).
 export const PESO_NF1 = 0.6;
 export const PESO_NF2 = 0.4;
 
-// Nota final ponderada: NF = 0,6·NF1 + 0,4·NF2.
-export function notaFinal(nf1: number, nf2: number): number {
-  return PESO_NF1 * nf1 + PESO_NF2 * nf2;
+// Nota final ponderada: NF = pesoNf1·NF1 + pesoNf2·NF2. Os pesos podem vir do calendário do
+// semestre (configuráveis pela coordenação); se não informados, usa os defaults 60/40.
+export function notaFinal(nf1: number, nf2: number, pesoNf1: number = PESO_NF1, pesoNf2: number = PESO_NF2): number {
+  return pesoNf1 * nf1 + pesoNf2 * nf2;
 }
 
 export const aprovadoFase1 = (nf1: number): boolean => nf1 >= 6;

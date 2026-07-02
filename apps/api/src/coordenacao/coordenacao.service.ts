@@ -96,6 +96,20 @@ export class CoordenacaoService {
     const data: Record<string, number> = {};
     CRITERIOS_FASE1.forEach((c, i) => (data[colunaPeso(c.chave)] = p1[i]));
     CRITERIOS_FASE2.forEach((c, i) => (data[colunaPeso(c.chave)] = p2[i]));
+
+    // Pesos das FASES na nota final (frações que somam 1; default 60/40). Só grava se enviados.
+    if (dados.pesoFase1 !== undefined || dados.pesoFase2 !== undefined) {
+      const pf1 = Number(dados.pesoFase1);
+      const pf2 = Number(dados.pesoFase2);
+      if (!Number.isFinite(pf1) || !Number.isFinite(pf2) || pf1 < 0 || pf2 < 0) {
+        throw new BadRequestException({ mensagem: 'Pesos das fases inválidos.' });
+      }
+      if (Math.abs(pf1 + pf2 - 1) > 0.001) {
+        throw new BadRequestException({ mensagem: 'Os pesos das fases (Fase I + Fase II) devem somar 100%.' });
+      }
+      data.pesoFase1 = pf1;
+      data.pesoFase2 = pf2;
+    }
     return this.prisma.calendario.upsert({
       where: { semestre },
       update: data,

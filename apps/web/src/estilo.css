@@ -35,7 +35,7 @@
   --reprovado: #b91c1c;
   --reprovado-suave: rgba(239, 68, 68, 0.12);
   --roxo: #9333ea; /* destaque do card "Fase atual" (ajustado por tema) */
-  --aviso: #b45309; /* aguardando/estimado (amber) — ajustado por tema */
+  --aviso: #9333ea; /* nota prevista/aguardando — roxo no tema claro (amber nos escuros) */
 
   /* Vidro claro (telas de acesso) */
   --vidro-bg: rgba(255, 255, 255, 0.72);

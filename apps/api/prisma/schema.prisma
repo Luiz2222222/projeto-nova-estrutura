@@ -148,6 +148,10 @@ model Tcc {
   continuidadeConfirmada Boolean @default(false)
   parecerContinuidade    String? // motivo, quando o orientador rejeita a continuidade
 
+  // Fase em que o TCC estava ANTES de ser descontinuado (edição administrativa). Ao sair de
+  // DESCONTINUADO, a coordenação volta para esta fase (e não sempre para DESENVOLVIMENTO).
+  faseAnteriorDescontinuacao String?
+
   // Notas (apuradas pela coordenação). NF = 0,6·NF1 + 0,4·NF2; resultado = APROVADO | REPROVADO.
   nf1       Float?
   nf2       Float?
@@ -338,6 +342,10 @@ model Calendario {
   pesoDominio         Float @default(2.5)
   pesoClareza         Float @default(2.5)
   pesoObservancia     Float @default(1.0)
+
+  // Pesos das FASES na nota final: NF = pesoFase1·NF1 + pesoFase2·NF2 (soma = 1). Defaults 60/40.
+  pesoFase1 Float @default(0.6)
+  pesoFase2 Float @default(0.4)
 
   atualizadoEm DateTime @updatedAt
 

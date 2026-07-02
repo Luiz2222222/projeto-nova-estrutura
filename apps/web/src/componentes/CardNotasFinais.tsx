@@ -50,7 +50,7 @@ function BlocoNotas({ titulo, pendente, destaque, linhas }: { titulo: string; pe
   );
 }
 
-export function CardNotasFinais({ tcc, coordenador = false }: { tcc: any; coordenador?: boolean }) {
+export function CardNotasFinais({ tcc, coordenador = false, pesoF1 = PESO_NF1, pesoF2 = PESO_NF2 }: { tcc: any; coordenador?: boolean; pesoF1?: number; pesoF2?: number }) {
   const nf1 = num(tcc?.nf1);
   const nf2 = num(tcc?.nf2);
   const nf = num(tcc?.nf);
@@ -66,10 +66,10 @@ export function CardNotasFinais({ tcc, coordenador = false }: { tcc: any; coorde
   const nf1Pend = nf1 == null && est1 != null;
   const nf2Pend = nf2 == null && est2 != null;
 
-  const pondF1 = nf1Eff == null ? null : PESO_NF1 * nf1Eff;
-  const pondF2 = nf2Eff == null ? null : PESO_NF2 * nf2Eff;
+  const pondF1 = nf1Eff == null ? null : pesoF1 * nf1Eff;
+  const pondF2 = nf2Eff == null ? null : pesoF2 * nf2Eff;
   const finalNormal = nf1Eff != null && nf2Eff != null ? mediaNotas([nf1Eff, nf2Eff]) : null;
-  const finalPond = nf != null ? nf : nf1Eff != null && nf2Eff != null ? notaFinal(nf1Eff, nf2Eff) : null;
+  const finalPond = nf != null ? nf : nf1Eff != null && nf2Eff != null ? notaFinal(nf1Eff, nf2Eff, pesoF1, pesoF2) : null;
   const nfPend = nf == null && finalPond != null;
 
   // Mostra quando há nota oficial OU estimativa (coordenador) OU resultado.
@@ -84,11 +84,11 @@ export function CardNotasFinais({ tcc, coordenador = false }: { tcc: any; coorde
       <div className="notas-finais-grid">
         <BlocoNotas titulo="Fase I" pendente={nf1Pend} linhas={[
           { rot: 'Média normal', valor: nf1Eff, forte: true },
-          { rot: `Ponderada (${Math.round(PESO_NF1 * 100)}%)`, valor: pondF1 },
+          { rot: `Ponderada (${Math.round(pesoF1 * 100)}%)`, valor: pondF1 },
         ]} />
         <BlocoNotas titulo="Fase II" pendente={nf2Pend} linhas={[
           { rot: 'Média normal', valor: nf2Eff, forte: true },
-          { rot: `Ponderada (${Math.round(PESO_NF2 * 100)}%)`, valor: pondF2 },
+          { rot: `Ponderada (${Math.round(pesoF2 * 100)}%)`, valor: pondF2 },
         ]} />
         <BlocoNotas titulo="Nota Final" destaque pendente={nfPend} linhas={[
           { rot: 'Normal', valor: finalNormal },

@@ -54,6 +54,13 @@ export class TccsService {
         throw new BadRequestException({ mensagem: 'Fase inválida.' });
       }
       data.faseAtual = dados.faseAtual;
+      // Ao DESCONTINUAR, guarda a fase em que o TCC estava (para restaurar depois); ao sair de
+      // DESCONTINUADO, limpa a fase preservada.
+      if (dados.faseAtual === 'DESCONTINUADO') {
+        if (tcc.faseAtual !== 'DESCONTINUADO') data.faseAnteriorDescontinuacao = tcc.faseAtual;
+      } else {
+        data.faseAnteriorDescontinuacao = null;
+      }
     }
     if (dados.monografiaAprovada !== undefined) data.monografiaAprovada = dados.monografiaAprovada;
     if (dados.continuidadeConfirmada !== undefined) data.continuidadeConfirmada = dados.continuidadeConfirmada;
