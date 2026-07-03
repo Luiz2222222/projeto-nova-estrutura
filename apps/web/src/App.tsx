@@ -23,6 +23,8 @@ import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
 import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
 import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
 import { DetalheOrientando } from './paginas/professor/DetalheOrientando';
+import { HistoricoProfessor } from './paginas/professor/HistoricoProfessor';
+import { DetalheHistorico } from './paginas/professor/DetalheHistorico';
 import { DashboardAvaliador } from './paginas/avaliador/DashboardAvaliador';
 import { Coorientacoes } from './paginas/Coorientacoes';
 import { MinhasBancas } from './paginas/MinhasBancas';
@@ -92,6 +94,8 @@ export function App() {
               <Route path="/professor" element={<DashboardProfessor />} />
               <Route path="/professor/orientandos" element={<MeusOrientandos />} />
               <Route path="/professor/orientandos/:id" element={<DetalheOrientando />} />
+              <Route path="/professor/historico" element={<HistoricoProfessor />} />
+              <Route path="/professor/historico/:id" element={<DetalheHistorico />} />
             </Route>
 
             {/* Rotas do avaliador */}

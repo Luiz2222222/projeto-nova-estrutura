@@ -580,6 +580,42 @@ export class TccsService {
     return tccs.map((t) => ({ ...sanitizarNotasTcc(t), ...pesos[t.semestre] }));
   }
 
+  // Histórico do professor: TCCs de períodos ANTERIORES (semestre != atual) em que ele teve
+  // vínculo real — orientador, coorientador OU membro de banca (avaliador). Só leitura.
+  // Usa SEMPRE o id do JWT (nunca aceita id do front). Exclui TCCs com soft delete.
+  async historicoProfessor(profId: string) {
+    const semestre = await resolverSemestreAtivo(this.prisma);
+    const tccs = await this.prisma.tcc.findMany({
+      where: {
+        excluidoEm: null,
+        semestre: { not: semestre }, // "antigo" = período diferente do atual configurado
+        OR: [
+          { orientadorId: profId },
+          { coorientadorId: profId },
+          { bancas: { some: { membros: { some: { avaliadorId: profId } } } } },
+        ],
+      },
+      include: {
+        aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
+        orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, email: true } },
+        documentos: { where: { tipo: { not: 'AVALIACAO_BANCA' } }, orderBy: { criadoEm: 'desc' } },
+        bancas: { include: { membros: { include: { avaliador: { select: { id: true, nomeCompleto: true, tratamento: true } } } } } },
+        solicitacoes: { orderBy: { criadoEm: 'desc' } },
+      },
+      orderBy: [{ semestre: 'desc' }, { criadoEm: 'desc' }], // semestre mais recente primeiro
+    });
+    // Anota o(s) vínculo(s) do professor com cada TCC (para o filtro no front) e sanitiza:
+    // esconde notas/parecer até a liberação (nf) e nunca expõe o rascunho privado do avaliador.
+    return tccs.map((t) => {
+      const vinculos: string[] = [];
+      if (t.orientadorId === profId) vinculos.push('ORIENTADOR');
+      if (t.coorientadorId === profId) vinculos.push('COORIENTADOR');
+      if ((t.bancas ?? []).some((b) => (b.membros ?? []).some((m) => m.avaliadorId === profId))) vinculos.push('AVALIADOR');
+      return { ...ocultarRascunho(sanitizarNotasTcc(t)), vinculos };
+    });
+  }
+
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) throw new NotFoundException();

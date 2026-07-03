@@ -157,6 +157,14 @@ export class TccsController {
     return this.tccs.orientandos(req.usuario.sub);
   }
 
+  // Histórico do professor (períodos anteriores): usa SEMPRE o id do JWT, nunca do front.
+  @Get('tccs/historico-professor')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR')
+  historicoProfessor(@Req() req: Req) {
+    return this.tccs.historicoProfessor(req.usuario.sub);
+  }
+
   // Coorientações: visão de leitura dos TCCs em que o usuário é coorientador.
   // Professor ou avaliador podem ser coorientadores.
   @Get('tccs/coorientando')
