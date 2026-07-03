@@ -141,14 +141,16 @@ export function LayoutApp() {
           </button>
           {menuAberto && (
             <div className="usuario-menu" role="menu">
-              <div className="usuario-menu-cabecalho">
-                <span className="usuario-nome">{usuario.nomeCompleto}</span>
-                <span className="usuario-papel">{usuario.email}</span>
-              </div>
               <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/perfil'); }}>
                 {icoPerfil}
                 <span>Meu perfil</span>
               </button>
+              {usuario.papel === 'PROFESSOR' && (
+                <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/professor/historico'); }}>
+                  {icoHistorico}
+                  <span>Histórico</span>
+                </button>
+              )}
               <button role="menuitem" className="item-sair" onClick={() => { setMenuAberto(false); sair(); }}>
                 {icoSair}
                 <span>Sair</span>

@@ -227,7 +227,6 @@ a:hover { color: var(--azul-escuro); }
 }
 .usuario-menu button:hover { background: var(--inset); }
 .usuario-menu svg { color: var(--tinta-3); flex-shrink: 0; }
-.usuario-menu-cabecalho { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--borda); }
 .usuario-menu .item-sair { color: var(--reprovado); }
 .usuario-menu .item-sair:hover { background: var(--reprovado-suave); }
 .usuario-menu .item-sair svg { color: var(--reprovado); }
