@@ -183,7 +183,7 @@ export function DashboardAluno() {
       };
     }
     if (tcc.faseAtual === 'VALIDACAO_VERSAO_FINAL') return semAcao('Aguardando validação', 'Versão final enviada — aguardando a validação do orientador.');
-    if (tcc.faseAtual === 'CONCLUIDO') return semAcao('Concluído', 'TCC aprovado e concluído.');
+    if (tcc.faseAtual === 'CONCLUIDO') return semAcao('TCC concluído 🎉', 'Parabéns! Seu TCC foi aprovado e concluído.');
     if (tcc.faseAtual === 'DESCONTINUADO' || tcc.faseAtual?.startsWith('REPROVADO'))
       return semAcao('TCC encerrado', tcc.faseAtual === 'DESCONTINUADO' ? 'O TCC foi descontinuado.' : 'O TCC foi reprovado.');
 
@@ -196,10 +196,7 @@ export function DashboardAluno() {
   // aparecem no card "Fase atual", então não substituem o texto deste card.)
   const acao: Acao = acaoBruta.botao
     ? acaoBruta
-    // TCC concluído: mostra "Concluído" no card (não cai no texto padrão de sem pendência).
-    : tcc?.faseAtual === 'CONCLUIDO'
-      ? { titulo: 'Concluído', desc: 'TCC aprovado e concluído.' }
-      : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
+    : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
   // Recusada → trata como "sem TCC ativo": volta ao estado inicial, só com o aviso vermelho.
   const recusada = !!tcc && tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'RECUSADA';
 
