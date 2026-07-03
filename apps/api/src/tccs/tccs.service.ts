@@ -588,10 +588,12 @@ export class TccsService {
   // Usa SEMPRE o id do JWT (nunca aceita id do front). Exclui TCCs com soft delete.
   async historicoProfessor(profId: string) {
     const semestre = await resolverSemestreAtivo(this.prisma);
+    const ocultos = await this.tccsOcultosDoUsuario(profId); // ocultações individuais do professor
     const tccs = await this.prisma.tcc.findMany({
       where: {
         excluidoEm: null,
         semestre: { not: semestre }, // "antigo" = período diferente do atual configurado
+        id: { notIn: ocultos }, // fora os que ESTE professor ocultou do próprio histórico
         OR: [
           { orientadorId: profId },
           { coorientadorId: profId },
@@ -631,6 +633,56 @@ export class TccsService {
         pesoFase2: cal?.pesoFase2 ?? PESO_NF2,
       };
     });
+  }
+
+  // ----- Ocultação INDIVIDUAL do histórico (preferência por usuário) -----
+  // NÃO confundir com exclusão: ocultar só esconde o TCC do histórico DESTE usuário; não mexe
+  // no TCC, não toca em `excluidoEm`, não apaga nada. A exclusão administrativa global continua
+  // sendo o soft delete (`Tcc.excluidoEm`). Hard delete definitivo não existe (etapa futura).
+
+  // Ids dos TCCs que o usuário ocultou do próprio histórico (para filtrar as listagens).
+  private async tccsOcultosDoUsuario(usuarioId: string): Promise<string[]> {
+    const linhas = await this.prisma.historicoTccOculto.findMany({ where: { usuarioId }, select: { tccId: true } });
+    return linhas.map((l) => l.tccId);
+  }
+
+  // Professor tem vínculo real (orientador, coorientador ou membro de banca) com o TCC?
+  private async professorTemVinculo(tccId: string, profId: string): Promise<boolean> {
+    const tcc = await this.prisma.tcc.findFirst({
+      where: {
+        id: tccId,
+        OR: [
+          { orientadorId: profId },
+          { coorientadorId: profId },
+          { bancas: { some: { membros: { some: { avaliadorId: profId } } } } },
+        ],
+      },
+      select: { id: true },
+    });
+    return !!tcc;
+  }
+
+  // Oculta um TCC do histórico do PRÓPRIO usuário logado (id do JWT). Coordenador pode ocultar
+  // qualquer TCC; professor só os que tem vínculo. Idempotente (se já oculto, retorna ok).
+  async ocultarDoHistorico(usuario: { sub: string; papel: string }, tccId: string) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId }, select: { id: true } });
+    if (!tcc) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
+    if (usuario.papel !== 'COORDENADOR') {
+      const temVinculo = await this.professorTemVinculo(tccId, usuario.sub);
+      if (!temVinculo) throw new ForbiddenException({ mensagem: 'Você não tem vínculo com este TCC.' });
+    }
+    await this.prisma.historicoTccOculto.upsert({
+      where: { usuarioId_tccId: { usuarioId: usuario.sub, tccId } },
+      update: {},
+      create: { usuarioId: usuario.sub, tccId },
+    });
+    return { ok: true };
+  }
+
+  // Desfaz a ocultação do próprio usuário (o TCC volta a aparecer no histórico dele).
+  async desocultarDoHistorico(usuario: { sub: string }, tccId: string) {
+    await this.prisma.historicoTccOculto.deleteMany({ where: { usuarioId: usuario.sub, tccId } });
+    return { ok: true };
   }
 
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {

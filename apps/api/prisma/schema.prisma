@@ -202,6 +202,23 @@ model Tcc {
   @@map("tccs")
 }
 
+// Ocultação INDIVIDUAL de um TCC no histórico de UM usuário (preferência por usuário/perfil).
+// NÃO é exclusão: não mexe no TCC nem em `excluidoEm`, não apaga documentos/notas/bancas/
+// arquivos/usuários. Só esconde o TCC do histórico DAQUELE usuário — se o professor oculta,
+// o coordenador ainda vê, e vice-versa.
+//
+// A exclusão administrativa GLOBAL continua sendo `Tcc.excluidoEm` (soft delete), que tira o
+// TCC de TODOS os históricos/listas/fluxos. Hard delete definitivo NÃO existe (etapa futura).
+model HistoricoTccOculto {
+  id        String   @id @default(cuid())
+  usuarioId String
+  tccId     String
+  criadoEm  DateTime @default(now())
+
+  @@unique([usuarioId, tccId])
+  @@map("historico_tcc_oculto")
+}
+
 // Liberação individual de prazo dada pela coordenação para um TCC/aluno específico,
 // permitindo uma ação fora do prazo global sem mexer no calendário do semestre.
 // A PRESENÇA da linha = liberado; remover a linha = volta a respeitar o prazo.

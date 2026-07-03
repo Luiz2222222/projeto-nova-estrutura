@@ -165,6 +165,22 @@ export class TccsController {
     return this.tccs.historicoProfessor(req.usuario.sub);
   }
 
+  // Ocultar/mostrar um TCC no histórico do PRÓPRIO usuário (preferência por usuário). NÃO é
+  // exclusão: não mexe no TCC nem em excluidoEm. Só o coordenador ou um professor com vínculo.
+  @Post('tccs/:id/historico/ocultar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR', 'COORDENADOR')
+  ocultarHistorico(@Req() req: Req, @Param('id') id: string) {
+    return this.tccs.ocultarDoHistorico(req.usuario, id);
+  }
+
+  @Delete('tccs/:id/historico/ocultar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR', 'COORDENADOR')
+  desocultarHistorico(@Req() req: Req, @Param('id') id: string) {
+    return this.tccs.desocultarDoHistorico(req.usuario, id);
+  }
+
   // Coorientações: visão de leitura dos TCCs em que o usuário é coorientador.
   // Professor ou avaliador podem ser coorientadores.
   @Get('tccs/coorientando')
