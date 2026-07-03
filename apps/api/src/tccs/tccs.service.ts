@@ -449,6 +449,7 @@ export class TccsService {
       include: {
         tcc: {
           select: {
+            excluidoEm: true,
             alunoId: true,
             orientadorId: true,
             coorientadorId: true,
@@ -458,6 +459,9 @@ export class TccsService {
       },
     });
     if (!doc) return null;
+    // TCC excluído logicamente: ninguém baixa/visualiza documentos dele (nem o coordenador).
+    // Vem ANTES do atalho do coordenador para o soft delete valer também aqui (404 na rota).
+    if (doc.tcc.excluidoEm) return null;
     if (usuario.papel === 'COORDENADOR') return doc;
     const t = doc.tcc;
 
