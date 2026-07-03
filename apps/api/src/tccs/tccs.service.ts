@@ -646,31 +646,22 @@ export class TccsService {
     return linhas.map((l) => l.tccId);
   }
 
-  // Professor tem vínculo real (orientador, coorientador ou membro de banca) com o TCC?
-  private async professorTemVinculo(tccId: string, profId: string): Promise<boolean> {
-    const tcc = await this.prisma.tcc.findFirst({
-      where: {
-        id: tccId,
-        OR: [
-          { orientadorId: profId },
-          { coorientadorId: profId },
-          { bancas: { some: { membros: { some: { avaliadorId: profId } } } } },
-        ],
-      },
-      select: { id: true },
-    });
-    return !!tcc;
-  }
-
-  // Oculta um TCC do histórico do PRÓPRIO usuário logado (id do JWT). Coordenador pode ocultar
-  // qualquer TCC; professor só os que tem vínculo. Idempotente (se já oculto, retorna ok).
+  // Oculta um TCC do histórico do PRÓPRIO usuário logado (id do JWT). Só aceita TCC que
+  // realmente APARECE no histórico: ativo (excluidoEm null) e de período ANTERIOR (semestre !=
+  // atual). Coordenador pode ocultar qualquer TCC histórico; professor só os que tem vínculo
+  // (orientador, coorientador ou membro de banca). Idempotente (se já oculto, retorna ok).
   async ocultarDoHistorico(usuario: { sub: string; papel: string }, tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId }, select: { id: true } });
-    if (!tcc) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
+    const semestre = await resolverSemestreAtivo(this.prisma);
+    const where: any = { id: tccId, excluidoEm: null, semestre: { not: semestre } };
     if (usuario.papel !== 'COORDENADOR') {
-      const temVinculo = await this.professorTemVinculo(tccId, usuario.sub);
-      if (!temVinculo) throw new ForbiddenException({ mensagem: 'Você não tem vínculo com este TCC.' });
+      where.OR = [
+        { orientadorId: usuario.sub },
+        { coorientadorId: usuario.sub },
+        { bancas: { some: { membros: { some: { avaliadorId: usuario.sub } } } } },
+      ];
     }
+    const tcc = await this.prisma.tcc.findFirst({ where, select: { id: true } });
+    if (!tcc) throw new NotFoundException({ mensagem: 'TCC não encontrado no histórico.' });
     await this.prisma.historicoTccOculto.upsert({
       where: { usuarioId_tccId: { usuarioId: usuario.sub, tccId } },
       update: {},

@@ -69,7 +69,6 @@ const NAV: Record<Papel, ItemNav[]> = {
   COORDENADOR: [
     { to: '/coordenador', rotulo: 'Dashboard', icone: icoCasa, fim: true },
     { to: '/coordenador/tccs', rotulo: 'TCCs', icone: icoDoc },
-    { to: '/coordenador/historico', rotulo: 'Histórico', icone: icoHistorico },
     { to: '/coordenador/relatorios', rotulo: 'Relatórios', icone: icoRelatorio },
     { to: '/coordenador/solicitacoes', rotulo: 'Solicitações', icone: icoLista },
     { to: '/coordenador/usuarios', rotulo: 'Usuários', icone: icoUsuarios },
@@ -145,8 +144,8 @@ export function LayoutApp() {
                 {icoPerfil}
                 <span>Meu perfil</span>
               </button>
-              {usuario.papel === 'PROFESSOR' && (
-                <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/professor/historico'); }}>
+              {(usuario.papel === 'PROFESSOR' || usuario.papel === 'COORDENADOR') && (
+                <button role="menuitem" onClick={() => { setMenuAberto(false); navegar(usuario.papel === 'COORDENADOR' ? '/coordenador/historico' : '/professor/historico'); }}>
                   {icoHistorico}
                   <span>Histórico</span>
                 </button>
