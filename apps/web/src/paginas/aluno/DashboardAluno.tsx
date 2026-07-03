@@ -85,7 +85,7 @@ function faseMacroSub(tcc: any): { macro: string; sub: string } {
     case 'VALIDACAO_FASE_2': return { macro: 'Fase II', sub: 'Validação da Fase II' };
     case 'AGUARDANDO_AJUSTES_FINAIS': return { macro: 'Finalização', sub: 'Envio da versão final' };
     case 'VALIDACAO_VERSAO_FINAL': return { macro: 'Finalização', sub: 'Versão final aguardando orientador' };
-    case 'CONCLUIDO': return { macro: 'Concluído', sub: 'Aprovado' };
+    case 'CONCLUIDO': return { macro: 'Concluído', sub: '' };
     case 'REPROVADO_FASE_1': return { macro: 'Encerrado', sub: 'Reprovado na Fase I' };
     case 'REPROVADO_FASE_2': return { macro: 'Encerrado', sub: 'Reprovado na Fase II' };
     case 'DESCONTINUADO': return { macro: 'Encerrado', sub: 'Descontinuado' };
