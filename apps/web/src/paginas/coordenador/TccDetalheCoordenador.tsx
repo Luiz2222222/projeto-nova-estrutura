@@ -633,7 +633,7 @@ export function TccDetalheCoordenador() {
         >
           {erroAcao && <div className="erro-geral">{erroAcao}</div>}
           <label className="campo">
-            <span>Motivo do ajuste (opcional)</span>
+            <span>Motivo do ajuste</span>
             <textarea rows={4} value={ajusteMotivo} onChange={(e) => setAjusteMotivo(e.target.value)} placeholder="Descreva o que precisa ser ajustado…" />
           </label>
           <div className="acoes">
@@ -657,9 +657,10 @@ export function TccDetalheCoordenador() {
       )}
 
       {/* Estado desatualizado (solicitação já não existe, fase/status mudou): aviso simples
-          só com a mensagem real do backend e "Ok". Ao fechar (Ok, ✕ ou Esc), recarrega o TCC. */}
+          só com a mensagem real do backend e "Ok". Modal preso (sem X, sem clicar fora, sem
+          Esc): só fecha no "Ok", que então recarrega o TCC. */}
       {avisoRecarregar && (
-        <Modal titulo="Ação indisponível" aoFechar={fecharAvisoRecarregar}>
+        <Modal titulo="Ação indisponível" aoFechar={fecharAvisoRecarregar} semFechar>
           <p className="modal-confirma-texto">{avisoRecarregar}</p>
           <div className="acoes" style={{ justifyContent: 'flex-end' }}>
             <button className="botao" onClick={fecharAvisoRecarregar}>Ok</button>

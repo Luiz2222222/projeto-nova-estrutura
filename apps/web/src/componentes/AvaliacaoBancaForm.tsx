@@ -247,7 +247,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       {ajusteSolicitado && (
         <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 14 }}>
           <strong>A coordenação solicitou um ajuste na sua avaliação.</strong>
-          {m?.ajusteMotivo ? <><br />Motivo: {m.ajusteMotivo}</> : null}
+          {m?.ajusteMotivo ? <span className="alerta-motivo">Motivo: {m.ajusteMotivo}</span> : null}
         </div>
       )}
       {leitura && (() => {
@@ -353,10 +353,11 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
         />
       )}
 
-      {/* Avaliação travada/cancelada pela coordenação: modal simples só com a mensagem do
-          backend e "Ok". Ao fechar (Ok, ✕ ou Esc), recarrega os dados da avaliação. */}
+      {/* Avaliação travada/cancelada pela coordenação: aviso simples só com a mensagem do
+          backend e "Ok". Modal preso (sem X, sem clicar fora, sem Esc): só fecha no "Ok",
+          que então recarrega os dados da avaliação. */}
       {erroTravado && (
-        <Modal titulo="Avaliação indisponível" aoFechar={fecharTravada}>
+        <Modal titulo="Avaliação indisponível" aoFechar={fecharTravada} semFechar>
           <p className="modal-confirma-texto">{erroTravado}</p>
           <div className="acoes" style={{ justifyContent: 'flex-end' }}>
             <button className="botao" onClick={fecharTravada}>Ok</button>

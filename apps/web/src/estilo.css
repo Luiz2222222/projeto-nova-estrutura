@@ -782,7 +782,9 @@ select {
 .arquivo-remover { border: none; background: transparent; color: var(--reprovado); font: inherit; font-weight: 600; font-size: 13px; cursor: pointer; padding: 4px 6px; flex-shrink: 0; }
 .arquivo-remover:hover { text-decoration: underline; }
 textarea { resize: vertical; min-height: 72px; }
-.alerta { border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; }
+.alerta { border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
+/* Motivo do ajuste (texto livre, pode ser longo): quebra dentro do card sem estourar. */
+.alerta-motivo { display: block; margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
 .alerta-erro { background: var(--reprovado-suave); border: 1px solid rgba(185, 28, 28, 0.25); color: var(--reprovado); }
 .badge-status { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .status-bad { background: var(--reprovado-suave); color: var(--reprovado); }
