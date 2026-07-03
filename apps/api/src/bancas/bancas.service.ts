@@ -696,7 +696,7 @@ export class BancasService {
   async cancelarAjuste(membroId: string) {
     const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
     if (membro.status !== 'AJUSTE_SOLICITADO') {
-      throw new BadRequestException({ mensagem: 'Não há solicitação de ajuste para cancelar neste membro.' });
+      throw new BadRequestException({ mensagem: 'Não há solicitação de ajuste para cancelar neste avaliador.' });
     }
     // Descarta o rascunho privado do ajuste em andamento: a avaliação volta ao que estava
     // ENVIADO (colunas oficiais), travada, sem o rascunho cancelado.
