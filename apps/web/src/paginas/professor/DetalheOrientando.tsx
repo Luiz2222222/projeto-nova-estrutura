@@ -216,8 +216,9 @@ export function DetalheOrientando() {
         </div>
       </div>
 
-      {/* Notas Finais (topo) — só aparece quando há notas liberadas para este perfil. */}
-      <CardNotasFinais tcc={tcc} />
+      {/* Notas Finais (topo) — só aparece quando há notas liberadas para este perfil.
+          Pesos das fases vêm do calendário do semestre (backend); sem eles, o card usa 60/40. */}
+      <CardNotasFinais tcc={tcc} pesoF1={tcc.pesoFase1} pesoF2={tcc.pesoFase2} />
 
       {/* Informações: orientando + orientação */}
       <div className="grade-detalhe bloco">

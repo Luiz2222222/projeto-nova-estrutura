@@ -12,7 +12,7 @@ import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
-import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc } from '@tcc/compartilhado';
+import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
 @Injectable()
@@ -274,6 +274,29 @@ export class TccsService {
     return tcc;
   }
 
+  // Pesos das FASES na nota final (NF = pesoFase1·NF1 + pesoFase2·NF2), do calendário do
+  // semestre do TCC. Sem calendário salvo → defaults do domínio (60/40). Anexado aos TCCs
+  // devolvidos para aluno/orientador/coorientador para que o card de notas use o peso vigente
+  // (em vez de hardcode 60/40 no front).
+  private async pesosFasesDoSemestre(semestre: string) {
+    const cal: any = await this.prisma.calendario.findUnique({ where: { semestre } });
+    return { pesoFase1: cal?.pesoFase1 ?? PESO_NF1, pesoFase2: cal?.pesoFase2 ?? PESO_NF2 };
+  }
+
+  // Mesmo que pesosFasesDoSemestre, mas para uma lista de TCCs de vários semestres:
+  // busca um calendário por semestre distinto e devolve um mapa semestre → pesos.
+  private async pesosFasesPorSemestre(semestres: string[]) {
+    const distintos = [...new Set(semestres)];
+    const cals: any[] = await this.prisma.calendario.findMany({ where: { semestre: { in: distintos } } });
+    const mapa = new Map<string, any>(cals.map((c) => [c.semestre, c]));
+    const out: Record<string, { pesoFase1: number; pesoFase2: number }> = {};
+    for (const s of distintos) {
+      const cal = mapa.get(s);
+      out[s] = { pesoFase1: cal?.pesoFase1 ?? PESO_NF1, pesoFase2: cal?.pesoFase2 ?? PESO_NF2 };
+    }
+    return out;
+  }
+
   async meu(alunoId: string) {
     const tcc = await this.prisma.tcc.findFirst({
       where: { alunoId },
@@ -291,7 +314,11 @@ export class TccsService {
     if (!tcc) return null;
     // bloqueios[etapa] = ação bloqueada por prazo vencido sem liberação (para desabilitar botões).
     // Aluno não é coordenador: esconde notas/resultado até a confirmação da nota final (tcc.nf).
-    return { ...sanitizarNotasTcc(tcc), bloqueios: await this.prazos.bloqueiosDoTcc(tcc) };
+    return {
+      ...sanitizarNotasTcc(tcc),
+      ...(await this.pesosFasesDoSemestre(tcc.semestre)),
+      bloqueios: await this.prazos.bloqueiosDoTcc(tcc),
+    };
   }
 
   async cancelar(alunoId: string, tccId: string) {
@@ -507,7 +534,14 @@ export class TccsService {
     });
     // Orientador não é coordenador: esconde NF1/NF2/NF, resultado e as notas/parecer dos
     // membros da banca até a confirmação da nota final da Fase II (tcc.nf).
-    return Promise.all(tccs.map(async (t) => ({ ...ocultarRascunho(sanitizarNotasTcc(t)), bloqueios: await this.prazos.bloqueiosDoTcc(t) })));
+    const pesos = await this.pesosFasesPorSemestre(tccs.map((t) => t.semestre));
+    return Promise.all(
+      tccs.map(async (t) => ({
+        ...ocultarRascunho(sanitizarNotasTcc(t)),
+        ...pesos[t.semestre],
+        bloqueios: await this.prazos.bloqueiosDoTcc(t),
+      })),
+    );
   }
 
   // Lista os TCCs em que o usuário é coorientador (visão de leitura: aluno, orientador e docs).
@@ -523,7 +557,8 @@ export class TccsService {
       orderBy: { criadoEm: 'desc' },
     });
     // Coorientador não é coordenador: esconde NF1/NF2/NF e resultado até a confirmação final.
-    return tccs.map((t) => sanitizarNotasTcc(t));
+    const pesos = await this.pesosFasesPorSemestre(tccs.map((t) => t.semestre));
+    return tccs.map((t) => ({ ...sanitizarNotasTcc(t), ...pesos[t.semestre] }));
   }
 
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {

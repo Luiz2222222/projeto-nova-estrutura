@@ -118,8 +118,9 @@ export function PainelAluno() {
         )}
       </div>
 
-      {/* Notas Finais (topo) — só aparece quando a nota final já foi confirmada/liberada. */}
-      <CardNotasFinais tcc={tcc} />
+      {/* Notas Finais (topo) — só aparece quando a nota final já foi confirmada/liberada.
+          Pesos das fases vêm do calendário do semestre (backend); sem eles, o card usa 60/40. */}
+      <CardNotasFinais tcc={tcc} pesoF1={tcc.pesoFase1} pesoF2={tcc.pesoFase2} />
 
       {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
       {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
