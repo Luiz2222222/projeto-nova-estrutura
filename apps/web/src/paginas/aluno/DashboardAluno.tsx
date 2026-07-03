@@ -198,7 +198,7 @@ export function DashboardAluno() {
     ? acaoBruta
     // TCC concluído: mostra só a descrição (sem a linha de título "Concluído").
     : tcc?.faseAtual === 'CONCLUIDO'
-      ? { titulo: '', desc: 'TCC aprovado e concluído.' }
+      ? { titulo: '', desc: 'TCC concluído.' }
       : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
   // Recusada → trata como "sem TCC ativo": volta ao estado inicial, só com o aviso vermelho.
   const recusada = !!tcc && tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'RECUSADA';
