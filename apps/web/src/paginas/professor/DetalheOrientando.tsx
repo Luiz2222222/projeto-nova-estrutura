@@ -301,7 +301,7 @@ export function DetalheOrientando() {
         <section className="cartao-secao bloco secao-acao">
           <h2>{icoDoc} Versão final</h2>
           {fase === 'CONCLUIDO' && <p className="legenda">TCC concluído — versão final aprovada.</p>}
-          {versaoFinal ? <ItemDoc d={versaoFinal} /> : <p className="nota-vazio">Aguardando o aluno enviar a versão final.</p>}
+          {versaoFinal ? <ItemDoc d={versaoFinal} comOlho /> : <p className="nota-vazio">Aguardando o aluno enviar a versão final.</p>}
           {versaoFinal?.status === 'REJEITADO' && versaoFinal.parecer && (
             <div className="alerta alerta-erro" style={{ marginTop: 10 }}><strong>Devolutiva enviada:</strong> {versaoFinal.parecer}</div>
           )}
