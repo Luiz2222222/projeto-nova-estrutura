@@ -6,8 +6,27 @@
 // (POST .../reabrir → volta a PENDENTE). BLOQUEADO/CONCLUIDO = leitura sem reabrir.
 import { useEffect, useMemo, useState } from 'react';
 import { apiPost, type ErroApi } from '../api';
+import { Modal } from './Modal';
 import { ModalConfirmacao } from './ModalConfirmacao';
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, colunaPeso, type Criterio } from '@tcc/compartilhado';
+
+// Erros do backend que significam "esta avaliação não pode mais ser editada" — a
+// coordenação travou/cancelou/iniciou a análise enquanto o avaliador estava com a tela
+// aberta. Nesses casos não adianta reeditar o formulário: o certo é avisar e recarregar.
+// (O front já valida notas/campos ANTES de chamar a API, então esses erros só chegam do
+// servidor por mudança de estado — daí a detecção por mensagem, sem tocar na regra.)
+function ehAvaliacaoTravada(e: ErroApi): boolean {
+  const msg = (e?.mensagem ?? '').toLowerCase();
+  return [
+    'iniciou a análise', // "A coordenação já iniciou a análise..."
+    'travad', // "...travada pela coordenação. Atualize a página."
+    'bloquead', // "Esta avaliação foi bloqueada/concluída..."
+    'não está em fase de avaliação',
+    'reabra antes de salvar',
+    'só é possível reabrir', // reabrir com estado já mudado
+    'não é possível reabrir',
+  ].some((k) => msg.includes(k));
+}
 
 const fmt = (n: number) => String(n).replace('.', ',');
 const parseBR = (v: string): number | null => {
@@ -59,6 +78,29 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   const enviando = acaoEmCurso !== null;
   const [confirmacao, setConfirmacao] = useState<null | 'enviar' | 'reabrir'>(null);
   const [erroConfirmacao, setErroConfirmacao] = useState('');
+  // Mensagem do modal simples (só texto + "Ok") mostrado quando a avaliação foi travada/
+  // cancelada pela coordenação. Ao fechar, recarrega os dados da avaliação.
+  const [erroTravado, setErroTravado] = useState('');
+
+  // Mostra o modal simples de "avaliação travada" e limpa qualquer outro erro/modal aberto
+  // (para não exibir dois erros ao mesmo tempo — inclusive fecha o modal de confirmação).
+  function mostrarTravada(msg?: string) {
+    setErro('');
+    setMensagem('');
+    setErroConfirmacao('');
+    setConfirmacao(null);
+    setErroTravado(msg || 'Esta avaliação não pode mais ser editada. Atualize a página.');
+  }
+  // "Ok": fecha o modal e recarrega os dados — o avaliador passa a ver o estado correto,
+  // sem o rascunho cancelado. (aoAtualizar re-busca no pai; erros dele não travam a tela.)
+  async function fecharTravada() {
+    setErroTravado('');
+    try {
+      await aoAtualizar();
+    } catch {
+      /* re-fetch do pai falhou: nada a fazer aqui além de já ter fechado o aviso */
+    }
+  }
 
   const fase: string | undefined = m?.banca?.fase;
   const ehF2 = fase === 'FASE_2';
@@ -154,7 +196,12 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       setMensagem(finalizar ? 'Avaliação enviada.' : 'Rascunho salvo.');
       return true;
     } catch (e) {
-      reportar((e as ErroApi).mensagem || 'Não foi possível salvar.');
+      const er = e as ErroApi;
+      // Vale para rascunho (finalizar=false) e envio (finalizar=true): se a coordenação
+      // travou/cancelou a avaliação, mostra o modal simples com "Ok" (que recarrega), em
+      // vez do erro comum da tela/modal.
+      if (ehAvaliacaoTravada(er)) mostrarTravada(er.mensagem);
+      else reportar(er.mensagem || 'Não foi possível salvar.');
       return false;
     } finally {
       setAcaoEmCurso(null);
@@ -172,7 +219,9 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
       setMensagem('Avaliação reaberta para edição.');
       return true;
     } catch (e) {
-      reportar((e as ErroApi).mensagem || 'Não foi possível reabrir a avaliação.');
+      const er = e as ErroApi;
+      if (ehAvaliacaoTravada(er)) mostrarTravada(er.mensagem);
+      else reportar(er.mensagem || 'Não foi possível reabrir a avaliação.');
       return false;
     } finally {
       setAcaoEmCurso(null);
@@ -302,6 +351,17 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
           aoConfirmar={confirmarReabrir}
           aoCancelar={() => setConfirmacao(null)}
         />
+      )}
+
+      {/* Avaliação travada/cancelada pela coordenação: modal simples só com a mensagem do
+          backend e "Ok". Ao fechar (Ok, ✕ ou Esc), recarrega os dados da avaliação. */}
+      {erroTravado && (
+        <Modal titulo="Avaliação indisponível" aoFechar={fecharTravada}>
+          <p className="modal-confirma-texto">{erroTravado}</p>
+          <div className="acoes" style={{ justifyContent: 'flex-end' }}>
+            <button className="botao" onClick={fecharTravada}>Ok</button>
+          </div>
+        </Modal>
       )}
     </>
   );
