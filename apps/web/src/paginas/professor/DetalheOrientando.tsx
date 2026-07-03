@@ -16,10 +16,11 @@ import { useAuth } from '../../autenticacao/contexto';
 import { Modal } from '../../componentes/Modal';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ROTULO_FASE } from '../../utils/fases';
-import { ROTULO_CURSO } from '@tcc/compartilhado';
+import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
+import { extrairSecao, pesoDe, fmtNum, STATUS_AVAL } from '../../utils/avaliacao';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -37,7 +38,6 @@ const icoCheck = ic('M22 11.08V12a10 10 0 1 1-5.93-9.14|M22 4 12 14.01l-3-3');
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
 const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 const fmtNota = (v: any) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
-const fmtNota1 = (v: any) => (v != null ? Number(v).toFixed(1).replace('.', ',') : '—');
 const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
   const [a, m, d] = iso.split('T')[0].split('-');
@@ -388,19 +388,68 @@ export function DetalheOrientando() {
               {bancas.length === 0 ? (
                 <p className="nota-vazio">Banca ainda não formada.</p>
               ) : (
-                bancas.map((b: any) => (
-                  <div key={b.id} className="trilha-bloco">
-                    <div className="trilha-titulo"><strong>{b.fase === 'FASE_1' ? 'Fase I' : 'Fase II'}</strong></div>
-                    <dl className="dados">
-                      {(b.membros ?? []).map((m: any) => (
-                        <div key={m.id}>
-                          <dt>{nomeComTrat(m.avaliador)}</dt>
-                          <dd>{notasLiberadas ? <>{fmtNota1(m.nota)}{m.parecer ? ` · ${m.parecer}` : ''}</> : (m.nota != null ? 'Avaliação registrada' : 'Aguardando avaliação')}</dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                ))
+                // Mesmo padrão visual do coordenador (PainelBancaTcc): card por fase, card por
+                // membro com critérios/comentários formatados — sem parecer cru com "===".
+                // As notas/parecer só chegam do backend após a liberação (notasLiberadas); antes
+                // disso mostramos apenas o status do membro.
+                bancas.map((b: any) => {
+                  const ehF2b = b.fase === 'FASE_2';
+                  const criterios: Criterio[] = ehF2b ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
+                  const membros = b.membros ?? [];
+                  let contaAval = 0;
+                  const papelDe = new Map<string, string>();
+                  for (const mm of membros) {
+                    const ehOri = ehF2b && mm.avaliadorId === tcc.orientadorId;
+                    papelDe.set(mm.id, ehOri ? 'Orientador' : `Avaliador ${++contaAval}`);
+                  }
+                  return (
+                    <div key={b.id} className="banca-fase">
+                      <div className="banca-fase-cab"><h3>{ehF2b ? 'Fase II' : 'Fase I'}</h3></div>
+                      {membros.length === 0 ? (
+                        <p className="nota-vazio">Sem membros nesta banca.</p>
+                      ) : (
+                        membros.map((m: any) => {
+                          const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+                          const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
+                          return (
+                            <div key={m.id} className="aval-card">
+                              <div className="aval-card-top">
+                                <span className="aval-nome">{nomeComTrat(m.avaliador)} <span className="aval-papel">({papelDe.get(m.id)})</span></span>
+                                <span className={`status-pill ${st.classe}`}>{st.rotulo}</span>
+                              </div>
+                              {!notasLiberadas ? (
+                                <p className="nota-vazio" style={{ marginTop: 8 }}>
+                                  {m.status === 'PENDENTE' ? 'Aguardando avaliação' : 'Avaliação registrada'}
+                                </p>
+                              ) : m.nota == null ? (
+                                <p className="nota-vazio" style={{ marginTop: 8 }}>Avaliação ainda não enviada.</p>
+                              ) : (
+                                <>
+                                  <div className="aval-criterios">
+                                    {criterios.map((c) => {
+                                      const com = extrairSecao(m.parecer ?? '', c.rotulo);
+                                      return (
+                                        <div key={c.chave} className="aval-criterio">
+                                          <span className="aval-criterio-rot">{c.rotulo}</span>
+                                          <span className="aval-criterio-nota">{fmtNota(m[colunaNota(c.chave)])} <small>/ {fmtNum(Number(pesoDe(c, meuMembroFase2?.pesos ?? null).toFixed(1)))}</small></span>
+                                          {com && <span className="aval-criterio-com">{com}</span>}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  {parecerGeral && <p className="aval-parecer"><strong>Parecer geral:</strong> {parecerGeral}</p>}
+                                  <div className="aval-rodape">
+                                    <span className="aval-total">Nota total: <strong>{fmtNota(m.nota)}</strong> / 10</span>
+                                  </div>
+                                </>
+                              )}
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  );
+                })
               )}
               {temNotas && (
                 <dl className="dados" style={{ marginTop: 12 }}>
