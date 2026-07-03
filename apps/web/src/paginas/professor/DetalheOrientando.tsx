@@ -11,7 +11,7 @@
 //  - sem nenhuma etapa de análise final do coordenador.
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiDelete, URL_API, type ErroApi } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { Modal } from '../../componentes/Modal';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
@@ -21,6 +21,7 @@ import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDet
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
+import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -84,6 +85,9 @@ export function DetalheOrientando() {
   const [erro, setErro] = useState('');
   const [erroAcao, setErroAcao] = useState('');
   const [enviando, setEnviando] = useState(false);
+  const [excluindo, setExcluindo] = useState(false); // modal "Excluir TCC"
+  const [excluindoProc, setExcluindoProc] = useState(false);
+  const [erroExcluir, setErroExcluir] = useState('');
 
   function carregar() {
     setCarregando(true);
@@ -93,6 +97,21 @@ export function DetalheOrientando() {
     apiGet('/bancas/minhas').then(setBancasMinhas).catch(() => setBancasMinhas([]));
   }
   useEffect(carregar, []);
+
+  // Exclusão LÓGICA do TCC pelo ORIENTADOR (o backend valida que o usuário é o orientador
+  // deste TCC; senão 403). Após excluir, volta para "Meus orientandos".
+  async function excluirTcc(motivo: string) {
+    if (!tcc) return;
+    setErroExcluir('');
+    setExcluindoProc(true);
+    try {
+      await apiDelete(`/tccs/${tcc.id}`, { motivo });
+      navigate('/professor/orientandos');
+    } catch (e) {
+      setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');
+      setExcluindoProc(false);
+    }
+  }
 
   const tcc = useMemo(() => tccs.find((t) => t.id === id), [tccs, id]);
   // Membro da banca da Fase II que é meu (orientador) neste TCC. /bancas/minhas já só
@@ -208,11 +227,15 @@ export function DetalheOrientando() {
       <div className="det-cabecalho">
         <button className="det-voltar" onClick={() => navigate('/professor/orientandos')}>{icoVoltar} Voltar para meus orientandos</button>
         <div className="det-titulo-area">
-          <h1>{tcc.titulo}</h1>
-          <div className="det-badges">
-            <span className="badge-papel">{ROTULO_FASE[fase] ?? fase}</span>
-            {tcc.semestre && <span className="status-pill status-normal">Semestre {tcc.semestre}</span>}
+          <div style={{ minWidth: 0 }}>
+            <h1>{tcc.titulo}</h1>
+            <div className="det-badges">
+              <span className="badge-papel">{ROTULO_FASE[fase] ?? fase}</span>
+              {tcc.semestre && <span className="status-pill status-normal">Semestre {tcc.semestre}</span>}
+            </div>
           </div>
+          {/* Só o orientador do TCC exclui (esta página é dos orientandos dele). */}
+          <button className="botao-perigo-sutil" style={{ flexShrink: 0 }} onClick={() => { setErroExcluir(''); setExcluindo(true); }}>Excluir TCC</button>
         </div>
       </div>
 
@@ -472,6 +495,10 @@ export function DetalheOrientando() {
           aoConfirmar={executarAcao}
           aoCancelar={() => setConfirmarAcao(null)}
         />
+      )}
+
+      {excluindo && (
+        <ModalExcluirTcc aoFechar={() => setExcluindo(false)} aoConfirmar={excluirTcc} processando={excluindoProc} erro={erroExcluir} />
       )}
     </>
   );

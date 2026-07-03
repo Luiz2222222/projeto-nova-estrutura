@@ -39,8 +39,12 @@ export async function apiPut<T = any>(caminho: string, corpo: unknown): Promise<
   return tratar<T>(r);
 }
 
-export async function apiDelete<T = any>(caminho: string): Promise<T> {
-  const r = await fetch(`${URL_API}${caminho}`, { method: 'DELETE', credentials: 'include' });
+export async function apiDelete<T = any>(caminho: string, corpo?: unknown): Promise<T> {
+  const r = await fetch(`${URL_API}${caminho}`, {
+    method: 'DELETE',
+    credentials: 'include',
+    ...(corpo !== undefined ? { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) } : {}),
+  });
   return tratar<T>(r);
 }
 

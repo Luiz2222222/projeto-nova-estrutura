@@ -252,6 +252,9 @@ a:hover { color: var(--azul-escuro); }
 .botao-perigo { background: var(--reprovado); border-color: var(--reprovado); color: #fff; }
 .botao-perigo:hover { background: var(--reprovado); filter: brightness(0.92); }
 .botao-perigo:disabled { opacity: 0.55; cursor: default; filter: none; }
+/* Gatilho discreto de perigo (ex.: "Excluir TCC"): contorno tênue, preenche no hover. */
+.botao-perigo-sutil { background: transparent; border: 1px solid var(--reprovado-suave); color: var(--reprovado); border-radius: var(--raio-1); padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
+.botao-perigo-sutil:hover { background: var(--reprovado-suave); }
 .selo { display: inline-flex; align-items: center; gap: 7px; padding: 7px 13px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .selo-ok { background: var(--aprovado-suave); color: var(--aprovado); }
 

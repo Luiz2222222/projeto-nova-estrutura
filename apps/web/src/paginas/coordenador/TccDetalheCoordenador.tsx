@@ -7,7 +7,7 @@
 //  - a versão final é validada pelo ORIENTADOR, não pelo coordenador.
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { apiGet, apiPost, apiUpload, URL_API, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiUpload, apiDelete, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
@@ -16,6 +16,7 @@ import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDet
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { Modal } from '../../componentes/Modal';
+import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { LiberacoesPrazo } from '../../componentes/LiberacoesPrazo';
 
 const ic = (d: string) => (
@@ -100,6 +101,9 @@ export function TccDetalheCoordenador() {
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [pesos, setPesos] = useState<any | null>(null);
+  const [excluindo, setExcluindo] = useState(false); // modal "Excluir TCC" aberto
+  const [excluindoProc, setExcluindoProc] = useState(false);
+  const [erroExcluir, setErroExcluir] = useState('');
 
   function carregar() {
     setCarregando(true);
@@ -280,6 +284,19 @@ export function TccDetalheCoordenador() {
     }
   }
 
+  // Exclusão LÓGICA do TCC (coordenador). Após excluir, volta para a lista de TCCs.
+  async function excluirTcc(motivo: string) {
+    setErroExcluir('');
+    setExcluindoProc(true);
+    try {
+      await apiDelete(`/tccs/${tcc.id}`, { motivo });
+      navigate('/coordenador/tccs');
+    } catch (e) {
+      setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');
+      setExcluindoProc(false);
+    }
+  }
+
   // Fase II fica ACIMA da Fase I quando o TCC já está na Fase II (ou em etapa posterior).
   const fasesFaseIIouDepois = ['AGENDAMENTO_DEFESA_FASE_2', 'AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2', 'VALIDACAO_FASE_2', 'AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO', 'REPROVADO_FASE_2'];
   const faseIIouDepois = fasesFaseIIouDepois.includes(fase);
@@ -318,9 +335,12 @@ export function TccDetalheCoordenador() {
               <span className={`status-pill ${status.classe}`}>{status.rotulo}</span>
             </div>
           </div>
-          <button className="botao" style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexShrink: 0 }} onClick={() => setEditando(true)}>
-            {icoLapis} Editar informações
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            <button className="botao" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} onClick={() => setEditando(true)}>
+              {icoLapis} Editar informações
+            </button>
+            <button className="botao-perigo-sutil" onClick={() => { setErroExcluir(''); setExcluindo(true); }}>Excluir TCC</button>
+          </div>
         </div>
       </div>
 
@@ -666,6 +686,10 @@ export function TccDetalheCoordenador() {
             <button className="botao" onClick={fecharAvisoRecarregar}>Ok</button>
           </div>
         </Modal>
+      )}
+
+      {excluindo && (
+        <ModalExcluirTcc aoFechar={() => setExcluindo(false)} aoConfirmar={excluirTcc} processando={excluindoProc} erro={erroExcluir} />
       )}
     </>
   );
