@@ -644,7 +644,9 @@ export class BancasService {
       where: { id: membroId },
       include: { banca: { include: { tcc: true } }, avaliador: { select: { papel: true } } },
     });
-    if (!membro) throw new NotFoundException();
+    // Mensagem clara (com `mensagem`, não o "Not Found" padrão) para quando a avaliação/
+    // solicitação não existe mais — ex.: o coordenador tenta agir sobre dados já mudados.
+    if (!membro) throw new NotFoundException({ mensagem: 'Avaliação não encontrada — os dados podem ter mudado. Atualize a página.' });
     const ehF1 = membro.banca.fase === 'FASE_1';
     const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
     if (membro.banca.tcc.faseAtual !== faseValid) {

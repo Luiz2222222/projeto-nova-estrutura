@@ -56,6 +56,28 @@ function statusDe(fase: string): { rotulo: string; classe: string } {
   return { rotulo: 'Normal', classe: 'status-normal' };
 }
 
+// Mensagem REAL retornada pela API, cobrindo os formatos possíveis (mensagem custom,
+// erros de validação, ou o `message` padrão do Nest) — evita cair sempre na frase genérica.
+function msgErro(e: ErroApi, padrao: string): string {
+  const anyE = e as ErroApi & { message?: string };
+  return e?.mensagem || e?.erros?.[0]?.mensagem || anyE?.message || padrao;
+}
+
+// Erro de "estado desatualizado": a ação foi negada porque os dados mudaram (a solicitação
+// já não existe, a fase/status já mudou, ou o registro sumiu). Nesses casos o certo é avisar
+// e recarregar — não deixar o coordenador tentando de novo sobre dados velhos.
+function ehEstadoDesatualizado(e: ErroApi): boolean {
+  if (e?.status === 404) return true;
+  const msg = msgErro(e, '').toLowerCase();
+  return [
+    'não há solicitação', // "Não há solicitação de ajuste para cancelar neste membro."
+    'ainda não foi iniciada', // "A análise da coordenação ainda não foi iniciada nesta fase."
+    'já iniciou a análise',
+    'não encontrad', // "Avaliação não encontrada — os dados podem ter mudado."
+    'atualize a página',
+  ].some((k) => msg.includes(k));
+}
+
 export function TccDetalheCoordenador() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -73,6 +95,8 @@ export function TccDetalheCoordenador() {
   const [ajusteMembro, setAjusteMembro] = useState<string | null>(null); // membroId p/ solicitar ajuste
   const [ajusteMotivo, setAjusteMotivo] = useState('');
   const [cancelarMembro, setCancelarMembro] = useState<string | null>(null); // membroId p/ cancelar ajuste
+  // Aviso simples (só mensagem + "Ok") para estado desatualizado; ao fechar, recarrega o TCC.
+  const [avisoRecarregar, setAvisoRecarregar] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
   const [pesos, setPesos] = useState<any | null>(null);
@@ -200,7 +224,29 @@ export function TccDetalheCoordenador() {
     }
   }
 
-  // Envia a solicitação de ajuste (motivo obrigatório) para o membro selecionado.
+  // Mostra o aviso simples de "estado desatualizado" e fecha qualquer erro/modal de ajuste
+  // aberto (para não exibir dois erros ao mesmo tempo).
+  function mostrarAvisoRecarregar(msg: string) {
+    setErroAcao('');
+    setAjusteMembro(null);
+    setCancelarMembro(null);
+    setConfirmando(null);
+    setAvisoRecarregar(msg);
+  }
+  // "Ok" do aviso: fecha e recarrega os dados do TCC (deixa a tela no estado real).
+  function fecharAvisoRecarregar() {
+    setAvisoRecarregar('');
+    carregar();
+  }
+  // Trata o erro de uma ação de ajuste: se for estado desatualizado, abre o aviso simples
+  // (com refresh); senão, mostra a mensagem real inline no modal da ação.
+  function tratarErroAjuste(e: unknown, padrao: string) {
+    const er = e as ErroApi;
+    if (ehEstadoDesatualizado(er)) mostrarAvisoRecarregar(msgErro(er, padrao));
+    else setErroAcao(msgErro(er, padrao));
+  }
+
+  // Envia a solicitação de ajuste (motivo opcional) para o membro selecionado.
   async function enviarAjuste() {
     if (!ajusteMembro) return;
     setErroAcao('');
@@ -211,7 +257,7 @@ export function TccDetalheCoordenador() {
       setAjusteMotivo('');
       carregar();
     } catch (e) {
-      setErroAcao((e as ErroApi).mensagem || 'Não foi possível solicitar o ajuste.');
+      tratarErroAjuste(e, 'Não foi possível solicitar o ajuste.');
     } finally {
       setEnviando(false);
     }
@@ -228,7 +274,7 @@ export function TccDetalheCoordenador() {
       setConfirmando(null);
       carregar();
     } catch (e) {
-      setErroAcao((e as ErroApi).mensagem || 'Não foi possível cancelar a solicitação.');
+      tratarErroAjuste(e, 'Não foi possível cancelar a solicitação.');
     } finally {
       setEnviando(false);
     }
@@ -608,6 +654,17 @@ export function TccDetalheCoordenador() {
           aoConfirmar={confirmarCancelarAjuste}
           aoCancelar={() => { setConfirmando(null); setCancelarMembro(null); }}
         />
+      )}
+
+      {/* Estado desatualizado (solicitação já não existe, fase/status mudou): aviso simples
+          só com a mensagem real do backend e "Ok". Ao fechar (Ok, ✕ ou Esc), recarrega o TCC. */}
+      {avisoRecarregar && (
+        <Modal titulo="Ação indisponível" aoFechar={fecharAvisoRecarregar}>
+          <p className="modal-confirma-texto">{avisoRecarregar}</p>
+          <div className="acoes" style={{ justifyContent: 'flex-end' }}>
+            <button className="botao" onClick={fecharAvisoRecarregar}>Ok</button>
+          </div>
+        </Modal>
       )}
     </>
   );
