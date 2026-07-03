@@ -1,6 +1,7 @@
 // Modal de confirmação para EXCLUIR (soft delete) um TCC. Exige digitar exatamente "EXCLUIR"
 // e permite um motivo opcional. Usado pelo coordenador e pelo orientador. A exclusão é lógica:
-// nada é apagado fisicamente (documentos, banca, avaliações e arquivos permanecem).
+// nada é apagado fisicamente (documentos, banca, avaliações e arquivos permanecem no banco).
+// (Não há restauração implementada — por isso o texto não promete reversão.)
 import { useState } from 'react';
 import { Modal } from './Modal';
 
@@ -24,8 +25,7 @@ export function ModalExcluirTcc({
       {erro && <div className="erro-geral">{erro}</div>}
       <div className="alerta alerta-erro" style={{ marginBottom: 14 }}>
         <strong>Atenção:</strong> o TCC será excluído e sairá das listas e dos fluxos ativos.
-        Os documentos, a banca e as avaliações <strong>não</strong> são apagados — a exclusão é
-        lógica e pode ser revertida pela coordenação.
+        Os documentos, a banca e as avaliações <strong>não</strong> são apagados.
       </div>
       <label className="campo">
         <span>Motivo (opcional)</span>

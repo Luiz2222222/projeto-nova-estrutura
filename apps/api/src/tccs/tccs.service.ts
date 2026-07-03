@@ -12,6 +12,7 @@ import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
+import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
@@ -43,8 +44,7 @@ export class TccsService {
   // dos usuários e a unique (alunoId, semestre). NÃO mexe em bancas, documentos,
   // solicitações ou avaliações; salva a fase escolhida sem criar/apagar banca.
   async editarTcc(tccId: string, dados: DadosEditarTcc) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
 
     const data: Record<string, unknown> = {};
     if (dados.titulo !== undefined) data.titulo = dados.titulo;
@@ -131,6 +131,7 @@ export class TccsService {
   async editarDocumento(docId: string, dados: DadosEditarDocumento) {
     const doc = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException();
+    await buscarTccAtivoOuFalhar(this.prisma, doc.tccId); // bloqueia edição em TCC excluído
     const TIPOS_DOC = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
     const STATUS_DOC = ['PENDENTE', 'EM_ANALISE', 'APROVADO', 'REJEITADO', 'SUBSTITUIDA'];
     if (dados.tipo !== undefined && !TIPOS_DOC.includes(dados.tipo)) {
@@ -159,8 +160,7 @@ export class TccsService {
   // Coordenador adiciona administrativamente um documento ao TCC (upload). Versão automática.
   // Reaproveita o mesmo padrão seguro de gravação (nome interno aleatório, original como metadado).
   async adicionarDocumentoAdmin(tccId: string, tipo: string, status: string | undefined, parecer: string | undefined, arquivo: any) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    await buscarTccAtivoOuFalhar(this.prisma, tccId); // 404 se TCC inexistente ou excluído
     if (!TccsService.TIPOS_DOC.includes(tipo)) {
       throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
     }
@@ -187,6 +187,7 @@ export class TccsService {
   async substituirArquivoDocumento(docId: string, status: string | undefined, arquivo: any) {
     const antigo = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
     if (!antigo) throw new NotFoundException();
+    await buscarTccAtivoOuFalhar(this.prisma, antigo.tccId); // bloqueia substituição em TCC excluído
     const st = status || antigo.status;
     if (!TccsService.STATUS_DOC.includes(st)) {
       throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
@@ -322,8 +323,7 @@ export class TccsService {
   }
 
   async cancelar(alunoId: string, tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'INICIALIZACAO') {
       throw new BadRequestException({ mensagem: 'Só é possível cancelar enquanto aguarda aprovação.' });
@@ -390,7 +390,7 @@ export class TccsService {
       where: { id: tccId },
       include: { solicitacoes: { where: { status: 'PENDENTE' } }, documentos: true },
     });
-    if (!tcc) throw new NotFoundException();
+    if (!tcc || tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
     if (tcc.faseAtual !== 'INICIALIZACAO' || tcc.solicitacoes.length === 0) {
       throw new BadRequestException({ mensagem: 'Este TCC não está aguardando aprovação de abertura.' });
     }
@@ -429,7 +429,7 @@ export class TccsService {
       where: { id: tccId },
       include: { solicitacoes: { where: { status: 'PENDENTE' } } },
     });
-    if (!tcc) throw new NotFoundException();
+    if (!tcc || tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
     if (tcc.faseAtual !== 'INICIALIZACAO' || tcc.solicitacoes.length === 0) {
       throw new BadRequestException({ mensagem: 'Este TCC não está aguardando aprovação de abertura.' });
     }
@@ -505,8 +505,7 @@ export class TccsService {
   // Aluno envia (ou reenvia) a monografia. Substitui versões pendentes antigas e cria a nova
   // (PENDENTE) numa transação; se algo falhar, remove o arquivo recém-gravado (sem órfão).
   async enviarMonografia(alunoId: string, tccId: string, arquivo: any) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'DESENVOLVIMENTO') {
       throw new BadRequestException({ mensagem: 'O TCC não está na fase de desenvolvimento.' });
@@ -605,6 +604,13 @@ export class TccsService {
       },
       orderBy: [{ semestre: 'desc' }, { criadoEm: 'desc' }], // semestre mais recente primeiro
     });
+    // Pesos do calendário de cada SEMESTRE do TCC (para os cards de notas usarem o peso real do
+    // período antigo, não o padrão). `pesos` = a linha do calendário (pesos por critério +
+    // pesoFase1/pesoFase2); pesoFase1/pesoFase2 já com o fallback do domínio.
+    const cals: any[] = await this.prisma.calendario.findMany({
+      where: { semestre: { in: [...new Set(tccs.map((t) => t.semestre))] } },
+    });
+    const calPorSemestre = new Map<string, any>(cals.map((c) => [c.semestre, c]));
     // Anota o(s) vínculo(s) do professor com cada TCC (para o filtro no front) e sanitiza:
     // esconde notas/parecer até a liberação (nf) e nunca expõe o rascunho privado do avaliador.
     return tccs.map((t) => {
@@ -612,13 +618,19 @@ export class TccsService {
       if (t.orientadorId === profId) vinculos.push('ORIENTADOR');
       if (t.coorientadorId === profId) vinculos.push('COORIENTADOR');
       if ((t.bancas ?? []).some((b) => (b.membros ?? []).some((m) => m.avaliadorId === profId))) vinculos.push('AVALIADOR');
-      return { ...ocultarRascunho(sanitizarNotasTcc(t)), vinculos };
+      const cal = calPorSemestre.get(t.semestre) ?? null;
+      return {
+        ...ocultarRascunho(sanitizarNotasTcc(t)),
+        vinculos,
+        pesos: cal, // pesos por critério (para BancaNotasTcc)
+        pesoFase1: cal?.pesoFase1 ?? PESO_NF1,
+        pesoFase2: cal?.pesoFase2 ?? PESO_NF2,
+      };
     });
   }
 
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'DESENVOLVIMENTO') {
       throw new BadRequestException({ mensagem: 'O TCC não está na fase de desenvolvimento.' });
@@ -694,8 +706,7 @@ export class TccsService {
 
   // Aluno envia a versão final corrigida (após aprovado na defesa). → VALIDACAO_VERSAO_FINAL.
   async enviarVersaoFinal(alunoId: string, tccId: string, arquivo: any) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'AGUARDANDO_AJUSTES_FINAIS') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando a versão final.' });
@@ -728,8 +739,7 @@ export class TccsService {
 
   // Orientador valida a versão final: conclui (→ CONCLUIDO/APROVADO) ou pede ajustes (volta).
   async validarVersaoFinal(profId: string, tccId: string, decisao: 'CONCLUIR' | 'AJUSTES', parecer?: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'VALIDACAO_VERSAO_FINAL') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação da versão final.' });
@@ -765,8 +775,7 @@ export class TccsService {
 
   // Documentos da ABERTURA (plano + termo). Só na fase de solicitação e só esses dois tipos.
   async adicionarDocumento(alunoId: string, tccId: string, tipo: string, arquivo: any) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
     if (!['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE'].includes(tipo)) {
       throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });

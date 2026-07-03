@@ -99,8 +99,9 @@ export function DetalheHistorico() {
         </div>
       </div>
 
-      {/* Notas Finais (topo) — só aparece quando há notas liberadas (regra de visibilidade). */}
-      <CardNotasFinais tcc={tcc} />
+      {/* Notas Finais (topo) — só aparece quando há notas liberadas (regra de visibilidade).
+          Pesos das fases do calendário do semestre do TCC (backend); sem eles, cai em 60/40. */}
+      <CardNotasFinais tcc={tcc} pesoF1={tcc.pesoFase1} pesoF2={tcc.pesoFase2} />
 
       {/* Informações: aluno + orientação */}
       <div className="grade-detalhe bloco">
@@ -141,7 +142,7 @@ export function DetalheHistorico() {
           </section>
           <section className="cartao-secao">
             <h2>{icoBanca} Banca e notas</h2>
-            <BancaNotasTcc tcc={tcc} />
+            <BancaNotasTcc tcc={tcc} pesos={tcc.pesos} />
           </section>
         </div>
       </div>

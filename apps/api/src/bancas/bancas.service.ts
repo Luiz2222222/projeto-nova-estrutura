@@ -7,6 +7,7 @@ import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
+import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import {
   mediaNotas,
   notaFinal,
@@ -33,8 +34,7 @@ export class BancasService {
 
   // Candidatos a avaliador (professores e avaliadores externos), exceto o aluno e o orientador.
   async candidatos(tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     const excluir = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
     return this.prisma.usuario.findMany({
       where: { papel: { in: ['PROFESSOR', 'AVALIADOR'] }, id: { notIn: excluir } },
@@ -59,8 +59,7 @@ export class BancasService {
   // banca deve avaliar. A da Fase II é montada automaticamente ao validar a Fase I
   // (orientador + os 2 avaliadores da Fase I).
   async formarBanca(tccId: string, avaliadorIds: string[], arquivo: any) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
 
     if (tcc.faseAtual !== 'FORMACAO_BANCA_FASE_1') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando formação da banca da Fase I.' });
@@ -192,6 +191,7 @@ export class BancasService {
         throw new BadRequestException({ mensagem: 'Esta avaliação foi bloqueada/concluída e não pode mais ser editada.' });
       }
       const tcc = membro.banca.tcc;
+      if (tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
       const ehF1 = membro.banca.fase === 'FASE_1';
       const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
       const faseAguardando = ehF1 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
@@ -327,6 +327,7 @@ export class BancasService {
         throw new BadRequestException({ mensagem: 'Só é possível reabrir uma avaliação enviada.' });
       }
       const tcc = membro.banca.tcc;
+      if (tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
       const ehF1 = membro.banca.fase === 'FASE_1';
       const faseAval = ehF1 ? 'AVALIACAO_FASE_1' : 'AVALIACAO_FASE_2';
       const faseAguardando = ehF1 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2';
@@ -363,8 +364,7 @@ export class BancasService {
 
   // Pesos do calendário do SEMESTRE do TCC (ou null → o front usa os defaults dos critérios).
   async pesosDaBanca(tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     return this.prisma.calendario.findUnique({ where: { semestre: tcc.semestre } });
   }
 
@@ -404,6 +404,7 @@ export class BancasService {
       });
       if (!membro) throw new NotFoundException();
       const tcc = membro.banca.tcc;
+      if (tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
       // Edição administrativa do COORDENADOR (endpoint @Papeis('COORDENADOR')) é permitida em
       // QUALQUER fase, inclusive já validada/concluída. As notas apuradas (NF1/NF2/NF/resultado)
       // são recalculadas ao final para manter a consistência com as notas atuais da banca.
@@ -492,8 +493,7 @@ export class BancasService {
       throw new BadRequestException({ mensagem: 'A banca da Fase I deve ter exatamente 2 avaliadores distintos.' });
     }
     await this.prisma.$transaction(async (tx) => {
-      const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
-      if (!tcc) throw new NotFoundException();
+      const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
       // Só dá para trocar os avaliadores da Fase I ANTES de a Fase I ser validada — depois
       // disso a NF1 já foi calculada e trocar avaliadores deixaria histórico/nota inconsistentes.
       if (!['FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1'].includes(tcc.faseAtual)) {
@@ -613,8 +613,7 @@ export class BancasService {
   // alguém reabriu, a fase já saiu de AGUARDANDO e retorna erro amigável.
   async iniciarAnalise(tccId: string) {
     const fase = await this.prisma.$transaction(async (tx) => {
-      const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
-      if (!tcc) throw new NotFoundException();
+      const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
       const fase = this.faseFromAguardando(tcc.faseAtual);
       if (!fase) {
         throw new BadRequestException({ mensagem: 'Uma avaliação foi reaberta. Atualize a página antes de iniciar a análise.' });
@@ -648,6 +647,7 @@ export class BancasService {
     // Mensagem clara (com `mensagem`, não o "Not Found" padrão) para quando a avaliação/
     // solicitação não existe mais — ex.: o coordenador tenta agir sobre dados já mudados.
     if (!membro) throw new NotFoundException({ mensagem: 'Avaliação não encontrada — os dados podem ter mudado. Atualize a página.' });
+    if (membro.banca.tcc.excluidoEm) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
     const ehF1 = membro.banca.fase === 'FASE_1';
     const faseValid = ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2';
     if (membro.banca.tcc.faseAtual !== faseValid) {
@@ -710,8 +710,7 @@ export class BancasService {
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
   // depois a nota final NF = 0,6·NF1 + 0,4·NF2, ≥7 → concluído.
   async validar(tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
 
     let fase: 'FASE_1' | 'FASE_2';
     if (tcc.faseAtual === 'VALIDACAO_FASE_1') fase = 'FASE_1';
@@ -806,8 +805,7 @@ export class BancasService {
   // Orientador libera a avaliação da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
   // Só o orientador do TCC. A partir daqui os AVALIADORES (não o orientador) recebem a ação.
   async liberarDefesa(profId: string, tccId: string) {
-    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException();
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
     if (tcc.faseAtual !== 'AGENDAMENTO_DEFESA_FASE_2') {
       throw new BadRequestException({ mensagem: 'A avaliação da Fase II só pode ser liberada após a Fase I ser validada e antes de iniciar a avaliação.' });
