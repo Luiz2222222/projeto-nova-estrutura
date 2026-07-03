@@ -61,7 +61,7 @@ export function HistoricoProfessor() {
   return (
     <>
       <h1 className="h1-icone"><span className="h1-ico">{icoHist}</span>Histórico</h1>
-      <p className="legenda" style={{ marginTop: -6 }}>TCCs de períodos anteriores em que você participou (orientação, coorientação ou banca). Consulta somente leitura.</p>
+      <p className="legenda">TCCs de períodos anteriores em que você participou (orientação, coorientação ou banca). Consulta somente leitura.</p>
 
       {tccs.length === 0 ? (
         <section className="cartao-secao bloco"><p className="nota-vazio">Você ainda não tem TCCs em períodos anteriores.</p></section>
