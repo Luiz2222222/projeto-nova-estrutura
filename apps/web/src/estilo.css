@@ -784,7 +784,7 @@ select {
 textarea { resize: vertical; min-height: 72px; }
 .alerta { border-radius: var(--raio-1); padding: 12px 14px; font-size: 14px; min-width: 0; overflow-wrap: anywhere; word-break: break-word; }
 /* Motivo do ajuste (texto livre, pode ser longo): quebra dentro do card sem estourar. */
-.alerta-motivo { display: block; margin-top: 4px; overflow-wrap: anywhere; word-break: break-word; }
+.alerta-motivo { display: block; margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 .alerta-erro { background: var(--reprovado-suave); border: 1px solid rgba(185, 28, 28, 0.25); color: var(--reprovado); }
 .badge-status { display: inline-block; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; }
 .status-bad { background: var(--reprovado-suave); color: var(--reprovado); }
@@ -1313,8 +1313,8 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 .aval-criterio-rot { font-size: 13px; font-weight: 600; color: var(--tinta-2); }
 .aval-criterio-nota { font-size: 13px; font-weight: 700; color: var(--tinta-1); white-space: nowrap; }
 .aval-criterio-nota small { color: var(--tinta-3); font-weight: 500; }
-.aval-criterio-com { grid-column: 1 / -1; min-width: 0; font-size: 12.5px; color: var(--tinta-3); overflow-wrap: anywhere; word-break: break-word; }
-.aval-parecer { margin: 10px 0 0; min-width: 0; font-size: 13px; color: var(--tinta-2); overflow-wrap: anywhere; word-break: break-word; }
+.aval-criterio-com { grid-column: 1 / -1; min-width: 0; font-size: 12.5px; color: var(--tinta-3); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
+.aval-parecer { margin: 10px 0 0; min-width: 0; font-size: 13px; color: var(--tinta-2); white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; }
 /* Comentários longos sem espaço não podem estourar o card horizontalmente. */
 .aval-card, .aval-criterio { min-width: 0; }
 .aval-criterio-rot { overflow-wrap: anywhere; }

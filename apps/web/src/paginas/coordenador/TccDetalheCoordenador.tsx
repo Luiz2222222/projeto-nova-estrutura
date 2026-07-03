@@ -628,7 +628,7 @@ export function TccDetalheCoordenador() {
       {ajusteMembro && (
         <Modal
           titulo="Solicitar ajuste"
-          subtitulo="O avaliador poderá reenviar a avaliação. O motivo é opcional."
+          subtitulo="O avaliador poderá reenviar a avaliação."
           aoFechar={() => !enviando && setAjusteMembro(null)}
         >
           {erroAcao && <div className="erro-geral">{erroAcao}</div>}
