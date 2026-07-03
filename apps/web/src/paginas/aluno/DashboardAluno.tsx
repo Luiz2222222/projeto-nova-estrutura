@@ -258,7 +258,7 @@ export function DashboardAluno() {
           <div className="cards-status bloco">
             <div className="card-status">
               <div className="card-status-topo">
-                <span className="card-status-titulo">Ação pendente</span>
+                <span className="card-status-titulo">{tcc?.faseAtual === 'CONCLUIDO' ? '' : 'Ação pendente'}</span>
                 {acao.botao ? icoRelogio : null}
               </div>
               <div className="card-status-corpo">
