@@ -299,7 +299,7 @@ export class TccsService {
 
   async meu(alunoId: string) {
     const tcc = await this.prisma.tcc.findFirst({
-      where: { alunoId },
+      where: { alunoId, excluidoEm: null },
       orderBy: { criadoEm: 'desc' },
       include: {
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
@@ -332,12 +332,31 @@ export class TccsService {
     return { ok: true };
   }
 
+  // Exclusão LÓGICA (soft delete) por COORDENADOR (qualquer TCC) ou pelo PROFESSOR ORIENTADOR
+  // (só o TCC dele). Não apaga nada fisicamente: apenas marca excluidoEm/excluidoPorId/
+  // motivoExclusao. Documentos, bancas, avaliações, notas e arquivos permanecem no banco/disco.
+  async excluir(usuario: { sub: string; papel: string }, tccId: string, motivo?: string) {
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
+    if (!tcc) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
+    if (tcc.excluidoEm) return { ok: true }; // já excluído: idempotente
+    const ehCoordenador = usuario.papel === 'COORDENADOR';
+    const ehOrientador = usuario.papel === 'PROFESSOR' && tcc.orientadorId === usuario.sub;
+    if (!ehCoordenador && !ehOrientador) {
+      throw new ForbiddenException({ mensagem: 'Você não tem permissão para excluir este TCC.' });
+    }
+    await this.prisma.tcc.update({
+      where: { id: tccId },
+      data: { excluidoEm: new Date(), excluidoPorId: usuario.sub, motivoExclusao: (motivo ?? '').trim() || null },
+    });
+    return { ok: true };
+  }
+
   // TCCs do período atual (visão do coordenador), com dados pra gerir banca/fase
   // e abrir o detalhe (aluno, orientador, coorientador, documentos, banca + notas).
   async todos() {
     const semestre = await resolverSemestreAtivo(this.prisma);
     const tccs = await this.prisma.tcc.findMany({
-      where: { semestre },
+      where: { semestre, excluidoEm: null },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
@@ -354,7 +373,7 @@ export class TccsService {
 
   pendentes() {
     return this.prisma.tcc.findMany({
-      where: { faseAtual: 'INICIALIZACAO', solicitacoes: { some: { status: 'PENDENTE' } } },
+      where: { faseAtual: 'INICIALIZACAO', excluidoEm: null, solicitacoes: { some: { status: 'PENDENTE' } } },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true } },
@@ -521,7 +540,7 @@ export class TccsService {
   // Lista os TCCs em que o usuário é orientador (com aluno, documentos e flags das trilhas).
   async orientandos(professorId: string) {
     const tccs = await this.prisma.tcc.findMany({
-      where: { orientadorId: professorId },
+      where: { orientadorId: professorId, excluidoEm: null },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, email: true } },
@@ -547,7 +566,7 @@ export class TccsService {
   // Lista os TCCs em que o usuário é coorientador (visão de leitura: aluno, orientador e docs).
   async coorientacoes(usuarioId: string) {
     const tccs = await this.prisma.tcc.findMany({
-      where: { coorientadorId: usuarioId },
+      where: { coorientadorId: usuarioId, excluidoEm: null },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
         orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },

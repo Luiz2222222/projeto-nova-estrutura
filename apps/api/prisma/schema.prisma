@@ -182,6 +182,14 @@ model Tcc {
   coorientadorAfiliacao String?
   coorientadorLattes    String?
 
+  // Exclusão lógica (soft delete) pela coordenação ou pelo orientador. Um TCC excluído
+  // some das listas/fluxos ativos, mas NADA é apagado fisicamente: documentos, bancas,
+  // avaliações, notas e arquivos do disco permanecem (histórico/exportação preservados).
+  // excluidoPorId é o id do usuário que excluiu (sem FK, para migration mínima).
+  excluidoEm     DateTime?
+  excluidoPorId  String?
+  motivoExclusao String?
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

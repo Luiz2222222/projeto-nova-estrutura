@@ -316,6 +316,7 @@ export class CoordenacaoService {
   // Dump completo dos TCCs (com aluno/orientador/notas/documentos/bancas) para backup.
   async exportarDados() {
     const tccs = await this.prisma.tcc.findMany({
+      where: { excluidoEm: null },
       orderBy: { criadoEm: 'asc' },
       include: {
         aluno: { select: { nomeCompleto: true, email: true, curso: true } },
@@ -344,7 +345,7 @@ export class CoordenacaoService {
   async exportarZipGeral(opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
     const semestre = await resolverSemestreAtivo(this.prisma);
     const tccs = await this.prisma.tcc.findMany({
-      where: { semestre },
+      where: { semestre, excluidoEm: null },
       orderBy: { aluno: { nomeCompleto: 'asc' } },
       include: this.incExport,
     });
@@ -512,6 +513,7 @@ export class CoordenacaoService {
   // Dados completos dos TCCs para a tela de Relatórios (com bancas, membros e notas por critério).
   relatorio() {
     return this.prisma.tcc.findMany({
+      where: { excluidoEm: null },
       orderBy: { criadoEm: 'asc' },
       include: {
         aluno: { select: { nomeCompleto: true, curso: true } },
@@ -658,7 +660,7 @@ export class CoordenacaoService {
         email: true,
         curso: true,
         tccsComoAluno: {
-          where: { semestre },
+          where: { semestre, excluidoEm: null },
           select: {
             criadoEm: true,
             faseAtual: true,

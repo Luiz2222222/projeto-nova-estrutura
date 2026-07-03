@@ -94,11 +94,15 @@ export class TccsController {
     return this.tccs.aberturaPrazo(req.usuario.sub);
   }
 
+  // DELETE /tccs/:id: ALUNO cancela a PRÓPRIA abertura pendente (só em INICIALIZACAO).
+  // COORDENADOR (qualquer TCC) ou PROFESSOR ORIENTADOR (só o dele) fazem EXCLUSÃO LÓGICA
+  // (soft delete). Motivo opcional. A permissão fina é validada no service.
   @Delete('tccs/:id')
   @UseGuards(GuardaJwt, GuardaPapeis)
-  @Papeis('ALUNO')
-  cancelar(@Req() req: Req, @Param('id') id: string) {
-    return this.tccs.cancelar(req.usuario.sub, id);
+  @Papeis('ALUNO', 'PROFESSOR', 'COORDENADOR')
+  excluirOuCancelar(@Req() req: Req, @Param('id') id: string, @Body('motivo') motivo?: string) {
+    if (req.usuario.papel === 'ALUNO') return this.tccs.cancelar(req.usuario.sub, id);
+    return this.tccs.excluir(req.usuario, id, motivo);
   }
 
   // Documentos iniciais (Plano/Termo): só PDF.

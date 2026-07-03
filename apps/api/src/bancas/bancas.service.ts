@@ -125,7 +125,8 @@ export class BancasService {
   // Bancas em que o usuário é avaliador (com o TCC, a própria nota e os pesos do semestre do TCC).
   async minhasBancas(avaliadorId: string) {
     const membros = await this.prisma.membroBanca.findMany({
-      where: { avaliadorId },
+      // Não traz bancas de TCC excluído (soft delete).
+      where: { avaliadorId, banca: { tcc: { excluidoEm: null } } },
       include: {
         banca: {
           include: {
