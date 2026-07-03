@@ -3,8 +3,9 @@
 // A ação "Ocultar do meu histórico" (preferência do coordenador) é adicionada à parte.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet } from '../../api';
+import { apiGet, apiPost, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
+import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -14,6 +15,7 @@ const ic = (d: string) => (
 const icoHist = ic('M3 3v5h5|M3.05 13a9 9 0 1 0 2.13-5.36L3 8|M12 7v5l4 2');
 const icoUser = ic('M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2|M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8');
 const icoBusca = ic('M11 19a8 8 0 1 0 0-16 8 8 0 0 0 0 16z|M21 21l-4.35-4.35');
+const icoOcultar = ic('M17.94 17.94A10 10 0 0 1 12 20c-7 0-11-8-11-8a18 18 0 0 1 5.06-5.94|M9.9 4.24A9 9 0 0 1 12 4c7 0 11 8 11 8a18 18 0 0 1-2.16 3.19|M14.12 14.12a3 3 0 1 1-4.24-4.24|M1 1l22 22');
 
 const nomeCurto = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 
@@ -47,11 +49,30 @@ export function HistoricoCoordenador() {
   const [busca, setBusca] = useState('');
   const [semestre, setSemestre] = useState('TODOS');
   const [grupo, setGrupo] = useState<Grupo>('TODOS');
+  const [ocultarAlvo, setOcultarAlvo] = useState<any | null>(null); // TCC a ocultar (abre modal)
+  const [ocultando, setOcultando] = useState(false);
+  const [erroOcultar, setErroOcultar] = useState('');
 
   useEffect(() => {
     setCarregando(true);
     apiGet('/tccs/historico-coordenador').then((r: any) => setTccs(r ?? [])).catch(() => setTccs([])).finally(() => setCarregando(false));
   }, []);
+
+  // Oculta o TCC APENAS do histórico da coordenação (não apaga nada; não mexe em excluidoEm).
+  async function confirmarOcultar() {
+    if (!ocultarAlvo) return;
+    setErroOcultar('');
+    setOcultando(true);
+    try {
+      await apiPost(`/tccs/${ocultarAlvo.id}/historico/ocultar`, {});
+      setTccs((prev) => prev.filter((t) => t.id !== ocultarAlvo.id));
+      setOcultarAlvo(null);
+    } catch (e) {
+      setErroOcultar((e as ErroApi).mensagem || 'Não foi possível ocultar.');
+    } finally {
+      setOcultando(false);
+    }
+  }
 
   const semestres = useMemo(() => [...new Set(tccs.map((t) => t.semestre))].sort().reverse(), [tccs]);
 
@@ -123,8 +144,12 @@ export function HistoricoCoordenador() {
                       </div>
                       <span className={`status-pill ${sp.classe}`}>{sp.rotulo}</span>
                     </div>
-                    <div className="card-tcc-tags">
+                    <div className="card-tcc-tags" style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                       <span className="pilula pilula-neutra">{t.semestre}</span>
+                      <button className="card-tcc-btn" title="Ocultar do meu histórico"
+                        onClick={(e) => { e.stopPropagation(); setErroOcultar(''); setOcultarAlvo(t); }}>
+                        {icoOcultar} Ocultar do meu histórico
+                      </button>
                     </div>
                   </section>
                 );
@@ -132,6 +157,19 @@ export function HistoricoCoordenador() {
             </div>
           )}
         </>
+      )}
+
+      {ocultarAlvo && (
+        <ModalConfirmacao
+          titulo="Ocultar do histórico"
+          mensagem="Este TCC sairá apenas do histórico da coordenação. Ele não será apagado do sistema."
+          textoConfirmar="Ocultar"
+          textoProcessando="Ocultando…"
+          processando={ocultando}
+          erro={erroOcultar}
+          aoConfirmar={confirmarOcultar}
+          aoCancelar={() => setOcultarAlvo(null)}
+        />
       )}
     </>
   );
