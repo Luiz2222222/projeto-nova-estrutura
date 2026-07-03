@@ -196,7 +196,10 @@ export function DashboardAluno() {
   // aparecem no card "Fase atual", então não substituem o texto deste card.)
   const acao: Acao = acaoBruta.botao
     ? acaoBruta
-    : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
+    // TCC concluído: mostra só a descrição (sem a linha de título "Concluído").
+    : tcc?.faseAtual === 'CONCLUIDO'
+      ? { titulo: '', desc: 'TCC aprovado e concluído.' }
+      : { titulo: 'Sem solicitação pendente', desc: 'Nenhuma solicitação aguardando ação' };
   // Recusada → trata como "sem TCC ativo": volta ao estado inicial, só com o aviso vermelho.
   const recusada = !!tcc && tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'RECUSADA';
 
@@ -259,8 +262,8 @@ export function DashboardAluno() {
                 {acao.botao ? icoRelogio : null}
               </div>
               <div className="card-status-corpo">
-                {!acao.botao && <span className="card-status-vazio-ico">{icoAlertaCirculo}</span>}
-                <span className="forte">{acao.titulo}</span>
+                {!acao.botao && tcc?.faseAtual !== 'CONCLUIDO' && <span className="card-status-vazio-ico">{icoAlertaCirculo}</span>}
+                {acao.titulo && <span className="forte">{acao.titulo}</span>}
                 <span className="sub">{acao.desc}</span>
                 {acao.parecer && <span className="sub"><strong>Devolutiva:</strong> {acao.parecer}</span>}
                 {acao.botao && acao.bloqueado && (
