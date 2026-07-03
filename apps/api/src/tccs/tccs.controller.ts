@@ -242,6 +242,14 @@ export class TccsController {
     return this.tccs.todos();
   }
 
+  // Histórico administrativo do coordenador (períodos anteriores): id sempre do JWT.
+  @Get('tccs/historico-coordenador')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  historicoCoordenador(@Req() req: Req) {
+    return this.tccs.historicoCoordenador(req.usuario.sub);
+  }
+
   @Get('tccs/pendentes')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')

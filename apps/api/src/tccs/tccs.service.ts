@@ -685,6 +685,46 @@ export class TccsService {
     return { ok: true };
   }
 
+  // Histórico do COORDENADOR: TCCs de períodos ANTERIORES (semestre != atual). Visão
+  // administrativa — o coordenador vê TUDO (não sanitiza notas), só nunca o rascunho privado
+  // do avaliador. Exclui soft delete (excluidoEm) e os TCCs que ESTE coordenador ocultou do
+  // próprio histórico. Usa SEMPRE o id do JWT (nunca do front).
+  async historicoCoordenador(coordId: string) {
+    const semestre = await resolverSemestreAtivo(this.prisma);
+    const ocultos = await this.tccsOcultosDoUsuario(coordId);
+    const tccs = await this.prisma.tcc.findMany({
+      where: {
+        excluidoEm: null,
+        semestre: { not: semestre }, // "antigo" = período diferente do atual configurado
+        id: { notIn: ocultos }, // fora os que ESTE coordenador ocultou
+      },
+      include: {
+        aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true } },
+        orientador: { select: { id: true, nomeCompleto: true, tratamento: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, email: true } },
+        documentos: { orderBy: { criadoEm: 'desc' } }, // coordenador vê todos (inclui doc da banca)
+        bancas: { include: { membros: { include: { avaliador: { select: { id: true, nomeCompleto: true, tratamento: true } } } } } },
+        solicitacoes: { orderBy: { criadoEm: 'desc' } },
+      },
+      orderBy: [{ semestre: 'desc' }, { criadoEm: 'desc' }], // semestre mais recente primeiro
+    });
+    // Pesos do calendário de cada SEMESTRE (para os cards de notas usarem o peso real do período).
+    const cals: any[] = await this.prisma.calendario.findMany({
+      where: { semestre: { in: [...new Set(tccs.map((t) => t.semestre))] } },
+    });
+    const calPorSemestre = new Map<string, any>(cals.map((c) => [c.semestre, c]));
+    // Coordenador NÃO sanitiza notas (vê tudo), mas nunca recebe o rascunho privado do avaliador.
+    return tccs.map((t) => {
+      const cal = calPorSemestre.get(t.semestre) ?? null;
+      return {
+        ...ocultarRascunho(t),
+        pesos: cal, // linha completa do calendário (pesos por critério) p/ BancaNotasTcc
+        pesoFase1: cal?.pesoFase1 ?? PESO_NF1,
+        pesoFase2: cal?.pesoFase2 ?? PESO_NF2,
+      };
+    });
+  }
+
   private async exigirOrientadorEmDesenvolvimento(profId: string, tccId: string) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();

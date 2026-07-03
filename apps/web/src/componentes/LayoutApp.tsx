@@ -69,6 +69,7 @@ const NAV: Record<Papel, ItemNav[]> = {
   COORDENADOR: [
     { to: '/coordenador', rotulo: 'Dashboard', icone: icoCasa, fim: true },
     { to: '/coordenador/tccs', rotulo: 'TCCs', icone: icoDoc },
+    { to: '/coordenador/historico', rotulo: 'Histórico', icone: icoHistorico },
     { to: '/coordenador/relatorios', rotulo: 'Relatórios', icone: icoRelatorio },
     { to: '/coordenador/solicitacoes', rotulo: 'Solicitações', icone: icoLista },
     { to: '/coordenador/usuarios', rotulo: 'Usuários', icone: icoUsuarios },
