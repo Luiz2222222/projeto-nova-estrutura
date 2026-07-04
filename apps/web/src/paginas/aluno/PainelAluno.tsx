@@ -6,7 +6,8 @@ import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDet
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
-import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
+import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
+import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, ROTULO_TIPO_DOC, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
@@ -122,6 +123,11 @@ export function PainelAluno() {
           Pesos das fases vêm do calendário do semestre (backend); sem eles, o card usa 60/40. */}
       <CardNotasFinais tcc={tcc} pesoF1={tcc.pesoFase1} pesoF2={tcc.pesoFase2} />
 
+      {/* Devolutiva da monografia (orientador pediu ajustes) — contexto da ação de reenvio do topo. */}
+      {podeEnviarMono && mono?.status === 'REJEITADO' && mono.parecer && (
+        <div className="alerta alerta-erro bloco"><strong>Ajustes solicitados na monografia:</strong> {mono.parecer}</div>
+      )}
+
       {/* Solicitação pendente: card destacado no topo (como no antigo), com a ação de cancelar. */}
       {tcc.faseAtual === 'INICIALIZACAO' && solic?.status === 'PENDENTE' && (
         <div className="card-pendente bloco">
@@ -206,85 +212,33 @@ export function PainelAluno() {
         </p>
       </section>
 
-      {(tcc.faseAtual === 'DESENVOLVIMENTO' || ultimaMonografia(tcc.documentos)) && (
-        <section className="cartao-secao bloco">
-          <h2>Monografia</h2>
-          {(() => {
-            const mono = ultimaMonografia(tcc.documentos);
-            if (!mono) return <p className="nota-vazio" style={{ marginTop: 0 }}>Você ainda não enviou a monografia.</p>;
-            const rotulo =
-              mono.status === 'APROVADO'
-                ? 'Aprovada pelo orientador'
-                : mono.status === 'REJEITADO'
-                  ? 'Ajustes solicitados'
-                  : 'Aguardando avaliação do orientador';
-            return (
-              <>
-                <p className="nota-vazio" style={{ marginTop: 0 }}>
-                  Versão {mono.versao} — <strong>{rotulo}</strong>.
-                </p>
-                {mono.status === 'REJEITADO' && mono.parecer && (
-                  <div className="alerta alerta-erro"><strong>Devolutiva:</strong> {mono.parecer}</div>
-                )}
-              </>
-            );
-          })()}
-          {(() => {
-            // Só oferece enviar/reenviar quando NÃO há versão em avaliação (consistente com o Dashboard).
-            const mono = ultimaMonografia(tcc.documentos);
-            const podeEnviar =
-              tcc.faseAtual === 'DESENVOLVIMENTO' && !tcc.monografiaAprovada && (!mono || mono.status === 'REJEITADO');
-            if (!podeEnviar) return null;
-            const bloqueado = !!tcc.bloqueios?.SUBMISSAO_MONOGRAFIA;
-            return (
-              <>
-                {bloqueado && <div className="aviso-prazo">⏰ O prazo de submissão da monografia venceu. Peça uma liberação à coordenação para enviar.</div>}
-                <button className="botao" style={{ marginTop: 14 }} disabled={bloqueado} onClick={() => setModalUpload('monografia')}>
-                  {mono ? 'Reenviar monografia' : 'Enviar monografia'}
-                </button>
-              </>
-            );
-          })()}
-        </section>
-      )}
-
-      {mostrarVersaoFinal(tcc.faseAtual, !!ultimoDoc(tcc.documentos, 'VERSAO_FINAL')) && (
-      <section className="cartao-secao bloco">
-        <h2>Versão final</h2>
-        {(() => {
-          const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
-          if (!vf)
-            return (
-              <p className="nota-vazio" style={{ marginTop: 0 }}>
-                <span className="pilula pilula-neutra">Aguardando envio</span> — a versão final é enviada após a aprovação na banca final.
-              </p>
-            );
-          const rotulo =
-            vf.status === 'APROVADO'
-              ? 'Aprovada — TCC concluído'
-              : vf.status === 'REJEITADO'
-                ? 'Ajustes solicitados'
-                : 'Aguardando validação do orientador';
-          return (
-            <>
-              <p className="nota-vazio" style={{ marginTop: 0 }}>
-                Versão {vf.versao} — <strong>{rotulo}</strong>.
-              </p>
-              {vf.status === 'REJEITADO' && vf.parecer && (
-                <div className="alerta alerta-erro"><strong>Devolutiva:</strong> {vf.parecer}</div>
-              )}
-            </>
-          );
-        })()}
-        {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (
-          <>
-            {tcc.bloqueios?.VERSAO_FINAL && <div className="aviso-prazo">⏰ O prazo da versão final venceu. Peça uma liberação à coordenação para enviar.</div>}
-            <button className="botao" style={{ marginTop: 14 }} disabled={!!tcc.bloqueios?.VERSAO_FINAL} onClick={() => setModalUpload('versaoFinal')}>
-              {ultimoDoc(tcc.documentos, 'VERSAO_FINAL') ? 'Reenviar versão final' : 'Enviar versão final'}
+      {/* Ação: envio/reenvio da versão final. Só aparece quando há o que fazer (fase de ajustes
+          finais) — nada de card de status "aprovada"/"concluído" solto. */}
+      {tcc.faseAtual === 'AGUARDANDO_AJUSTES_FINAIS' && (() => {
+        const vf = ultimoDoc(tcc.documentos, 'VERSAO_FINAL');
+        const blkVf = !!tcc.bloqueios?.VERSAO_FINAL;
+        return (
+          <section className="cartao-secao bloco">
+            <h2>{vf ? 'Reenviar versão final' : 'Enviar versão final'}</h2>
+            <p className="nota-vazio" style={{ marginTop: 0 }}>Aprovado na banca! Envie a versão final corrigida para a validação do orientador.</p>
+            {vf?.status === 'REJEITADO' && vf.parecer && (
+              <div className="alerta alerta-erro"><strong>Ajustes solicitados:</strong> {vf.parecer}</div>
+            )}
+            {blkVf && <div className="aviso-prazo">⏰ O prazo da versão final venceu. Peça uma liberação à coordenação para enviar.</div>}
+            <button className="botao" style={{ marginTop: 14 }} disabled={blkVf} onClick={() => setModalUpload('versaoFinal')}>
+              {vf ? 'Reenviar versão final' : 'Enviar versão final'}
             </button>
-          </>
-        )}
-      </section>
+          </section>
+        );
+      })()}
+
+      {/* Avaliações da banca — SOMENTE depois da validação da Fase II (nf != null). O backend só
+          envia notas/parecer/avaliadores nesse momento; antes disso nada disso é exposto ao aluno. */}
+      {tcc.nf != null && (
+        <section className="cartao-secao bloco">
+          <h2>Avaliações</h2>
+          <BancaNotasTcc tcc={tcc} pesos={tcc.pesos} />
+        </section>
       )}
 
       {modalUpload && (

@@ -315,11 +315,26 @@ export class TccsService {
     if (!tcc) return null;
     // bloqueios[etapa] = ação bloqueada por prazo vencido sem liberação (para desabilitar botões).
     // Aluno não é coordenador: esconde notas/resultado até a confirmação da nota final (tcc.nf).
-    return {
+    const base = {
       ...sanitizarNotasTcc(tcc),
       ...(await this.pesosFasesDoSemestre(tcc.semestre)),
       bloqueios: await this.prazos.bloqueiosDoTcc(tcc),
     };
+    // Notas/avaliações da banca SÓ depois da confirmação da nota final da Fase II (nf != null).
+    // Antes disso, o payload traz apenas as DATAS da banca (para a timeline) — nada de notas,
+    // parecer ou avaliadores. Depois da liberação, anexa as bancas completas (com avaliadores,
+    // notas por critério, total e parecer), sempre SEM o rascunho privado do avaliador, e os
+    // pesos do calendário do semestre para os cards de notas.
+    if (tcc.nf != null) {
+      const bancas = await this.prisma.banca.findMany({
+        where: { tccId: tcc.id },
+        orderBy: { fase: 'asc' },
+        include: { membros: { include: { avaliador: { select: { id: true, nomeCompleto: true, tratamento: true } } } } },
+      });
+      const cal = await this.prisma.calendario.findUnique({ where: { semestre: tcc.semestre } });
+      return ocultarRascunho({ ...base, bancas, pesos: cal ?? null });
+    }
+    return base;
   }
 
   async cancelar(alunoId: string, tccId: string) {
