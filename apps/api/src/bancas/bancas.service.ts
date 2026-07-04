@@ -8,6 +8,7 @@ import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
+import { conteudoCompativel } from '../comum/assinatura-arquivo';
 import {
   mediaNotas,
   notaFinal,
@@ -69,6 +70,9 @@ export class BancasService {
     }
     if (!arquivoPermitidoParaTipo('AVALIACAO_BANCA', arquivo.originalname ?? '')) {
       throw new BadRequestException({ mensagem: `Para o documento da banca, envie ${formatoDoTipoDoc('AVALIACAO_BANCA').rotulo}.` });
+    }
+    if (!conteudoCompativel(arquivo.buffer, formatoDoTipoDoc('AVALIACAO_BANCA').exts)) {
+      throw new BadRequestException({ mensagem: 'O arquivo não é um PDF/Word válido — o conteúdo não corresponde à extensão.' });
     }
     const fase = 'FASE_1' as const;
     const qtd = 2;

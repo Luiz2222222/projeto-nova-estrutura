@@ -12,6 +12,8 @@ import AdmZip from 'adm-zip';
 import { PrismaService } from '../prisma/prisma.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { resolverSemestreAtivo, gravarSemestreAtivo } from '../comum/semestre';
+import { conteudoReferenciaPermitido } from '../comum/assinatura-arquivo';
+import { tccEstaAtivo } from '../comum/tcc-ativo';
 import {
   MARCOS_CALENDARIO,
   DESTINATARIOS_AVISO,
@@ -282,6 +284,11 @@ export class CoordenacaoService {
   }
 
   async adicionarReferencia(titulo: string, visivelPara: string | undefined, arquivo: any) {
+    // Além do filtro de MIME no controller, confere a ASSINATURA do conteúdo (magic bytes) —
+    // um executável renomeado com extensão/MIME permitido é rejeitado.
+    if (!conteudoReferenciaPermitido(arquivo?.buffer)) {
+      throw new BadRequestException({ mensagem: 'O arquivo não parece um PDF/Word/Excel/PPT/imagem válido (conteúdo incompatível).' });
+    }
     const visivel = this.normalizarVisibilidade(visivelPara);
     const dir = join(process.cwd(), 'uploads', 'referencia');
     await fs.mkdir(dir, { recursive: true });
@@ -364,7 +371,8 @@ export class CoordenacaoService {
   // ZIP de um TCC específico (sem subpasta; arquivos na raiz do ZIP).
   async exportarZipTcc(id: string, opts: OpcoesExport): Promise<{ buffer: Buffer; nome: string }> {
     const tcc = await this.prisma.tcc.findUnique({ where: { id }, include: this.incExport });
-    if (!tcc) throw new NotFoundException('TCC não encontrado');
+    // TCC inexistente OU com soft delete (excluidoEm): 404. Não exporta TCC excluído.
+    if (!tccEstaAtivo(tcc)) throw new NotFoundException('TCC não encontrado');
     const zip = new AdmZip();
     await this.adicionarTccAoZip(zip, tcc, opts, '');
     return { buffer: zip.toBuffer(), nome: `${this.sanitizarNome(tcc.aluno?.nomeCompleto || 'TCC')}.zip` };

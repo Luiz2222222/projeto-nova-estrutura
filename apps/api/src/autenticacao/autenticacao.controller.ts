@@ -2,6 +2,8 @@ import {
   Body,
   Controller,
   Get,
+  HttpException,
+  HttpStatus,
   Post,
   Put,
   Req,
@@ -16,6 +18,7 @@ import { GuardaJwt } from './guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
 import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
+import { LimitadorTentativas, ipDaRequisicao } from '../comum/limitador-tentativas';
 import {
   esquemaCadastro,
   esquemaLogin,
@@ -27,12 +30,33 @@ import {
 
 const SETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
 
+const JANELA_MS = 15 * 60 * 1000; // 15 minutos
+
 @Controller('autenticacao')
 export class AutenticacaoController {
   constructor(
     private readonly auth: AutenticacaoService,
     private readonly email: EmailService,
   ) {}
+
+  // Limitadores em memória (anti brute-force/spam). Por CONTA (IP+e-mail) e por IP (amplo).
+  private readonly limLoginConta = new LimitadorTentativas(8, JANELA_MS);
+  private readonly limLoginIp = new LimitadorTentativas(30, JANELA_MS);
+  private readonly limRecuperarConta = new LimitadorTentativas(5, JANELA_MS);
+  private readonly limRecuperarIp = new LimitadorTentativas(20, JANELA_MS);
+
+  // Registra as tentativas (sem short-circuit, para contar todas as chaves) e bloqueia com
+  // mensagem amigável se QUALQUER limite estourar. Não revela se o e-mail existe (429 é igual
+  // para conta existente ou não).
+  private bloquearSeExcedeu(checagens: Array<{ lim: LimitadorTentativas; chave: string }>) {
+    const permitidos = checagens.map(({ lim, chave }) => lim.permitir(chave));
+    if (permitidos.some((ok) => !ok)) {
+      throw new HttpException(
+        { mensagem: 'Muitas tentativas. Aguarde alguns minutos e tente novamente.' },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
+    }
+  }
 
   @Post('cadastro')
   async cadastro(@Body(new ZodValidacaoPipe(esquemaCadastro)) dados: DadosCadastro) {
@@ -41,10 +65,21 @@ export class AutenticacaoController {
 
   @Post('login')
   async login(
+    @Req() req: Request,
     @Body(new ZodValidacaoPipe(esquemaLogin)) dados: DadosLogin,
     @Res({ passthrough: true }) res: Response,
   ) {
+    const ip = ipDaRequisicao(req);
+    const email = (dados.email || '').toLowerCase();
+    const chaveConta = `login:${ip}:${email}`;
+    this.bloquearSeExcedeu([
+      { lim: this.limLoginIp, chave: `login:ip:${ip}` },
+      { lim: this.limLoginConta, chave: chaveConta },
+    ]);
+
     const u = await this.auth.validarCredenciais(dados);
+    // Login OK: zera o contador desta conta para não punir o usuário legítimo.
+    this.limLoginConta.limpar(chaveConta);
     const token = this.auth.gerarToken(u, !!dados.manterLogin);
 
     const emProducao = process.env.NODE_ENV === 'production';
@@ -68,9 +103,15 @@ export class AutenticacaoController {
   }
 
   // Esqueci minha senha: dispara o e-mail com o link (resposta sempre "ok", não
-  // revela se o e-mail existe).
+  // revela se o e-mail existe). Throttle por IP+e-mail e por IP contra spam de e-mails.
   @Post('recuperar-senha')
-  async recuperarSenha(@Body('email') email: string) {
+  async recuperarSenha(@Req() req: Request, @Body('email') email: string) {
+    const ip = ipDaRequisicao(req);
+    const e = (email || '').toLowerCase();
+    this.bloquearSeExcedeu([
+      { lim: this.limRecuperarIp, chave: `recuperar:ip:${ip}` },
+      { lim: this.limRecuperarConta, chave: `recuperar:${ip}:${e}` },
+    ]);
     await this.auth.solicitarRecuperacaoSenha(email || '');
     return { ok: true };
   }

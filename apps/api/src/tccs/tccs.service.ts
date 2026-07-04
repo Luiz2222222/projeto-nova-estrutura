@@ -13,6 +13,7 @@ import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
+import { conteudoCompativel } from '../comum/assinatura-arquivo';
 import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
@@ -500,11 +501,16 @@ export class TccsService {
 
   // ---------- Fase de Desenvolvimento (monografia + continuidade) ----------
 
-  // Validação REAL do formato pelo tipo de documento (extensão do nome enviado).
-  // Vale para qualquer rota; é a fonte de verdade independente do filtro do multer.
+  // Validação REAL do formato pelo tipo de documento: EXTENSÃO do nome + ASSINATURA do
+  // conteúdo (magic bytes). Vale para qualquer rota; é a fonte de verdade independente do
+  // filtro do multer. Um .pdf/.docx com conteúdo falso é rejeitado com 400.
   private validarFormato(tipo: string, arquivo: any) {
+    const formato = formatoDoTipoDoc(tipo);
     if (!arquivoPermitidoParaTipo(tipo, arquivo?.originalname ?? '')) {
-      throw new BadRequestException({ mensagem: `Para este documento, envie ${formatoDoTipoDoc(tipo).rotulo}.` });
+      throw new BadRequestException({ mensagem: `Para este documento, envie ${formato.rotulo}.` });
+    }
+    if (!conteudoCompativel(arquivo?.buffer, formato.exts)) {
+      throw new BadRequestException({ mensagem: `O arquivo não é um ${formato.rotulo} válido — o conteúdo não corresponde à extensão.` });
     }
   }
 
