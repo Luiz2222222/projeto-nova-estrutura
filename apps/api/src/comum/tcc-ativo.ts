@@ -1,9 +1,12 @@
 import { NotFoundException } from '@nestjs/common';
 
-// Um TCC está "ativo" quando existe e NÃO tem soft delete (excluidoEm == null). Regra pura
-// (testável) usada tanto pelo gate abaixo quanto por rotas que carregam o TCC com include
-// (ex.: export de um TCC específico).
-export function tccEstaAtivo(tcc: { excluidoEm?: Date | null } | null | undefined): boolean {
+// Um TCC está "ativo" quando existe e NÃO tem soft delete (excluidoEm == null). É um TYPE
+// GUARD: além de retornar boolean, estreita o tipo para T (não-nulo) após a checagem —
+// preservando o tipo com include. Regra pura (testável) usada pelo gate abaixo e por rotas
+// que carregam o TCC por id (ex.: export de um TCC específico).
+export function tccEstaAtivo<T extends { excluidoEm?: Date | null }>(
+  tcc: T | null | undefined,
+): tcc is T {
   return !!tcc && !tcc.excluidoEm;
 }
 
@@ -20,5 +23,5 @@ export async function buscarTccAtivoOuFalhar<T extends { excluidoEm?: Date | nul
 ): Promise<T> {
   const tcc = await db.tcc.findUnique({ where: { id: tccId }, ...args });
   if (!tccEstaAtivo(tcc)) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
-  return tcc as T;
+  return tcc; // narrowed para T pelo type guard
 }
