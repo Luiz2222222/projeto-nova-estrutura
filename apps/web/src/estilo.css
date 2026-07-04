@@ -44,6 +44,13 @@
   --vidro-txt-suave: #6b7280;
   --vidro-linha: rgba(17, 24, 39, 0.16);
 
+  /* Fundo das telas de acesso (login/cadastro/recuperar). Variáveis para o tema mudar a
+     tela INTEIRA de forma coerente — cada tema redefine estas abaixo. */
+  --palco-bg: linear-gradient(135deg, #eef4fb 0%, #ffffff 50%, #eaf3fb 100%);
+  --brilho-1: #bae6fd;
+  --brilho-2: #c7d2fe;
+  --brilho-3: #a5f3fc;
+
   /* Tipografia — Inter em tudo, como o original */
   --serif: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --sans: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -82,12 +89,12 @@ a:hover { color: var(--azul-escuro); }
   place-items: center;
   padding: 28px;
   overflow: hidden;
-  background: linear-gradient(135deg, #eef4fb 0%, #ffffff 50%, #eaf3fb 100%);
+  background: var(--palco-bg);
 }
 .brilho { position: absolute; border-radius: 50%; filter: blur(90px); pointer-events: none; }
-.brilho.b1 { width: 460px; height: 460px; background: #bae6fd; opacity: 0.55; top: -120px; left: -90px; }
-.brilho.b2 { width: 420px; height: 420px; background: #c7d2fe; opacity: 0.45; bottom: -140px; right: -80px; }
-.brilho.b3 { width: 320px; height: 320px; background: #a5f3fc; opacity: 0.4; bottom: 30px; left: 30%; }
+.brilho.b1 { width: 460px; height: 460px; background: var(--brilho-1); opacity: 0.55; top: -120px; left: -90px; }
+.brilho.b2 { width: 420px; height: 420px; background: var(--brilho-2); opacity: 0.45; bottom: -140px; right: -80px; }
+.brilho.b3 { width: 320px; height: 320px; background: var(--brilho-3); opacity: 0.4; bottom: 30px; left: 30%; }
 
 .palco-conteudo { position: relative; z-index: 1; width: 100%; max-width: 400px; }
 .palco-marca {
@@ -174,7 +181,7 @@ a:hover { color: var(--azul-escuro); }
   text-transform: uppercase;
   color: #fff;
   cursor: pointer;
-  background: linear-gradient(90deg, #0ea5e9, #0284c7 90%);
+  background: linear-gradient(90deg, var(--azul), var(--azul-forte) 90%);
   box-shadow: 0 10px 24px rgba(14, 165, 233, 0.3);
   transition: filter 0.12s, transform 0.05s;
 }
@@ -909,6 +916,17 @@ textarea { resize: vertical; min-height: 72px; }
   --roxo: #c084fc; /* roxo mais claro p/ contraste no escuro */
   --aviso: #fbbf24;
 
+  /* Telas de acesso (login) no escuro: vidro e fundo escuros, coerentes com o tema. */
+  --vidro-bg: rgba(31, 41, 55, 0.72);
+  --vidro-borda: rgba(255, 255, 255, 0.08);
+  --vidro-txt: #f3f4f6;
+  --vidro-txt-suave: #9ca3af;
+  --vidro-linha: rgba(255, 255, 255, 0.18);
+  --palco-bg: linear-gradient(135deg, #0b1220 0%, #111827 50%, #0b1220 100%);
+  --brilho-1: #1e3a5f;
+  --brilho-2: #312e81;
+  --brilho-3: #164e63;
+
   --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.35);
   --sombra-2: 0 12px 34px rgba(0, 0, 0, 0.5);
 }
@@ -947,6 +965,17 @@ textarea { resize: vertical; min-height: 72px; }
   --roxo: #c084fc; /* roxo mais claro p/ contraste no preto */
   --aviso: #fbbf24;
 
+  /* Telas de acesso (login) no preto: vidro quase preto, alto contraste. */
+  --vidro-bg: rgba(17, 17, 17, 0.8);
+  --vidro-borda: rgba(255, 255, 255, 0.1);
+  --vidro-txt: #ffffff;
+  --vidro-txt-suave: #9ca3af;
+  --vidro-linha: rgba(255, 255, 255, 0.22);
+  --palco-bg: linear-gradient(135deg, #000000 0%, #0a0a0a 50%, #000000 100%);
+  --brilho-1: #0f3d2e;
+  --brilho-2: #14532d;
+  --brilho-3: #052e2b;
+
   --sombra-1: 0 1px 2px rgba(0, 0, 0, 0.6);
   --sombra-2: 0 12px 34px rgba(0, 0, 0, 0.75);
 }
@@ -954,6 +983,15 @@ textarea { resize: vertical; min-height: 72px; }
 [data-tema="preto"] select:focus,
 [data-tema="preto"] textarea:focus { background: var(--papel-2); }
 [data-tema="preto"] .avatar { color: #000; }
+
+/* Inputs "de vidro" (login/cadastro/recuperar) usam estilo SUBLINHADO com fundo transparente.
+   No escuro/preto, o foco global põe fundo escuro nos inputs — mas aqui o fundo deve seguir
+   transparente (senão vira um retângulo escuro isolado sobre o cartão). Especificidade maior
+   e depois das regras acima para vencer. */
+[data-tema="escuro"] .vidro input:focus,
+[data-tema="escuro"] .vidro select:focus,
+[data-tema="preto"] .vidro input:focus,
+[data-tema="preto"] .vidro select:focus { background: transparent; }
 
 /* Tema INSTITUCIONAL — clássico SIGAA (azul-marinho + dourado) */
 [data-tema="institucional"] {
@@ -977,6 +1015,14 @@ textarea { resize: vertical; min-height: 72px; }
   --azul-suave: rgba(18, 53, 91, 0.08);
   --azul-anel: rgba(18, 53, 91, 0.25);
   --roxo: var(--azul-forte); /* segue o destaque institucional (navy) */
+
+  /* Login no institucional: fundo azul-marinho claro; vidro segue o claro (legível). */
+  --vidro-borda: rgba(18, 53, 91, 0.14);
+  --vidro-linha: rgba(18, 53, 91, 0.2);
+  --palco-bg: linear-gradient(135deg, #dbe6f5 0%, #eef3fb 50%, #dbe6f5 100%);
+  --brilho-1: #b7c9e6;
+  --brilho-2: #c3d0ea;
+  --brilho-3: #aebfdd;
 }
 [data-tema="institucional"] .avatar { color: #ffffff; }
 
