@@ -40,10 +40,16 @@ export function ocultarRascunho<T extends Record<string, any> | null | undefined
   } as T;
 }
 
+// Fases terminais em que as notas ficam liberadas mesmo sem nota final (nf) confirmada.
+// Um TCC reprovado na Fase I nunca terá nf — mas o resultado é definitivo e o aluno,
+// o orientador e a banca têm direito de ver a NF1 que causou a reprovação.
+const FASES_NOTAS_LIBERADAS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'];
+
 // Sanitiza um TCC (com ou sem bancas/membros inclusos). Devolve o mesmo objeto quando a
-// nota final já foi confirmada (nf != null) ou quando não há TCC.
+// nota final já foi confirmada (nf != null), quando a fase é uma reprovação terminal
+// (resultado definitivo → notas liberadas) ou quando não há TCC.
 export function sanitizarNotasTcc<T extends Record<string, any> | null | undefined>(tcc: T): T {
-  if (!tcc || (tcc as any).nf != null) return tcc;
+  if (!tcc || (tcc as any).nf != null || FASES_NOTAS_LIBERADAS.includes((tcc as any).faseAtual)) return tcc;
   const limpo: any = { ...tcc };
   for (const c of CAMPOS_NOTA_TCC) if (c in limpo) limpo[c] = null;
   if (Array.isArray(limpo.bancas)) {

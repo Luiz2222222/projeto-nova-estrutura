@@ -4,7 +4,11 @@
 // os valores válidos ficam no pacote compartilhado e são validados com Zod.
 
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  // driverAdapters: permite rodar os TESTES de integração com a engine WASM (embutida no
+  // pacote) + adapter SQLite, sem depender do download das engines nativas. Não muda nada
+  // no uso normal do client (sem adapter, ele segue usando a engine nativa).
+  previewFeatures = ["driverAdapters"]
 }
 
 datasource db {

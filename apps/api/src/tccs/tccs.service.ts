@@ -759,15 +759,23 @@ export class TccsService {
       throw new BadRequestException({ mensagem: 'Não há monografia aguardando avaliação.' });
     }
     if (decisao === 'APROVAR') {
-      // Se a continuidade já estava confirmada, a junção "E" leva direto pra banca (Fase I).
-      const vaiPraBanca = tcc.continuidadeConfirmada;
-      await this.prisma.$transaction([
-        this.prisma.documentoTcc.update({ where: { id: mono.id }, data: { status: 'APROVADO', parecer: null } }),
-        this.prisma.tcc.update({
+      // Junção "E" ATÔMICA: liga a flag e, na MESMA transação, tenta a transição com um
+      // update condicional que só casa se AS DUAS trilhas estiverem concluídas NO BANCO
+      // (não no snapshot lido antes). Isso elimina a corrida em que monografia e
+      // continuidade são decididas quase ao mesmo tempo e nenhuma das duas vê a outra —
+      // o que deixava o TCC preso em DESENVOLVIMENTO com as duas flags ligadas.
+      const vaiPraBanca = await this.prisma.$transaction(async (tx) => {
+        await tx.documentoTcc.update({ where: { id: mono.id }, data: { status: 'APROVADO', parecer: null } });
+        await tx.tcc.update({
           where: { id: tccId },
-          data: { monografiaAprovada: true, monografiaAprovadaEm: new Date(), ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
-        }),
-      ]);
+          data: { monografiaAprovada: true, monografiaAprovadaEm: new Date() },
+        });
+        const transicao = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: true, continuidadeConfirmada: true },
+          data: { faseAtual: 'FORMACAO_BANCA_FASE_1' },
+        });
+        return transicao.count === 1;
+      });
       await this.eventos.emitirParaUsuario('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.`);
       if (vaiPraBanca) {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`, `/coordenador/tccs/${tcc.id}`);
@@ -789,11 +797,18 @@ export class TccsService {
       if (tcc.continuidadeConfirmada) {
         throw new BadRequestException({ mensagem: 'A continuidade já foi confirmada.' });
       }
-      // Junção "E": se a monografia já estava aprovada, vai direto pra banca (Fase I). Update único.
-      const vaiPraBanca = tcc.monografiaAprovada;
-      await this.prisma.tcc.update({
-        where: { id: tccId },
-        data: { continuidadeConfirmada: true, continuidadeAvaliadaEm: new Date(), ...(vaiPraBanca ? { faseAtual: 'FORMACAO_BANCA_FASE_1' } : {}) },
+      // Junção "E" ATÔMICA (espelha avaliarMonografia): liga a flag e tenta a transição
+      // com update condicional na MESMA transação, olhando o estado real do banco.
+      const vaiPraBanca = await this.prisma.$transaction(async (tx) => {
+        await tx.tcc.update({
+          where: { id: tccId },
+          data: { continuidadeConfirmada: true, continuidadeAvaliadaEm: new Date() },
+        });
+        const transicao = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: true, continuidadeConfirmada: true },
+          data: { faseAtual: 'FORMACAO_BANCA_FASE_1' },
+        });
+        return transicao.count === 1;
       });
       await this.eventos.emitirParaUsuario('aluno_continuidade_confirmada', tcc.alunoId, 'Continuidade confirmada', `O orientador confirmou a continuidade do seu TCC "${tcc.titulo}".`);
       if (vaiPraBanca) {

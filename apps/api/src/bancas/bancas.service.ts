@@ -713,97 +713,122 @@ export class BancasService {
 
   // Coordenador valida a fase. Fase I: NF1 = média, ≥6 segue p/ Fase II. Fase II: NF2 = média,
   // depois a nota final NF = 0,6·NF1 + 0,4·NF2, ≥7 → concluído.
+  //
+  // TUDO acontece numa ÚNICA transação: checagens, travamento dos membros (CONCLUIDO),
+  // mudança de fase e criação da banca da Fase II. Antes, o travamento ficava FORA da
+  // transação — se um passo seguinte falhasse (ex.: banca da Fase II já existente após um
+  // remanejo administrativo), os membros ficavam CONCLUIDO com a fase ainda em VALIDACAO_*,
+  // e revalidar era impossível (a checagem exige membros APROVADO): estado preso.
   async validar(tccId: string) {
-    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
+    const r = await this.prisma.$transaction(async (tx) => {
+      const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
 
-    let fase: 'FASE_1' | 'FASE_2';
-    if (tcc.faseAtual === 'VALIDACAO_FASE_1') fase = 'FASE_1';
-    else if (tcc.faseAtual === 'VALIDACAO_FASE_2') fase = 'FASE_2';
-    else throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação.' });
+      let fase: 'FASE_1' | 'FASE_2';
+      if (tcc.faseAtual === 'VALIDACAO_FASE_1') fase = 'FASE_1';
+      else if (tcc.faseAtual === 'VALIDACAO_FASE_2') fase = 'FASE_2';
+      else throw new BadRequestException({ mensagem: 'O TCC não está aguardando validação.' });
 
-    const banca = await this.prisma.banca.findUnique({
-      where: { tccId_fase: { tccId, fase } },
-      include: { membros: true },
-    });
-    if (!banca || banca.membros.length === 0) {
-      throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
-    }
-    // Só valida quando TODAS as avaliações foram aprovadas individualmente na análise.
-    if (!banca.membros.every((m) => m.status === 'APROVADO')) {
-      throw new BadRequestException({ mensagem: 'Aprove todas as avaliações da banca antes de validar a fase.' });
-    }
-    if (banca.membros.some((m) => m.nota === null)) {
-      throw new BadRequestException({ mensagem: 'Ainda faltam notas na banca.' });
-    }
-    // Ao validar, trava as avaliações desta banca (não podem mais ser editadas).
-    await this.prisma.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO' } });
-    const media = mediaNotas(banca.membros.map((m) => m.nota ?? 0));
-
-    if (fase === 'FASE_1') {
-      const aprovado = aprovadoFase1(media);
-      if (!aprovado) {
-        await this.prisma.tcc.update({
-          where: { id: tccId },
-          data: { nf1: media, faseAtual: 'REPROVADO_FASE_1', resultado: 'REPROVADO', fase1ValidadaEm: new Date() },
-        });
-        // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
-        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
-        await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
-        return { ok: true, fase, nf1: media, aprovado };
+      const banca = await tx.banca.findUnique({
+        where: { tccId_fase: { tccId, fase } },
+        include: { membros: true },
+      });
+      if (!banca || banca.membros.length === 0) {
+        throw new BadRequestException({ mensagem: 'Ainda faltam avaliações da banca.' });
       }
-      // Banca da Fase II NÃO é formada do zero: orientador + os 2 avaliadores da Fase I.
-      // O TCC NÃO entra direto em avaliação: vai para AGENDAMENTO_DEFESA_FASE_2, e só o
-      // orientador (na página do orientando) libera a avaliação → aí sim AVALIACAO_FASE_2.
-      const membrosFase2 = [tcc.orientadorId, ...banca.membros.map((m) => m.avaliadorId)].filter(
-        (x): x is string => !!x,
-      );
-      await this.prisma.$transaction([
-        this.prisma.tcc.update({
+      // Só valida quando TODAS as avaliações foram aprovadas individualmente na análise.
+      if (!banca.membros.every((m) => m.status === 'APROVADO')) {
+        throw new BadRequestException({ mensagem: 'Aprove todas as avaliações da banca antes de validar a fase.' });
+      }
+      if (banca.membros.some((m) => m.nota === null)) {
+        throw new BadRequestException({ mensagem: 'Ainda faltam notas na banca.' });
+      }
+      // Trava as avaliações desta banca (não podem mais ser editadas). Dentro da transação:
+      // se qualquer passo abaixo falhar, o travamento é desfeito junto (nada fica preso).
+      await tx.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO' } });
+      const media = mediaNotas(banca.membros.map((m) => m.nota ?? 0));
+
+      const resumo: { fase: 'FASE_1' | 'FASE_2'; aprovado: boolean; nf1?: number; nf2?: number; nf?: number; tcc: typeof tcc } =
+        { fase, aprovado: false, tcc };
+
+      if (fase === 'FASE_1') {
+        resumo.nf1 = media;
+        resumo.aprovado = aprovadoFase1(media);
+        if (!resumo.aprovado) {
+          await tx.tcc.update({
+            where: { id: tccId },
+            data: { nf1: media, faseAtual: 'REPROVADO_FASE_1', resultado: 'REPROVADO', fase1ValidadaEm: new Date() },
+          });
+          return resumo;
+        }
+        await tx.tcc.update({
           where: { id: tccId },
           data: { nf1: media, faseAtual: 'AGENDAMENTO_DEFESA_FASE_2', resultado: null, fase1ValidadaEm: new Date() },
-        }),
-        this.prisma.banca.create({
-          data: { tccId, fase: 'FASE_2', membros: { create: membrosFase2.map((id) => ({ avaliadorId: id })) } },
-        }),
-      ]);
+        });
+        // Banca da Fase II NÃO é formada do zero: orientador + os 2 avaliadores da Fase I.
+        // Se ela JÁ existir (sobra de um remanejo administrativo), reaproveita em vez de
+        // quebrar na unique (tccId, fase) — era exatamente essa quebra que prendia o TCC.
+        const jaExiste = await tx.banca.findUnique({ where: { tccId_fase: { tccId, fase: 'FASE_2' } } });
+        if (!jaExiste) {
+          const membrosFase2 = [tcc.orientadorId, ...banca.membros.map((m) => m.avaliadorId)].filter(
+            (x): x is string => !!x,
+          );
+          await tx.banca.create({
+            data: { tccId, fase: 'FASE_2', membros: { create: membrosFase2.map((id) => ({ avaliadorId: id })) } },
+          });
+        }
+        return resumo;
+      }
+
+      if (tcc.nf1 == null) {
+        throw new BadRequestException({ mensagem: 'NF1 ausente — a Fase I precisa ter sido validada antes.' });
+      }
+      resumo.nf2 = media;
+      // Pesos das fases configuráveis pela coordenação (calendário do semestre); default 60/40.
+      const calFase: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
+      resumo.nf = notaFinal(tcc.nf1, media, calFase?.pesoFase1 ?? PESO_NF1, calFase?.pesoFase2 ?? PESO_NF2);
+      resumo.aprovado = aprovadoFinal(resumo.nf);
+      // Aprovado na defesa ainda NÃO conclui: vai pra ajustes finais (aluno sobe a versão final).
+      await tx.tcc.update({
+        where: { id: tccId },
+        data: {
+          nf2: media,
+          nf: resumo.nf,
+          faseAtual: resumo.aprovado ? 'AGUARDANDO_AJUSTES_FINAIS' : 'REPROVADO_FASE_2',
+          resultado: resumo.aprovado ? null : 'REPROVADO',
+          fase2ValidadaEm: new Date(),
+        },
+      });
+      return resumo;
+    });
+
+    // Notificações FORA da transação (efeitos externos só depois de o estado estar salvo).
+    const tcc = r.tcc;
+    if (r.fase === 'FASE_1') {
+      if (!r.aprovado) {
+        // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
+        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
+        await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
+        return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
+      }
       // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
       await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador liberar a avaliação da Fase II. A nota final ainda não foi confirmada.`);
       // Só o ORIENTADOR é avisado agora — para preparar as bancas / liberar a avaliação. Os
       // avaliadores só recebem ação/notificação depois que a avaliação for liberada.
       await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Preparar as bancas (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Prepare as bancas / libere a avaliação da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a preparação das bancas da Fase II.`);
-      await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
-      return { ok: true, fase, nf1: media, aprovado };
+      await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
+      return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
     }
 
-    if (tcc.nf1 == null) {
-      throw new BadRequestException({ mensagem: 'NF1 ausente — a Fase I precisa ter sido validada antes.' });
-    }
-    const nf2 = media;
-    // Pesos das fases configuráveis pela coordenação (calendário do semestre); default 60/40.
-    const calFase: any = await this.prisma.calendario.findUnique({ where: { semestre: tcc.semestre } });
-    const nf = notaFinal(tcc.nf1, nf2, calFase?.pesoFase1 ?? PESO_NF1, calFase?.pesoFase2 ?? PESO_NF2);
-    const aprovado = aprovadoFinal(nf);
-    // Aprovado na defesa ainda NÃO conclui: vai pra ajustes finais (aluno sobe a versão final).
-    await this.prisma.tcc.update({
-      where: { id: tccId },
-      data: {
-        nf2,
-        nf,
-        faseAtual: aprovado ? 'AGUARDANDO_AJUSTES_FINAIS' : 'REPROVADO_FASE_2',
-        resultado: aprovado ? null : 'REPROVADO',
-        fase2ValidadaEm: new Date(),
-      },
-    });
     // Esta validação É a confirmação da nota final da Fase II; ainda assim a notificação
     // traz só o resultado qualitativo (a nota fica visível na página do TCC, não no texto).
-    await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada pela coordenação. ${aprovado ? 'Você foi aprovado na defesa!' : 'Resultado: reprovado.'}`);
-    if (aprovado) {
+    await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada pela coordenação. ${r.aprovado ? 'Você foi aprovado na defesa!' : 'Resultado: reprovado.'}`);
+    if (r.aprovado) {
       await this.eventos.emitirParaUsuario('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
     }
-    await this.notificarFaseValidada(tccId, fase, tcc.titulo, tcc.orientadorId);
-    return { ok: true, fase, nf2, nf, aprovado };
+    await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
+    return { ok: true, fase: r.fase, nf2: r.nf2, nf: r.nf, aprovado: r.aprovado };
   }
 
   // Orientador libera a avaliação da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.

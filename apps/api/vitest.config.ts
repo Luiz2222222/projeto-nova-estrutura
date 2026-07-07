@@ -1,10 +1,11 @@
 import { defineConfig } from 'vitest/config';
 
-// Testes unitários da API — focados em helpers PUROS de src/comum (sem Nest/Prisma runtime).
-// Usa o vitest já presente no monorepo (nenhuma dependência nova).
+// Testes da API: unitários (helpers puros em src/comum) + integração do fluxo do TCC
+// (test/*.test.ts, com SQLite real via driver adapter). Usa o vitest já presente no monorepo.
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'test/**/*.test.ts'],
     environment: 'node',
+    testTimeout: 30000, // testes de integração aplicam migrations num SQLite temporário
   },
 });
