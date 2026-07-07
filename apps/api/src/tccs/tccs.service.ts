@@ -85,14 +85,16 @@ export class TccsService {
       data.alunoId = dados.alunoId;
     }
     if (dados.orientadorId !== undefined) {
-      if (!dados.orientadorId) data.orientadorId = null;
-      else {
-        const o = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
-        if (!o || !['PROFESSOR', 'COORDENADOR'].includes(o.papel)) {
-          throw new BadRequestException({ mensagem: 'Orientador inválido (precisa ser professor ou coordenador).' });
-        }
-        data.orientadorId = dados.orientadorId;
+      if (!dados.orientadorId) {
+        // Sem orientador o fluxo trava: é ele quem aprova monografia/continuidade, libera a
+        // defesa e compõe a banca da Fase II. Todo TCC ativo precisa ter um orientador.
+        throw new BadRequestException({ mensagem: 'O TCC precisa ter um orientador — escolha outro em vez de remover.' });
       }
+      const o = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
+      if (!o || !['PROFESSOR', 'COORDENADOR'].includes(o.papel)) {
+        throw new BadRequestException({ mensagem: 'Orientador inválido (precisa ser professor ou coordenador).' });
+      }
+      data.orientadorId = dados.orientadorId;
     }
     if (dados.coorientadorId !== undefined) {
       if (!dados.coorientadorId) data.coorientadorId = null;
@@ -125,7 +127,48 @@ export class TccsService {
       if (conflito) throw new BadRequestException({ mensagem: 'Já existe um TCC para este aluno neste semestre.' });
     }
 
-    return this.prisma.tcc.update({ where: { id: tccId }, data });
+    // ----- Coerência com as bancas (mesma transação da gravação) -----
+    return this.prisma.$transaction(async (tx) => {
+      const bancas = await tx.banca.findMany({ where: { tccId }, include: { membros: true } });
+      const trocouOrientador = data.orientadorId !== undefined && data.orientadorId !== tcc.orientadorId;
+
+      // Ninguém pode ser juiz e parte: o novo orientador/coorientador não pode já ser
+      // avaliador em banca deste TCC (a vaga do orientador na Fase II é criada pela
+      // sincronização abaixo — o orientador ATUAL, membro legítimo da F2, não conta).
+      const ehAvaliadorDoTcc = (userId: string | null) =>
+        !!userId && bancas.some((b) => b.membros.some((m) => m.avaliadorId === userId && m.avaliadorId !== tcc.orientadorId));
+      if (trocouOrientador && ehAvaliadorDoTcc(novoOrient)) {
+        throw new BadRequestException({ mensagem: 'O novo orientador já é avaliador na banca deste TCC — escolha outra pessoa ou troque antes os avaliadores.' });
+      }
+      if (data.coorientadorId !== undefined && ehAvaliadorDoTcc(novoCoor)) {
+        throw new BadRequestException({ mensagem: 'O novo coorientador já é avaliador na banca deste TCC.' });
+      }
+
+      // Troca de orientador com banca da Fase II existente → sincroniza a composição
+      // (a F2 é sempre orientador + os 2 avaliadores da Fase I). Antes, o antigo continuava
+      // avaliador da defesa e o novo ficava de fora — estado impossível.
+      if (trocouOrientador) {
+        const bancaF2 = bancas.find((b) => b.fase === 'FASE_2');
+        const membroAntigo = bancaF2?.membros.find((m) => m.avaliadorId === tcc.orientadorId);
+        if (membroAntigo) {
+          const jaAvaliou = membroAntigo.nota != null || membroAntigo.status !== 'PENDENTE';
+          if (jaAvaliou) {
+            // Não descartamos silenciosamente uma avaliação oficial já registrada: o
+            // coordenador decide o destino dela primeiro (zerar/editar) e então troca.
+            throw new BadRequestException({
+              mensagem: 'O orientador atual já registrou avaliação na banca da Fase II. ' +
+                'Edite/zere essa avaliação (em Bancas → editar avaliação, status "Pendente") antes de trocar o orientador.',
+            });
+          }
+          await tx.membroBanca.delete({ where: { id: membroAntigo.id } });
+        }
+        if (bancaF2) {
+          await tx.membroBanca.create({ data: { bancaId: bancaF2.id, avaliadorId: data.orientadorId as string } });
+        }
+      }
+
+      return tx.tcc.update({ where: { id: tccId }, data });
+    });
   }
 
   // Edita metadados de um documento do TCC (não substitui o arquivo). Coordenador.

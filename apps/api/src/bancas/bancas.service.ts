@@ -482,6 +482,13 @@ export class BancasService {
   // haviam sido apurados, mantendo-os consistentes com as notas atuais da banca. NÃO mexe na
   // fase/fluxo — só nos números já existentes (fases ainda não validadas têm NF null e são
   // ignoradas aqui; a apuração inicial continua sendo feita na validação da coordenação).
+  //
+  // GUARDA DE COERÊNCIA: se o recálculo CONTRADIZ o desfecho da fase atual (ex.: TCC
+  // REPROVADO na Fase I cuja edição elevaria a NF1 para ≥ 6, ou TCC concluído/aprovado cuja
+  // edição derrubaria a NF para < 7), a edição é REJEITADA com uma mensagem que ensina o
+  // caminho correto: voltar a fase para a validação correspondente e validar de novo. Assim
+  // nunca existe um "reprovado com nota de aprovado" (nem o inverso) no banco, e a mudança
+  // de desfecho passa sempre pelo circuito oficial (validar), que cria banca/fase direito.
   private async recalcularNotasApuradas(tx: Prisma.TransactionClient, tccId: string) {
     const tcc = await tx.tcc.findUnique({ where: { id: tccId } });
     if (!tcc) return;
@@ -504,12 +511,46 @@ export class BancasService {
     const nf2n = (data.nf2 as number | undefined) ?? tcc.nf2;
     if (tcc.nf != null && nf1n != null && nf2n != null) {
       const cal: any = await tx.calendario.findUnique({ where: { semestre: tcc.semestre } });
-      const nf = notaFinal(nf1n, nf2n, cal?.pesoFase1 ?? PESO_NF1, cal?.pesoFase2 ?? PESO_NF2);
-      data.nf = nf;
-      // Só recomputa o resultado FINAL já definido (aprovado/reprovado na Fase II).
-      if (tcc.resultado === 'APROVADO' || tcc.resultado === 'REPROVADO') {
-        data.resultado = aprovadoFinal(nf) ? 'APROVADO' : 'REPROVADO';
-      }
+      data.nf = notaFinal(nf1n, nf2n, cal?.pesoFase1 ?? PESO_NF1, cal?.pesoFase2 ?? PESO_NF2);
+    }
+
+    // ----- Guarda de coerência entre notas recalculadas e o desfecho da fase atual -----
+    const FASES_POS_FASE_1 = [
+      'AGENDAMENTO_DEFESA_FASE_2', 'AVALIACAO_FASE_2', 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2',
+      'VALIDACAO_FASE_2', 'AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO', 'REPROVADO_FASE_2',
+    ];
+    const FASES_APROVADO_FINAL = ['AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO'];
+    const nfNova = (data.nf as number | undefined) ?? tcc.nf;
+
+    if (tcc.faseAtual === 'REPROVADO_FASE_1' && nf1n != null && aprovadoFase1(nf1n)) {
+      throw new BadRequestException({
+        mensagem: `Com essa alteração a NF1 ficaria ${nf1n.toFixed(2)} (≥ 6), contradizendo a reprovação na Fase I. ` +
+          'Para reverter o desfecho: na edição do TCC, volte a fase para "Validação (Fase I)", faça a edição das notas e valide a fase novamente.',
+      });
+    }
+    if (FASES_POS_FASE_1.includes(tcc.faseAtual) && nf1n != null && !aprovadoFase1(nf1n)) {
+      throw new BadRequestException({
+        mensagem: `Com essa alteração a NF1 ficaria ${nf1n.toFixed(2)} (< 6), mas o TCC já avançou da Fase I. ` +
+          'Para refazer o desfecho da Fase I: volte a fase para "Validação (Fase I)" e valide novamente após a edição.',
+      });
+    }
+    if (tcc.faseAtual === 'REPROVADO_FASE_2' && nfNova != null && aprovadoFinal(nfNova)) {
+      throw new BadRequestException({
+        mensagem: `Com essa alteração a nota final ficaria ${nfNova.toFixed(2)} (≥ 7), contradizendo a reprovação na Fase II. ` +
+          'Para reverter o desfecho: volte a fase para "Validação (Fase II)" e valide a fase novamente após a edição.',
+      });
+    }
+    if (FASES_APROVADO_FINAL.includes(tcc.faseAtual) && nfNova != null && !aprovadoFinal(nfNova)) {
+      throw new BadRequestException({
+        mensagem: `Com essa alteração a nota final ficaria ${nfNova.toFixed(2)} (< 7), mas o TCC já foi aprovado na defesa. ` +
+          'Para refazer o desfecho da Fase II: volte a fase para "Validação (Fase II)" e valide novamente após a edição.',
+      });
+    }
+
+    // Coerente com a fase → grava. O resultado final já definido acompanha a NF recalculada
+    // (com a guarda acima, ele nunca muda de aprovado para reprovado sem passar pela validação).
+    if (tcc.nf != null && (data.nf as number | undefined) != null && (tcc.resultado === 'APROVADO' || tcc.resultado === 'REPROVADO')) {
+      data.resultado = aprovadoFinal(data.nf as number) ? 'APROVADO' : 'REPROVADO';
     }
     if (Object.keys(data).length > 0) await tx.tcc.update({ where: { id: tccId }, data });
   }
