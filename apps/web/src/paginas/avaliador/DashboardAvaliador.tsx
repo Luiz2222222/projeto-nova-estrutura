@@ -112,9 +112,9 @@ export function DashboardAvaliador() {
       const t = m.banca?.tcc;
       const ehF2 = m.banca?.fase === 'FASE_2';
       if (bancaPendente(m)) {
-        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
+        items.push({ id: 'banca' + m.id, cor: 'roxo', titulo: `Avaliar banca — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? 'Aluno anônimo'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
       } else if (ajustePendente(m)) {
-        items.push({ id: 'ajuste' + m.id, cor: 'amarelo', titulo: `Ajustar avaliação — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? '—'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
+        items.push({ id: 'ajuste' + m.id, cor: 'amarelo', titulo: `Ajustar avaliação — Fase ${ehF2 ? 'II' : 'I'}`, sub: `${t?.aluno?.nomeCompleto ?? 'Aluno anônimo'} · ${t?.titulo ?? ''}`, link: `/avaliador/bancas/${m.id}` });
       }
     });
     return items;

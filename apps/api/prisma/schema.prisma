@@ -37,6 +37,10 @@ model Usuario {
   // Professor: se está aceitando novas orientações.
   disponivelParaOrientar Boolean @default(true)
 
+  // Versão do token de sessão: incrementada a cada troca/redefinição de senha para
+  // invalidar imediatamente todas as sessões antigas (o guard compara com o token).
+  versaoToken Int @default(0)
+
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 

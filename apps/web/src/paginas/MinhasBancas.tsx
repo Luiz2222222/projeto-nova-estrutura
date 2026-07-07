@@ -69,7 +69,9 @@ export function MinhasBancas() {
       const g = map.get(tcc.id) ?? { tcc };
       if (m.banca.fase === 'FASE_1') g.fase1 = m;
       else g.fase2 = m;
-      g.tcc = tcc;
+      // Duplo-cego: o TCC da Fase I chega SEM identidade (aluno null). Se o mesmo TCC também
+      // tem membro na Fase II (não anônima), preferimos essa versão para exibir o nome.
+      g.tcc = g.tcc?.aluno ? g.tcc : tcc;
       map.set(tcc.id, g);
     });
     return [...map.values()];
@@ -101,7 +103,7 @@ export function MinhasBancas() {
                   <div style={{ minWidth: 0 }}>
                     <h2>{tcc.titulo}</h2>
                     <p className="nota-vazio" style={{ margin: '4px 0 0' }}>
-                      {tcc.aluno?.nomeCompleto ?? '—'} · {ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}
+                      {tcc.aluno?.nomeCompleto ?? 'Aluno anônimo — avaliação às cegas'} · {ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}
                     </p>
                   </div>
                   {doc && (

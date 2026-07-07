@@ -91,7 +91,8 @@ export function AvaliarBanca() {
       <section className="cartao-secao bloco">
         <h2>{ehF2 ? 'Avaliação da Apresentação' : 'Avaliação da Monografia'}</h2>
         <div className="info-lista" style={{ marginBottom: 14 }}>
-          <div className="info-campo"><span className="info-rotulo">Aluno</span><span className="info-valor">{tcc.aluno?.nomeCompleto ?? '—'}</span></div>
+          {/* Duplo-cego: na Fase I o backend não envia a identidade do aluno (avaliação às cegas). */}
+          <div className="info-campo"><span className="info-rotulo">Aluno</span><span className="info-valor">{ehF2 ? (tcc.aluno?.nomeCompleto ?? '—') : 'Anônimo — avaliação às cegas'}</span></div>
           <div className="info-campo"><span className="info-rotulo">Fase atual</span><span className="info-valor">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span></div>
         </div>
         {doc ? (

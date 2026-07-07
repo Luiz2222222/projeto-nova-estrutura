@@ -83,9 +83,11 @@ export class AutenticacaoService {
     return u;
   }
 
-  gerarToken(u: { id: string; papel: string }, manterLogin: boolean): string {
+  // O token carrega `v` (versão de sessão): quando a senha muda, versaoToken é incrementada
+  // e todos os tokens com `v` antigo passam a ser rejeitados pelo guard.
+  gerarToken(u: { id: string; papel: string; versaoToken?: number }, manterLogin: boolean): string {
     return this.jwt.sign(
-      { sub: u.id, papel: u.papel },
+      { sub: u.id, papel: u.papel, v: u.versaoToken ?? 0 },
       { expiresIn: manterLogin ? '7d' : '1d' },
     );
   }
@@ -107,7 +109,8 @@ export class AutenticacaoService {
       });
     }
     const senhaHash = await bcrypt.hash(novaSenha, 10);
-    await this.prisma.usuario.update({ where: { id: userId }, data: { senhaHash } });
+    // Nova senha derruba TODAS as sessões abertas (inclusive a de um eventual invasor).
+    await this.prisma.usuario.update({ where: { id: userId }, data: { senhaHash, versaoToken: { increment: 1 } } });
   }
 
   // ---------- Recuperação de senha ("esqueci minha senha") ----------
@@ -159,7 +162,8 @@ export class AutenticacaoService {
 
     const senhaHash = await bcrypt.hash(novaSenha, 10);
     await this.prisma.$transaction([
-      this.prisma.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash } }),
+      // Redefinição derruba TODAS as sessões abertas do usuário (versão de token nova).
+      this.prisma.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash, versaoToken: { increment: 1 } } }),
       this.prisma.tokenSenha.update({ where: { id: registro.id }, data: { usadoEm: new Date() } }),
     ]);
   }

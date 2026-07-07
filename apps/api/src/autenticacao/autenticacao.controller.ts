@@ -44,6 +44,10 @@ export class AutenticacaoController {
   private readonly limLoginIp = new LimitadorTentativas(30, JANELA_MS);
   private readonly limRecuperarConta = new LimitadorTentativas(5, JANELA_MS);
   private readonly limRecuperarIp = new LimitadorTentativas(20, JANELA_MS);
+  // Cadastro: freia força bruta do código de cadastro (por IP). Redefinir: impede varredura
+  // de tokens de redefinição (por IP). Mesmo padrão manual dos demais (sem dependência nova).
+  private readonly limCadastroIp = new LimitadorTentativas(10, JANELA_MS);
+  private readonly limRedefinirIp = new LimitadorTentativas(20, JANELA_MS);
 
   // Registra as tentativas (sem short-circuit, para contar todas as chaves) e bloqueia com
   // mensagem amigável se QUALQUER limite estourar. Não revela se o e-mail existe (429 é igual
@@ -59,7 +63,9 @@ export class AutenticacaoController {
   }
 
   @Post('cadastro')
-  async cadastro(@Body(new ZodValidacaoPipe(esquemaCadastro)) dados: DadosCadastro) {
+  async cadastro(@Req() req: Request, @Body(new ZodValidacaoPipe(esquemaCadastro)) dados: DadosCadastro) {
+    const ip = ipDaRequisicao(req);
+    this.bloquearSeExcedeu([{ lim: this.limCadastroIp, chave: `cadastro:ip:${ip}` }]);
     return this.auth.cadastrar(dados);
   }
 
@@ -116,9 +122,12 @@ export class AutenticacaoController {
     return { ok: true };
   }
 
-  // Redefine a senha a partir do token do link recebido por e-mail.
+  // Redefine a senha a partir do token do link recebido por e-mail. Throttle por IP para
+  // impedir varredura de tokens de redefinição.
   @Post('redefinir-senha')
-  async redefinirSenha(@Body() dados: { token?: string; novaSenha?: string; confirmarNovaSenha?: string }) {
+  async redefinirSenha(@Req() req: Request, @Body() dados: { token?: string; novaSenha?: string; confirmarNovaSenha?: string }) {
+    const ip = ipDaRequisicao(req);
+    this.bloquearSeExcedeu([{ lim: this.limRedefinirIp, chave: `redefinir:ip:${ip}` }]);
     await this.auth.redefinirSenha(dados.token ?? '', dados.novaSenha ?? '', dados.confirmarNovaSenha ?? '');
     return { ok: true };
   }

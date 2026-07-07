@@ -469,7 +469,7 @@ export class TccsService {
             alunoId: true,
             orientadorId: true,
             coorientadorId: true,
-            bancas: { select: { documentoAvaliacaoId: true, membros: { select: { avaliadorId: true } } } },
+            bancas: { select: { fase: true, documentoAvaliacaoId: true, membros: { select: { avaliadorId: true } } } },
           },
         },
       },
@@ -493,9 +493,14 @@ export class TccsService {
       t.alunoId === usuario.sub ||
       t.orientadorId === usuario.sub ||
       t.coorientadorId === usuario.sub;
-    // Membro de banca acessa a monografia/versão final (não os documentos de abertura).
-    const ehMembroBanca = t.bancas.some((b) => b.membros.some((m) => m.avaliadorId === usuario.sub));
-    const acessoBanca = ehMembroBanca && ['MONOGRAFIA', 'VERSAO_FINAL'].includes(doc.tipo);
+    // Membro de banca acessa a monografia/versão final — mas SÓ o da banca da FASE II.
+    // Na Fase I a avaliação é às cegas: o membro só acessa o documento anônimo da banca
+    // (AVALIACAO_BANCA, tratado acima); a monografia original carrega o nome do aluno
+    // (no arquivo e no conteúdo) e entregaria a identidade.
+    const ehMembroBancaF2 = t.bancas.some(
+      (b) => b.fase === 'FASE_2' && b.membros.some((m) => m.avaliadorId === usuario.sub),
+    );
+    const acessoBanca = ehMembroBancaF2 && ['MONOGRAFIA', 'VERSAO_FINAL'].includes(doc.tipo);
     return ehDono || acessoBanca ? doc : null;
   }
 

@@ -625,7 +625,8 @@ export class CoordenacaoService {
       throw new ForbiddenException({ mensagem: 'Este usuário não pode ser gerenciado por aqui.' });
     }
     const senhaHash = await bcrypt.hash(novaSenha, 10);
-    await this.prisma.usuario.update({ where: { id }, data: { senhaHash } });
+    // Reset administrativo também derruba todas as sessões abertas do usuário.
+    await this.prisma.usuario.update({ where: { id }, data: { senhaHash, versaoToken: { increment: 1 } } });
     return { ok: true };
   }
 

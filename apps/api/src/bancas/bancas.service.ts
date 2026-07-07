@@ -125,6 +125,27 @@ export class BancasService {
     return { ok: true };
   }
 
+  // ----- Duplo-cego (Fase I) -----
+  // Na banca da FASE I a avaliação da monografia é ÀS CEGAS: o avaliador não pode saber
+  // quem é o aluno (nem orientador/coorientador). Remove as identidades e também os
+  // METADADOS dos documentos do TCC — o nome original de um arquivo ("TCC_Fulano.docx")
+  // entregaria o aluno. O avaliador da Fase I trabalha só com o documento anônimo da banca
+  // (documentoAvaliacao), enviado pela coordenação ao formar a banca.
+  // Na FASE II (defesa presencial) o anonimato não se aplica: a banca assiste o aluno.
+  private anonimizarTccFase1<T extends Record<string, any>>(tcc: T): T {
+    const anon: any = { ...tcc };
+    for (const k of [
+      'aluno', 'alunoId',
+      'orientador', 'orientadorId',
+      'coorientador', 'coorientadorId',
+      'coorientadorNome', 'coorientadorTitulacao', 'coorientadorAfiliacao', 'coorientadorLattes',
+    ]) {
+      if (k in anon) anon[k] = null;
+    }
+    if ('documentos' in anon) anon.documentos = [];
+    return anon as T;
+  }
+
   // Bancas em que o usuário é avaliador (com o TCC, a própria nota e os pesos do semestre do TCC).
   async minhasBancas(avaliadorId: string) {
     const membros = await this.prisma.membroBanca.findMany({
@@ -157,7 +178,12 @@ export class BancasService {
         });
         // O avaliador vê a PRÓPRIA avaliação (m.nota*/m.parecer) — necessário para editar.
         // Mas o TCC embutido não pode vazar NF1/NF2/NF/resultado antes da confirmação final.
-        const banca = { ...m.banca, tcc: sanitizarNotasTcc(m.banca.tcc) };
+        // E na FASE I a identidade do aluno/orientador e os documentos são removidos (às cegas).
+        const tccSan = sanitizarNotasTcc(m.banca.tcc);
+        const banca = {
+          ...m.banca,
+          tcc: m.banca.fase === 'FASE_1' ? this.anonimizarTccFase1(tccSan) : tccSan,
+        };
         return { ...m, banca, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
       }),
     );
