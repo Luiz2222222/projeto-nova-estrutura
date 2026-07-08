@@ -101,12 +101,14 @@ export interface NotasTrilha { fase1?: number | null; fase2?: number | null; fin
 
 // Notas exibidas na timeline horizontal, respeitando a visibilidade:
 //  - coordenador vê NF1/NF2 assim que existem (antes mesmo da nota final);
-//  - aluno/orientador/coorientador só veem as notas DEPOIS da nota final confirmada (nf != null).
+//  - aluno/orientador/coorientador veem as notas DEPOIS da nota final confirmada (nf != null)
+//    OU em reprovação terminal (mesmo critério do backend, que já libera as notas nesses casos).
 export function notasTrilhaTcc(tcc: any, ehCoordenador: boolean): NotasTrilha {
   const nf1 = tcc?.nf1 ?? null;
   const nf2 = tcc?.nf2 ?? null;
   const nf = tcc?.nf ?? null;
   if (ehCoordenador) return { fase1: nf1, fase2: nf2, final: nf };
-  if (nf == null) return {}; // nota final ainda não confirmada → nada para os demais papéis
+  const terminal = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual);
+  if (nf == null && !terminal) return {}; // nota ainda não liberada para os demais papéis
   return { fase1: nf1, fase2: nf2, final: nf };
 }

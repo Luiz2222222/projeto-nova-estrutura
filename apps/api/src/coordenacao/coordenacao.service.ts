@@ -758,7 +758,21 @@ export class CoordenacaoService {
     }
 
     const semestre = await resolverSemestreAtivo(this.prisma);
-    const backup = await this.exportarDados(); // backup antes de apagar
+    const backup: any = await this.exportarDados(); // backup antes de apagar
+    // exportarDados FILTRA os TCCs com soft delete (excluidoEm) — mas o reset apaga TODOS os
+    // TCCs do semestre, inclusive os excluídos logicamente. Anexa esses ao backup para nada
+    // ser apagado sem cópia.
+    backup.tccsExcluidosLogicamente = await this.prisma.tcc.findMany({
+      where: { semestre, excluidoEm: { not: null } },
+      include: {
+        aluno: { select: { nomeCompleto: true, email: true, curso: true } },
+        orientador: { select: { nomeCompleto: true, tratamento: true } },
+        coorientador: { select: { nomeCompleto: true } },
+        solicitacoes: true,
+        documentos: true,
+        bancas: { include: { membros: { include: { avaliador: { select: { nomeCompleto: true } } } } } },
+      },
+    });
     const docs = await this.prisma.documentoTcc.findMany({
       where: { tcc: { semestre } },
       select: { caminho: true },

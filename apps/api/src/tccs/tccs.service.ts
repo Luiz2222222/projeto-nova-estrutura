@@ -265,6 +265,14 @@ export class TccsService {
       include: { solicitacoes: { orderBy: { criadoEm: 'desc' }, take: 1 } },
     });
     if (jaTem) {
+      // TCC do semestre EXCLUÍDO logicamente pela coordenação/orientador: a vaga única
+      // (aluno, semestre) continua ocupada — não dá para abrir outro sem intervenção. Mensagem
+      // clara em vez do genérico "já tem um TCC" (o aluno nem vê o TCC excluído nas telas).
+      if (jaTem.excluidoEm) {
+        throw new BadRequestException({
+          mensagem: 'Seu TCC deste semestre foi excluído pela coordenação. Fale com a coordenação para regularizar antes de abrir uma nova solicitação.',
+        });
+      }
       const ult = jaTem.solicitacoes[0];
       // Só dá pra recomeçar se o TCC anterior ainda está na abertura E foi recusado/cancelado.
       const podeRecomecar = jaTem.faseAtual === 'INICIALIZACAO' && (ult?.status === 'RECUSADA' || ult?.status === 'CANCELADA');

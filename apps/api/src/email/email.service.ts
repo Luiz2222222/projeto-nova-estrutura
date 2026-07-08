@@ -8,6 +8,18 @@ type Destinatario = { id: string; email: string | null; nomeCompleto: string } |
 
 const REMETENTE_PADRAO = 'Sistema de TCC <nao-responda@dee.local>';
 
+// Escapa texto para interpolação segura no HTML do e-mail. Nome de usuário e título de TCC
+// são controlados pelos próprios usuários — sem escape, um título com tags viraria HTML
+// clicável (phishing) na caixa de entrada de coordenador/orientador/avaliador.
+function escaparHtml(texto: string): string {
+  return String(texto)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 // Camada de envio de e-mail + controle de envio (global e por usuário).
 // SMTP vem do BANCO (configurado pela UID do coordenador) quando smtpHost está
 // setado; senão cai no .env; sem nenhum dos dois, modo dev/console (só loga).
@@ -170,9 +182,9 @@ export class EmailService {
       `Recebemos um pedido para redefinir sua senha. Acesse o link abaixo (válido por 1 hora):\n${link}\n\n` +
       `Se você não fez esse pedido, ignore este e-mail — sua senha continua a mesma.`;
     const html =
-      `<p>Olá, ${nome}.</p>` +
+      `<p>Olá, ${escaparHtml(nome)}.</p>` +
       `<p>Recebemos um pedido para redefinir sua senha. Clique no link abaixo (válido por 1 hora):</p>` +
-      `<p><a href="${link}">Redefinir minha senha</a></p>` +
+      `<p><a href="${escaparHtml(link)}">Redefinir minha senha</a></p>` +
       `<p>Se você não fez esse pedido, ignore este e-mail — sua senha continua a mesma.</p>`;
     await this.enviar(para, assunto, html, texto);
   }
@@ -198,7 +210,7 @@ export class EmailService {
         return;
       }
 
-      await this.enviar(destinatario.email, assunto, html ?? `<p>${texto.replace(/\n/g, '<br>')}</p>`, texto);
+      await this.enviar(destinatario.email, assunto, html ?? `<p>${escaparHtml(texto).replace(/\n/g, '<br>')}</p>`, texto);
     } catch (e) {
       this.logger.error(`Falha ao enviar e-mail do evento "${evento}": ${(e as Error).message}`);
     }

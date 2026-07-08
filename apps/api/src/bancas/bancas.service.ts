@@ -913,6 +913,12 @@ export class BancasService {
       where: { tccId_fase: { tccId, fase: 'FASE_2' } },
       include: { membros: { include: { avaliador: { select: { id: true, papel: true } } } } },
     });
+    // Guarda: sem banca da Fase II (ou sem membros) a fase avançaria SEM avaliadores e o TCC
+    // ficaria preso em AVALIACAO_FASE_2. Não deve acontecer no fluxo normal (validar() da
+    // Fase I cria a banca), mas barra estados vindos de mexida administrativa/manual.
+    if (!banca || banca.membros.length === 0) {
+      throw new BadRequestException({ mensagem: 'A banca da Fase II não está formada — peça à coordenação para corrigir a banca antes de liberar a avaliação.' });
+    }
     await this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AVALIACAO_FASE_2' } });
     // Notifica os avaliadores (exceto o orientador) com link DIRETO para a avaliação.
     for (const m of banca?.membros ?? []) {
