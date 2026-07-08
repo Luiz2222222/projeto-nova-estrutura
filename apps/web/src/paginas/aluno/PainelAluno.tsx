@@ -232,9 +232,10 @@ export function PainelAluno() {
         );
       })()}
 
-      {/* Avaliações da banca — SOMENTE depois da validação da Fase II (nf != null). O backend só
-          envia notas/parecer/avaliadores nesse momento; antes disso nada disso é exposto ao aluno. */}
-      {tcc.nf != null && (
+      {/* Avaliações da banca — depois da validação da Fase II (nf != null) OU em reprovação
+          terminal (resultado definitivo). Mesmo critério do backend: só nesses momentos ele
+          envia notas/parecer/avaliadores; antes disso nada é exposto ao aluno. */}
+      {(tcc.nf != null || ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc.faseAtual)) && (
         <section className="cartao-secao bloco">
           <h2>Avaliações</h2>
           <BancaNotasTcc tcc={tcc} pesos={tcc.pesos} />

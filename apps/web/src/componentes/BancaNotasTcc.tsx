@@ -15,7 +15,9 @@ const fmtNota = (v: any) => (v != null ? Number(v).toFixed(2).replace('.', ',') 
 // peso padrão de cada critério (pesoDe faz esse fallback).
 export function BancaNotasTcc({ tcc, pesos = null }: { tcc: any; pesos?: any }) {
   const bancas = [...(tcc?.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
-  const notasLiberadas = tcc?.nf != null;
+  // Mesmo critério do backend (sanitizarNotasTcc): nota final confirmada OU reprovação
+  // terminal (resultado definitivo → o backend já envia as notas reais nesses casos).
+  const notasLiberadas = tcc?.nf != null || ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual);
   if (bancas.length === 0) return <p className="nota-vazio">Banca ainda não formada.</p>;
   return (
     <>

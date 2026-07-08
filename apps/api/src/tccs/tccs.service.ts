@@ -10,7 +10,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
-import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
+import { sanitizarNotasTcc, ocultarRascunho, FASES_NOTAS_LIBERADAS } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import { conteudoCompativel } from '../comum/assinatura-arquivo';
@@ -364,12 +364,13 @@ export class TccsService {
       ...(await this.pesosFasesDoSemestre(tcc.semestre)),
       bloqueios: await this.prazos.bloqueiosDoTcc(tcc),
     };
-    // Notas/avaliações da banca SÓ depois da confirmação da nota final da Fase II (nf != null).
-    // Antes disso, o payload traz apenas as DATAS da banca (para a timeline) — nada de notas,
-    // parecer ou avaliadores. Depois da liberação, anexa as bancas completas (com avaliadores,
-    // notas por critério, total e parecer), sempre SEM o rascunho privado do avaliador, e os
-    // pesos do calendário do semestre para os cards de notas.
-    if (tcc.nf != null) {
+    // Notas/avaliações da banca SÓ depois da confirmação da nota final da Fase II (nf != null)
+    // OU em reprovação terminal (REPROVADO_FASE_1/2 — resultado definitivo; mesmo critério do
+    // sanitizarNotasTcc). Antes disso, o payload traz apenas as DATAS da banca (para a
+    // timeline) — nada de notas, parecer ou avaliadores. Depois da liberação, anexa as bancas
+    // completas (avaliadores, notas por critério, total e parecer), sempre SEM o rascunho
+    // privado do avaliador, e os pesos do calendário do semestre para os cards de notas.
+    if (tcc.nf != null || FASES_NOTAS_LIBERADAS.includes(tcc.faseAtual)) {
       const bancas = await this.prisma.banca.findMany({
         where: { tccId: tcc.id },
         orderBy: { fase: 'asc' },
@@ -582,9 +583,11 @@ export class TccsService {
   // Teto de documentos por TCC nos envios do ALUNO. O fluxo normal usa ~10–15 registros
   // mesmo com reenvios; sem teto, um usuário autenticado poderia subir arquivos de 10 MB
   // sem parar e encher o disco. Ações administrativas do coordenador não passam por aqui.
+  // Recebe o client (prisma OU tx): chamado DENTRO da mesma transação que cria o documento,
+  // para a contagem e a gravação serem atômicas (sem corrida entre uploads paralelos).
   private static readonly LIMITE_DOCUMENTOS_POR_TCC = 40;
-  private async exigirEspacoParaDocumento(tccId: string) {
-    const total = await this.prisma.documentoTcc.count({ where: { tccId } });
+  private async exigirEspacoParaDocumento(db: { documentoTcc: { count: (args: any) => Promise<number> } }, tccId: string) {
+    const total = await db.documentoTcc.count({ where: { tccId } });
     if (total >= TccsService.LIMITE_DOCUMENTOS_POR_TCC) {
       throw new BadRequestException({
         mensagem: 'Este TCC atingiu o limite de documentos enviados. Fale com a coordenação para remover versões antigas antes de enviar de novo.',
@@ -597,7 +600,6 @@ export class TccsService {
   async enviarMonografia(alunoId: string, tccId: string, arquivo: any) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
-    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'DESENVOLVIMENTO') {
       throw new BadRequestException({ mensagem: 'O TCC não está na fase de desenvolvimento.' });
     }
@@ -609,6 +611,7 @@ export class TccsService {
     const arq = await this.gravarArquivo(arquivo);
     try {
       const doc = await this.prisma.$transaction(async (tx) => {
+        await this.exigirEspacoParaDocumento(tx, tccId); // dentro da tx: contagem+criação atômicas
         // Versões pendentes anteriores deixam de valer (evita várias PENDENTE soltas).
         await tx.documentoTcc.updateMany({
           where: { tccId, tipo: 'MONOGRAFIA', status: 'PENDENTE' },
@@ -712,13 +715,29 @@ export class TccsService {
       if (t.coorientadorId === profId) vinculos.push('COORIENTADOR');
       if ((t.bancas ?? []).some((b) => (b.membros ?? []).some((m) => m.avaliadorId === profId))) vinculos.push('AVALIADOR');
       const cal = calPorSemestre.get(t.semestre) ?? null;
-      return {
+      const base: any = {
         ...ocultarRascunho(sanitizarNotasTcc(t)),
         vinculos,
         pesos: cal, // pesos por critério (para BancaNotasTcc)
         pesoFase1: cal?.pesoFase1 ?? PESO_NF1,
         pesoFase2: cal?.pesoFase2 ?? PESO_NF2,
       };
+      // DUPLO-CEGO também no histórico: se o único vínculo do professor é ter sido AVALIADOR
+      // da Fase I e o TCC foi REPROVADO na Fase I (nunca chegou à defesa pública da Fase II),
+      // a identidade do aluno/orientador e os metadados de documentos continuam anônimos —
+      // senão o avaliador cego descobriria o autor no período seguinte. TCCs que passaram da
+      // Fase I tiveram defesa pública (a banca da F2 vê o aluno), então abrem normalmente.
+      const soAvaliador = vinculos.length === 1 && vinculos[0] === 'AVALIADOR';
+      if (soAvaliador && t.faseAtual === 'REPROVADO_FASE_1') {
+        for (const k of [
+          'aluno', 'alunoId', 'orientador', 'orientadorId', 'coorientador', 'coorientadorId',
+          'coorientadorNome', 'coorientadorTitulacao', 'coorientadorAfiliacao', 'coorientadorLattes',
+        ]) {
+          if (k in base) base[k] = null;
+        }
+        base.documentos = []; // nomes de arquivo entregariam o aluno
+      }
+      return base;
     });
   }
 
@@ -897,7 +916,6 @@ export class TccsService {
   async enviarVersaoFinal(alunoId: string, tccId: string, arquivo: any) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
-    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'AGUARDANDO_AJUSTES_FINAIS') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando a versão final.' });
     }
@@ -907,6 +925,7 @@ export class TccsService {
     const arq = await this.gravarArquivo(arquivo);
     try {
       const doc = await this.prisma.$transaction(async (tx) => {
+        await this.exigirEspacoParaDocumento(tx, tccId); // dentro da tx: contagem+criação atômicas
         await tx.documentoTcc.updateMany({
           where: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE' },
           data: { status: 'SUBSTITUIDA' },
@@ -970,7 +989,6 @@ export class TccsService {
     if (!['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE'].includes(tipo)) {
       throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
     }
-    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'INICIALIZACAO') {
       throw new BadRequestException({ mensagem: 'Os documentos de abertura só podem ser enviados na solicitação.' });
     }
@@ -980,8 +998,12 @@ export class TccsService {
     this.validarFormato(tipo, arquivo);
     const arq = await this.gravarArquivo(arquivo);
     try {
-      return await this.prisma.documentoTcc.create({
-        data: { tccId, tipo, status: 'PENDENTE', ...arq },
+      // Transação: teto de documentos + criação atômicos (sem corrida entre uploads paralelos).
+      return await this.prisma.$transaction(async (tx) => {
+        await this.exigirEspacoParaDocumento(tx, tccId);
+        return tx.documentoTcc.create({
+          data: { tccId, tipo, status: 'PENDENTE', ...arq },
+        });
       });
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});

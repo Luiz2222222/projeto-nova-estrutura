@@ -43,7 +43,8 @@ export function ocultarRascunho<T extends Record<string, any> | null | undefined
 // Fases terminais em que as notas ficam liberadas mesmo sem nota final (nf) confirmada.
 // Um TCC reprovado na Fase I nunca terá nf — mas o resultado é definitivo e o aluno,
 // o orientador e a banca têm direito de ver a NF1 que causou a reprovação.
-const FASES_NOTAS_LIBERADAS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'];
+// Exportada para as rotas usarem o MESMO critério ao decidir anexar bancas/avaliações.
+export const FASES_NOTAS_LIBERADAS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'];
 
 // Sanitiza um TCC (com ou sem bancas/membros inclusos). Devolve o mesmo objeto quando a
 // nota final já foi confirmada (nf != null), quando a fase é uma reprovação terminal

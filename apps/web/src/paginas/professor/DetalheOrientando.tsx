@@ -218,7 +218,8 @@ export function DetalheOrientando() {
   // Notas só ficam visíveis ao orientador DEPOIS da confirmação da nota final da Fase II
   // (tcc.nf é preenchido na validação da Fase II pela coordenação). Antes disso, nada de
   // NF1/NF2/NF, resultado ou nota por membro — mesma regra da timeline (notasTrilhaTcc).
-  const notasLiberadas = tcc.nf != null;
+  // Mesmo critério do backend (sanitizarNotasTcc): nf confirmada OU reprovação terminal.
+  const notasLiberadas = tcc.nf != null || ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc.faseAtual);
   const temNotas = notasLiberadas && (tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null);
 
   return (

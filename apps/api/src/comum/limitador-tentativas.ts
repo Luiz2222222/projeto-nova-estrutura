@@ -8,6 +8,7 @@ type Registro = { contagem: number; expira: number };
 
 export class LimitadorTentativas {
   private readonly mapa = new Map<string, Registro>();
+  private chamadas = 0; // dispara a auto-poda periódica
 
   constructor(
     private readonly limite: number,
@@ -18,6 +19,9 @@ export class LimitadorTentativas {
   // Registra UMA tentativa para a chave e devolve true se AINDA está permitido (dentro do
   // limite) ou false se estourou (deve bloquear). Janela nova quando a anterior expira.
   permitir(chave: string): boolean {
+    // Auto-poda: sem isto o mapa cresceria sem limite (cada IP+e-mail único vira uma entrada
+    // eterna — memória inflável por ataque distribuído). A cada 500 chamadas, limpa expirados.
+    if (++this.chamadas % 500 === 0) this.podar();
     const t = this.agora();
     const reg = this.mapa.get(chave);
     if (!reg || t >= reg.expira) {
