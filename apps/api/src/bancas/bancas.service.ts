@@ -178,12 +178,15 @@ export class BancasService {
         });
         // O avaliador vê a PRÓPRIA avaliação (m.nota*/m.parecer) — necessário para editar.
         // Mas o TCC embutido não pode vazar NF1/NF2/NF/resultado antes da confirmação final.
-        // E na FASE I a identidade do aluno/orientador e os documentos são removidos (às cegas).
-        const tccSan = sanitizarNotasTcc(m.banca.tcc);
-        const banca = {
-          ...m.banca,
-          tcc: m.banca.fase === 'FASE_1' ? this.anonimizarTccFase1(tccSan) : tccSan,
-        };
+        // Na FASE I a identidade do aluno/orientador e os documentos são removidos (às cegas);
+        // na FASE II o avaliador só recebe os documentos que interessam à defesa
+        // (monografia/versão final) — plano e termo são assunto da abertura, não da banca.
+        const tccSan: any = sanitizarNotasTcc(m.banca.tcc);
+        const tccVisao =
+          m.banca.fase === 'FASE_1'
+            ? this.anonimizarTccFase1(tccSan)
+            : { ...tccSan, documentos: (tccSan.documentos ?? []).filter((d: any) => ['MONOGRAFIA', 'VERSAO_FINAL'].includes(d.tipo)) };
+        const banca = { ...m.banca, tcc: tccVisao };
         return { ...m, banca, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
       }),
     );

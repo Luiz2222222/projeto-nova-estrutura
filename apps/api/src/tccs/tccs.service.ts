@@ -453,10 +453,14 @@ export class TccsService {
     if (tcc.faseAtual !== 'INICIALIZACAO' || tcc.solicitacoes.length === 0) {
       throw new BadRequestException({ mensagem: 'Este TCC não está aguardando aprovação de abertura.' });
     }
-    // Não aprova sem os dois documentos obrigatórios da abertura.
-    const tipos = new Set(tcc.documentos.map((d) => d.tipo));
+    // Não aprova sem os dois documentos obrigatórios da abertura VÁLIDOS: um plano/termo
+    // REJEITADO (ou substituído) não conta — o aluno precisa reenviar antes da aprovação.
+    const validos = tcc.documentos.filter((d) => ['PENDENTE', 'EM_ANALISE', 'APROVADO'].includes(d.status));
+    const tipos = new Set(validos.map((d) => d.tipo));
     if (!tipos.has('PLANO_DESENVOLVIMENTO') || !tipos.has('TERMO_ACEITE')) {
-      throw new BadRequestException({ mensagem: 'A solicitação não tem o Plano de Desenvolvimento e o Termo de Aceite.' });
+      throw new BadRequestException({
+        mensagem: 'A solicitação precisa do Plano de Desenvolvimento e do Termo de Aceite válidos (documento rejeitado não conta — peça o reenvio ao aluno).',
+      });
     }
     await this.prisma.$transaction([
       this.prisma.solicitacaoOrientacao.updateMany({
@@ -575,11 +579,25 @@ export class TccsService {
     return { nomeArquivo, caminho: join('uploads', nome), tamanho: arquivo.size };
   }
 
+  // Teto de documentos por TCC nos envios do ALUNO. O fluxo normal usa ~10–15 registros
+  // mesmo com reenvios; sem teto, um usuário autenticado poderia subir arquivos de 10 MB
+  // sem parar e encher o disco. Ações administrativas do coordenador não passam por aqui.
+  private static readonly LIMITE_DOCUMENTOS_POR_TCC = 40;
+  private async exigirEspacoParaDocumento(tccId: string) {
+    const total = await this.prisma.documentoTcc.count({ where: { tccId } });
+    if (total >= TccsService.LIMITE_DOCUMENTOS_POR_TCC) {
+      throw new BadRequestException({
+        mensagem: 'Este TCC atingiu o limite de documentos enviados. Fale com a coordenação para remover versões antigas antes de enviar de novo.',
+      });
+    }
+  }
+
   // Aluno envia (ou reenvia) a monografia. Substitui versões pendentes antigas e cria a nova
   // (PENDENTE) numa transação; se algo falhar, remove o arquivo recém-gravado (sem órfão).
   async enviarMonografia(alunoId: string, tccId: string, arquivo: any) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
+    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'DESENVOLVIMENTO') {
       throw new BadRequestException({ mensagem: 'O TCC não está na fase de desenvolvimento.' });
     }
@@ -879,6 +897,7 @@ export class TccsService {
   async enviarVersaoFinal(alunoId: string, tccId: string, arquivo: any) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.alunoId !== alunoId) throw new ForbiddenException();
+    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'AGUARDANDO_AJUSTES_FINAIS') {
       throw new BadRequestException({ mensagem: 'O TCC não está aguardando a versão final.' });
     }
@@ -951,6 +970,7 @@ export class TccsService {
     if (!['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE'].includes(tipo)) {
       throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
     }
+    await this.exigirEspacoParaDocumento(tccId);
     if (tcc.faseAtual !== 'INICIALIZACAO') {
       throw new BadRequestException({ mensagem: 'Os documentos de abertura só podem ser enviados na solicitação.' });
     }

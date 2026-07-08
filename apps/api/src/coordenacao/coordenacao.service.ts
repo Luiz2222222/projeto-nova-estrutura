@@ -23,6 +23,8 @@ import {
   colunaPeso,
   colunaNota,
   pesosSomam10,
+  PESO_NF1,
+  PESO_NF2,
   ROTULO_FASE,
   ROTULO_CURSO,
   CURSOS,
@@ -95,6 +97,31 @@ export class CoordenacaoService {
     if (!pesosSomam10(p1)) throw new BadRequestException({ mensagem: 'Os pesos da Fase I devem somar 10.' });
     if (!pesosSomam10(p2)) throw new BadRequestException({ mensagem: 'Os pesos da Fase II devem somar 10.' });
 
+    // TRAVA DE COERÊNCIA: os pesos dos critérios são a régua das avaliações. Depois que a
+    // primeira avaliação do semestre foi ENVIADA, mudar um peso criaria réguas diferentes
+    // para quem enviou antes/depois (e notas fora do teto novo). Salvar os MESMOS valores
+    // continua permitido — só a MUDANÇA é bloqueada.
+    const calAtual: any = await this.prisma.calendario.findUnique({ where: { semestre } });
+    const pesoAtual = (chave: string, padrao: number) => Number(calAtual?.[colunaPeso(chave)] ?? padrao);
+    const mudouCriterio =
+      CRITERIOS_FASE1.some((c, i) => Math.abs(pesoAtual(c.chave, c.pesoPadrao) - p1[i]) > 0.001) ||
+      CRITERIOS_FASE2.some((c, i) => Math.abs(pesoAtual(c.chave, c.pesoPadrao) - p2[i]) > 0.001);
+    if (mudouCriterio) {
+      const avaliacaoEnviada = await this.prisma.membroBanca.findFirst({
+        where: {
+          OR: [{ nota: { not: null } }, { status: { not: 'PENDENTE' } }],
+          banca: { tcc: { semestre, excluidoEm: null } },
+        },
+        select: { id: true },
+      });
+      if (avaliacaoEnviada) {
+        throw new BadRequestException({
+          mensagem: 'Já existem avaliações de banca enviadas neste período — os pesos dos critérios não podem mais mudar. ' +
+            'Para usar pesos novos, configure-os no próximo período (ou zere as avaliações enviadas antes).',
+        });
+      }
+    }
+
     const data: Record<string, number> = {};
     CRITERIOS_FASE1.forEach((c, i) => (data[colunaPeso(c.chave)] = p1[i]));
     CRITERIOS_FASE2.forEach((c, i) => (data[colunaPeso(c.chave)] = p2[i]));
@@ -108,6 +135,22 @@ export class CoordenacaoService {
       }
       if (Math.abs(pf1 + pf2 - 1) > 0.001) {
         throw new BadRequestException({ mensagem: 'Os pesos das fases (Fase I + Fase II) devem somar 100%.' });
+      }
+      const mudouFase =
+        Math.abs((calAtual?.pesoFase1 ?? PESO_NF1) - pf1) > 0.001 ||
+        Math.abs((calAtual?.pesoFase2 ?? PESO_NF2) - pf2) > 0.001;
+      if (mudouFase) {
+        // A NF já apurada usou os pesos vigentes; mudar depois tornaria o recálculo
+        // administrativo inconsistente com as notas confirmadas.
+        const nfApurada = await this.prisma.tcc.findFirst({
+          where: { semestre, excluidoEm: null, nf: { not: null } },
+          select: { id: true },
+        });
+        if (nfApurada) {
+          throw new BadRequestException({
+            mensagem: 'Já existe nota final apurada neste período — os pesos das fases não podem mais mudar. Configure-os no próximo período.',
+          });
+        }
       }
       data.pesoFase1 = pf1;
       data.pesoFase2 = pf2;
