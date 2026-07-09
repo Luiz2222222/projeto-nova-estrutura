@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../autenticacao/contexto';
 import { LayoutAuth } from '../componentes/LayoutAuth';
+import { LogoDee } from '../componentes/LogoDee';
 import { ModalCadastro } from '../componentes/ModalCadastro';
 import type { ErroApi } from '../api';
 
@@ -34,7 +35,7 @@ export function Login() {
 
   return (
     <LayoutAuth>
-      <img className="login-logo" src="/Logo.png" alt="DEE — Departamento de Engenharia Elétrica" />
+      <LogoDee className="login-logo" />
       <h2 className="vidro-titulo">Entrar</h2>
 
       <form onSubmit={enviar}>

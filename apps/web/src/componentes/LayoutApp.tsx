@@ -1,4 +1,5 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { LogoDee } from './LogoDee';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useAuth } from '../autenticacao/contexto';
 import { Sino } from './Sino';
@@ -123,7 +124,7 @@ export function LayoutApp() {
     <div className="app-shell">
       <header className="barra-topo">
         <div className="barra-marca">
-          <img className="topo-logo" src="/Logo.png" alt="DEE" />
+          <LogoDee className="topo-logo" />
         </div>
         <div className="barra-acoes">
         <Sino />

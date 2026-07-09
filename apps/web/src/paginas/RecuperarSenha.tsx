@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LayoutAuth } from '../componentes/LayoutAuth';
+import { LogoDee } from '../componentes/LogoDee';
 import { apiPost, type ErroApi } from '../api';
 
 // "Esqueci minha senha": pede o e-mail e dispara o link de recuperação.
@@ -27,7 +28,7 @@ export function RecuperarSenha() {
 
   return (
     <LayoutAuth>
-      <img className="login-logo" src="/Logo.png" alt="DEE — Departamento de Engenharia Elétrica" />
+      <LogoDee className="login-logo" />
       <h2 className="vidro-titulo">Recuperar senha</h2>
 
       {enviado ? (

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { LayoutAuth } from '../componentes/LayoutAuth';
+import { LogoDee } from '../componentes/LogoDee';
 import { apiPost, type ErroApi } from '../api';
 
 const icoCadeado = (
@@ -40,7 +41,7 @@ export function RedefinirSenha() {
 
   return (
     <LayoutAuth>
-      <img className="login-logo" src="/Logo.png" alt="DEE — Departamento de Engenharia Elétrica" />
+      <LogoDee className="login-logo" />
       <h2 className="vidro-titulo">Redefinir senha</h2>
 
       {!token ? (
