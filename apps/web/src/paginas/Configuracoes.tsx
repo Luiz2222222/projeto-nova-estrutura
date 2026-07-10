@@ -24,7 +24,7 @@ export function Configuracoes() {
   const { tema, fonte, familia, definirTema, definirFonte, definirFamilia } = useTema();
 
   return (
-    <>
+    <div className="config-pagina">
       <h1>Configurações</h1>
       <p className="legenda">Preferências de exibição do sistema.</p>
 
@@ -96,6 +96,6 @@ export function Configuracoes() {
       </section>
 
       <PreferenciasEmail />
-    </>
+    </div>
   );
 }
