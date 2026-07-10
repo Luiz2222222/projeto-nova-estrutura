@@ -113,6 +113,8 @@ export class BancasService {
       throw e;
     }
     await this.eventos.emitirParaUsuario('aluno_banca_fase1_formada', tcc.alunoId, 'Banca da Fase I formada', `A banca da Fase I do seu TCC "${tcc.titulo}" foi formada.`);
+    await this.eventos.emitirParaUsuario('orientador_banca_formada', tcc.orientadorId, 'Banca da Fase I formada', `A banca da Fase I do TCC "${tcc.titulo}" foi formada.`, `/professor/orientandos/${tccId}`);
+    await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Banca da Fase I formada', `A banca da Fase I do TCC "${tcc.titulo}" (no qual você é coorientador) foi formada.`);
     const bancaCriada = await this.prisma.banca.findUnique({
       where: { tccId_fase: { tccId, fase: 'FASE_1' } },
       include: { membros: { include: { avaliador: { select: { papel: true } } } } },
@@ -877,6 +879,7 @@ export class BancasService {
       if (!r.aprovado) {
         // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
         await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
+        await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Resultado da Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi reprovado na Fase I.`);
         await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
         return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
       }
@@ -896,6 +899,8 @@ export class BancasService {
     if (r.aprovado) {
       await this.eventos.emitirParaUsuario('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
+    } else {
+      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Resultado da Fase II', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi reprovado na Fase II.`);
     }
     await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
     return { ok: true, fase: r.fase, nf2: r.nf2, nf: r.nf, aprovado: r.aprovado };

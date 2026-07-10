@@ -407,10 +407,10 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'orientador_definido', rotulo: 'Definido como orientador de um TCC aprovado', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_monografia_enviada', rotulo: 'Aluno enviou/reenviou monografia', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_confirmar_continuidade', rotulo: 'Precisa confirmar continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_banca_formada', rotulo: 'Banca da Fase I formada', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_agendar_defesa', rotulo: 'Preparar as bancas / liberar a avaliação da Fase II', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_enviada', rotulo: 'Aluno enviou versão final', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_reenviada', rotulo: 'Versão final reenviada após ajustes', grupo: 'Orientação', papeis: ['PROFESSOR'] },
-  { chave: 'orientador_tcc_concluido', rotulo: 'TCC concluído', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   // Coordenador
   { chave: 'coord_nova_solicitacao', rotulo: 'Nova solicitação aguardando análise', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   // coord_solicitacao_corrigida removido por ora: o "Corrigir e reenviar" apaga o TCC recusado
@@ -419,6 +419,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'coord_validar_fase1', rotulo: 'Fase I: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_validar_fase2', rotulo: 'Fase II: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_avaliacao_reenviada', rotulo: 'Avaliador reenviou a avaliação após ajuste', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_tcc_concluido', rotulo: 'TCC concluído (versão final validada)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   // Avaliadores / membros da banca (professor ou avaliador)
   { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase1_liberada', rotulo: 'Avaliação da Fase I liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
