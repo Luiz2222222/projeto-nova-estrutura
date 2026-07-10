@@ -1,11 +1,9 @@
 import { useTema, type Tema } from '../tema/contexto';
 
-const LOGO_POR_TEMA: Record<Tema, string> = {
-  claro: '/logo-dee-1.png',
-  institucional: '/logo-dee-2.png',
-  escuro: '/logo-dee-3.png',
-  preto: '/logo-dee-4.png',
-};
+const TEMAS_ESCUROS: Tema[] = ['escuro', 'preto'];
+
+const LOGO_CLARO = '/logo-dee-1.png';
+const LOGO_ESCURO = '/logo-dee-3.png';
 
 interface Props {
   className?: string;
@@ -14,5 +12,6 @@ interface Props {
 
 export function LogoDee({ className, alt = 'DEE — Departamento de Engenharia Elétrica' }: Props) {
   const { tema } = useTema();
-  return <img className={className} src={LOGO_POR_TEMA[tema]} alt={alt} />;
+  const src = TEMAS_ESCUROS.includes(tema) ? LOGO_ESCURO : LOGO_CLARO;
+  return <img className={className} src={src} alt={alt} />;
 }
