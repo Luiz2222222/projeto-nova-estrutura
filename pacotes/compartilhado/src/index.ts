@@ -419,6 +419,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'coord_validar_fase1', rotulo: 'Fase I: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_validar_fase2', rotulo: 'Fase II: avaliações concluídas (aguardando análise)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_avaliacao_reenviada', rotulo: 'Avaliador reenviou a avaliação após ajuste', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
+  { chave: 'coord_continuidade', rotulo: 'Continuidade confirmada ou TCC descontinuado', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_tcc_concluido', rotulo: 'TCC concluído (versão final validada)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   // Avaliadores / membros da banca (professor ou avaliador)
   { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
@@ -434,6 +435,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   // Coorientador (professor ou avaliador)
   { chave: 'coorientador_indicado', rotulo: 'Indicado como coorientador', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'coorientador_mudanca_fase', rotulo: 'Mudança de fase importante do TCC', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  { chave: 'coorientador_documentos', rotulo: 'Movimentação de documentos (monografia/versão final)', grupo: 'Coorientação', papeis: ['PROFESSOR', 'AVALIADOR'] },
 ];
 
 export const CHAVES_EVENTO_EMAIL = EVENTOS_EMAIL.map((e) => e.chave);

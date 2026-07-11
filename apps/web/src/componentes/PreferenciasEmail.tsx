@@ -29,6 +29,7 @@ const DESC_EVENTO: Record<string, string> = {
   coord_validar_fase1: 'Quando todos enviarem as avaliações da Fase I (aguardando análise).',
   coord_validar_fase2: 'Quando todos enviarem as avaliações da Fase II (aguardando análise).',
   coord_avaliacao_reenviada: 'Quando um avaliador reenviar a avaliação após um ajuste solicitado.',
+  coord_continuidade: 'Quando o orientador confirmar a continuidade ou descontinuar um TCC.',
   coord_tcc_concluido: 'Quando um TCC for concluído (versão final validada pelo orientador).',
   avaliador_adicionado_fase1: 'Quando você for adicionado a uma banca da Fase I.',
   avaliador_fase1_liberada: 'Quando a avaliação da Fase I for liberada para você.',
@@ -41,6 +42,7 @@ const DESC_EVENTO: Record<string, string> = {
   fase_validada: 'Quando a coordenação validar a fase.',
   coorientador_indicado: 'Quando a abertura de um TCC no qual você foi indicado coorientador for aprovada.',
   coorientador_mudanca_fase: 'Quando houver uma mudança de fase importante no TCC.',
+  coorientador_documentos: 'Quando a monografia ou a versão final for enviada, aprovada ou devolvida para ajustes.',
 };
 
 // Preferências de e-mail do próprio usuário: toggles por evento relevante ao papel.

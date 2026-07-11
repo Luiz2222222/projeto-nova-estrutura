@@ -631,6 +631,7 @@ export class TccsService {
         });
       });
       await this.eventos.emitirParaUsuario('orientador_monografia_enviada', tcc.orientadorId, 'Monografia enviada para avaliação', `O aluno enviou/reenviou a monografia do TCC "${tcc.titulo}" para sua avaliação.`, `/professor/orientandos/${tcc.id}#acao`);
+      await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia enviada', `O aluno enviou/reenviou a monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
       return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
@@ -870,13 +871,16 @@ export class TccsService {
         return transicao.count === 1;
       });
       await this.eventos.emitirParaUsuario('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.${vaiPraBanca ? ' Com a continuidade confirmada, seu TCC avançou para a formação da banca da Fase I.' : ''}`);
+      // Coorientador recebe pelo evento de documentos (a mensagem já carrega o avanço de fase,
+      // então não dispara também o coorientador_mudanca_fase — seria e-mail dobrado).
+      await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia aprovada', `A monografia do TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovada pelo orientador.${vaiPraBanca ? ' Com a continuidade confirmada, o TCC avançou para a formação da banca da Fase I.' : ''}`);
       if (vaiPraBanca) {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`, `/coordenador/tccs/${tcc.id}`);
-        await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase I.`);
       }
     } else {
       await this.prisma.documentoTcc.update({ where: { id: mono.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } });
       await this.eventos.emitirParaUsuario('aluno_monografia_rejeitada', tcc.alunoId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na sua monografia do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
+      await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }
     return { ok: true };
   }
@@ -909,6 +913,9 @@ export class TccsService {
         await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC avançou para a Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) avançou para a Fase I.`);
       } else {
         await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Continuidade confirmada', `O orientador confirmou a continuidade do TCC "${tcc.titulo}" (no qual você é coorientador).`);
+        // Quando vaiPraBanca o coordenador já recebe o "formar banca" (que implica a
+        // continuidade confirmada); aqui avisa só quando a monografia ainda está pendente.
+        await this.eventos.emitirParaCoordenadores('coord_continuidade', 'Continuidade confirmada', `O orientador confirmou a continuidade do TCC "${tcc.titulo}".`, `/coordenador/tccs/${tcc.id}`);
       }
     } else {
       await this.prisma.tcc.update({
@@ -917,6 +924,7 @@ export class TccsService {
       });
       await this.eventos.emitirParaUsuario('aluno_continuidade_rejeitada', tcc.alunoId, 'TCC descontinuado', `O orientador não confirmou a continuidade do TCC "${tcc.titulo}".${parecer ? ' Motivo: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC descontinuado', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi descontinuado — o orientador não confirmou a continuidade.`);
+      await this.eventos.emitirParaCoordenadores('coord_continuidade', 'TCC descontinuado', `O TCC "${tcc.titulo}" foi descontinuado — o orientador não confirmou a continuidade.`, `/coordenador/tccs/${tcc.id}`);
     }
     return { ok: true };
   }
@@ -950,6 +958,7 @@ export class TccsService {
       });
       const evento = reenvio ? 'orientador_versao_final_reenviada' : 'orientador_versao_final_enviada';
       await this.eventos.emitirParaUsuario(evento, tcc.orientadorId, 'Versão final enviada', `O aluno ${reenvio ? 'reenviou' : 'enviou'} a versão final do TCC "${tcc.titulo}" para sua validação.`, `/professor/orientandos/${tccId}#acao`);
+      await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final enviada', `O aluno ${reenvio ? 'reenviou' : 'enviou'} a versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
       return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
@@ -989,6 +998,7 @@ export class TccsService {
         this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' } }),
       ]);
       await this.eventos.emitirParaUsuario('aluno_versao_final_rejeitada', tcc.alunoId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
+      await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }
     return { ok: true };
   }
