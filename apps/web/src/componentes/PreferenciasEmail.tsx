@@ -45,6 +45,46 @@ const DESC_EVENTO: Record<string, string> = {
   coorientador_documentos: 'Quando a monografia ou a versão final for enviada, aprovada ou devolvida para ajustes.',
 };
 
+// Agrupamento de EXIBIÇÃO por papel (só apresentação — o grupo do domínio segue no registro):
+// aluno e coordenador enxergam as etapas do TCC; professor e avaliador, o tipo de participação.
+// Eventos que ficarem fora do mapa (ex.: um evento novo) caem no grupo "Outros" no final.
+const CHAVES_BANCA = [
+  'avaliador_adicionado_fase1',
+  'avaliador_fase1_liberada',
+  'avaliador_adicionado_fase2',
+  'avaliador_fase2_liberada',
+  'avaliador_ajuste_solicitado',
+  'avaliador_ajuste_cancelado',
+  'fase_avaliacoes_concluidas',
+  'fase_analise_iniciada',
+  'fase_validada',
+];
+const CHAVES_COORIENTACAO = ['coorientador_indicado', 'coorientador_documentos', 'coorientador_mudanca_fase'];
+
+const GRUPOS_EXIBICAO: Record<string, [string, string[]][]> = {
+  ALUNO: [
+    ['Abertura', ['aluno_solicitacao_aprovada', 'aluno_solicitacao_recusada']],
+    ['Desenvolvimento', ['aluno_monografia_aprovada', 'aluno_monografia_rejeitada', 'aluno_continuidade_confirmada', 'aluno_continuidade_rejeitada']],
+    ['Bancas e avaliação', ['aluno_banca_fase1_formada', 'fase_avaliacoes_concluidas', 'fase_analise_iniciada', 'fase_validada', 'aluno_resultado_fase1', 'aluno_resultado_fase2']],
+    ['Conclusão', ['aluno_versao_final_solicitada', 'aluno_versao_final_rejeitada', 'aluno_tcc_concluido']],
+  ],
+  PROFESSOR: [
+    ['Orientação', ['orientador_definido', 'orientador_monografia_enviada', 'orientador_confirmar_continuidade', 'orientador_banca_formada', 'orientador_agendar_defesa', 'orientador_versao_final_enviada', 'orientador_versao_final_reenviada']],
+    ['Coorientação', CHAVES_COORIENTACAO],
+    ['Participação em banca', CHAVES_BANCA],
+  ],
+  AVALIADOR: [
+    ['Participação em banca', CHAVES_BANCA],
+    ['Coorientação', CHAVES_COORIENTACAO],
+  ],
+  COORDENADOR: [
+    ['Abertura', ['coord_nova_solicitacao']],
+    ['Desenvolvimento', ['coord_continuidade']],
+    ['Bancas e avaliação', ['coord_formar_banca_fase1', 'coord_validar_fase1', 'coord_validar_fase2', 'coord_avaliacao_reenviada']],
+    ['Conclusão', ['coord_tcc_concluido']],
+  ],
+};
+
 // Preferências de e-mail do próprio usuário: toggles por evento relevante ao papel.
 // Recuperação de senha NÃO entra aqui (é controle global do coordenador).
 export function PreferenciasEmail() {
@@ -64,14 +104,22 @@ export function PreferenciasEmail() {
     [usuario],
   );
   const grupos = useMemo(() => {
-    const m = new Map<string, typeof eventos>();
-    eventos.forEach((e) => {
-      const a = m.get(e.grupo) ?? [];
-      a.push(e);
-      m.set(e.grupo, a);
-    });
-    return [...m.entries()];
-  }, [eventos]);
+    const porChave = new Map(eventos.map((e) => [e.chave, e]));
+    const usados = new Set<string>();
+    const out: [string, typeof eventos][] = [];
+    for (const [rotulo, chaves] of GRUPOS_EXIBICAO[usuario?.papel ?? ''] ?? []) {
+      const lista = chaves.flatMap((c) => {
+        const ev = porChave.get(c);
+        if (!ev || usados.has(c)) return [];
+        usados.add(c);
+        return [ev];
+      });
+      if (lista.length) out.push([rotulo, lista]);
+    }
+    const resto = eventos.filter((e) => !usados.has(e.chave));
+    if (resto.length) out.push(['Outros', resto]);
+    return out;
+  }, [eventos, usuario]);
 
   // Sem preferência salva = ligado (padrão dos e-mails importantes).
   const estaAtivo = (chave: string) => salvos[chave] ?? true;
