@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { UsuarioPublico, DadosCadastro, DadosLogin } from '@tcc/compartilhado';
 import { apiGet, apiPost } from '../api';
 
@@ -9,6 +9,9 @@ interface ContextoAuth {
   cadastrar: (dados: DadosCadastro) => Promise<void>;
   sair: () => Promise<void>;
   atualizarUsuario: (u: UsuarioPublico) => void;
+  // Zera a sessão local (sem chamada de rede) quando a API responde 401 no meio do uso —
+  // o roteador `Protegido` redireciona para /login (fluxo de login existente).
+  sessaoInvalida: () => void;
 }
 
 const Contexto = createContext<ContextoAuth>(null!);
@@ -41,8 +44,12 @@ export function ProvedorAuth({ children }: { children: ReactNode }) {
     setUsuario(null);
   }
 
+  // Estável (useCallback) para poder entrar como dependência de useEffect/useCallback nas telas
+  // sem recriar handlers a cada render.
+  const sessaoInvalida = useCallback(() => setUsuario(null), []);
+
   return (
-    <Contexto.Provider value={{ usuario, carregando, login, cadastrar, sair, atualizarUsuario: setUsuario }}>
+    <Contexto.Provider value={{ usuario, carregando, login, cadastrar, sair, atualizarUsuario: setUsuario, sessaoInvalida }}>
       {children}
     </Contexto.Provider>
   );

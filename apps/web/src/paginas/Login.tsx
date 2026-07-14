@@ -53,8 +53,8 @@ export function Login() {
           </svg>
           <input
             type="text"
-            placeholder="E-mail ou usuário"
-            aria-label="E-mail ou usuário"
+            placeholder="E-mail"
+            aria-label="E-mail"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required

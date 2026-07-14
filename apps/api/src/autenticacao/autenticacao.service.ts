@@ -155,17 +155,35 @@ export class AutenticacaoService {
       });
     }
 
-    const registro = await this.prisma.tokenSenha.findUnique({ where: { tokenHash: this.hashToken(token) } });
-    if (!registro || registro.usadoEm || registro.expiraEm < new Date()) {
-      throw new BadRequestException({ mensagem: 'Link inválido ou expirado. Solicite a recuperação novamente.' });
+    const hash = this.hashToken(token);
+    const registro = await this.prisma.tokenSenha.findUnique({ where: { tokenHash: hash } });
+    // Mensagens precisas para os casos comuns (não-concorrentes): inexistente, expirado, já usado.
+    if (!registro) {
+      throw new BadRequestException({ mensagem: 'Link inválido. Solicite a recuperação novamente.' });
+    }
+    if (registro.expiraEm < new Date()) {
+      throw new BadRequestException({ mensagem: 'Link expirado. Solicite a recuperação novamente.' });
+    }
+    if (registro.usadoEm) {
+      throw new BadRequestException({ mensagem: 'Este link já foi utilizado. Solicite a recuperação novamente.' });
     }
 
     const senhaHash = await bcrypt.hash(novaSenha, 10);
-    await this.prisma.$transaction([
-      // Redefinição derruba TODAS as sessões abertas do usuário (versão de token nova).
-      this.prisma.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash, versaoToken: { increment: 1 } } }),
-      this.prisma.tokenSenha.update({ where: { id: registro.id }, data: { usadoEm: new Date() } }),
-    ]);
+    await this.prisma.$transaction(async (tx) => {
+      // CONSUMO ATÔMICO (item 7): reserva o token exigindo usadoEm nulo E prazo válido. De dois
+      // pedidos simultâneos com o mesmo token, só um casa exatamente 1 linha — o outro recebe
+      // count 0. Com o SQLite serializando as escritas, isso garante uso ÚNICO mesmo com
+      // requisições concorrentes. A troca de senha (com incremento de versaoToken, que derruba
+      // TODAS as sessões abertas) só acontece se a reserva do token deu certo, na MESMA transação.
+      const consumo = await tx.tokenSenha.updateMany({
+        where: { id: registro.id, usadoEm: null, expiraEm: { gt: new Date() } },
+        data: { usadoEm: new Date() },
+      });
+      if (consumo.count !== 1) {
+        throw new BadRequestException({ mensagem: 'Este link já foi utilizado. Solicite a recuperação novamente.' });
+      }
+      await tx.usuario.update({ where: { id: registro.usuarioId }, data: { senhaHash, versaoToken: { increment: 1 } } });
+    });
   }
 
   // Professor liga/desliga a disponibilidade para receber novas orientações.

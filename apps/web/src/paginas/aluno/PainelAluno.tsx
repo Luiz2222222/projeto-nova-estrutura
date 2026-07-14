@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, apiDelete, type ErroApi } from '../../api';
+import { apiGet, apiDelete, ehNaoAutorizado, type ErroApi } from '../../api';
+import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { EstadoErro } from '../../componentes/EstadoErro';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
@@ -21,8 +23,10 @@ const fmtData = (iso?: string | null) => {
 
 export function PainelAluno() {
   const navegar = useNavigate();
+  const { sessaoInvalida } = useAuth();
   const [tcc, setTcc] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
   const [modoTimeline, setModoTimeline] = useState<'vertical' | 'horizontal'>('vertical');
   const [confirmar, setConfirmar] = useState<null | 'cancelar'>(null);
@@ -32,12 +36,18 @@ export function PainelAluno() {
 
   function carregar() {
     setCarregando(true);
+    setErro(false);
     apiGet('/tccs/meu')
-      .then(setTcc)
-      .catch(() => setTcc(null))
+      .then((r) => { setTcc(r); setErro(false); })
+      .catch((e) => {
+        // 401 → sessão expirada (fluxo de login). Erros de rede/500 NÃO viram "sem TCC":
+        // mostramos o estado de erro com "Tentar novamente" (item 8).
+        if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+        setErro(true);
+      })
       .finally(() => setCarregando(false));
   }
-  useEffect(carregar, []);
+  useEffect(carregar, [sessaoInvalida]); // sessaoInvalida é estável (useCallback) → roda uma vez
 
   async function cancelar() {
     setErroAcao('');
@@ -60,6 +70,7 @@ export function PainelAluno() {
   }
 
   if (carregando) return <p className="nota-vazio">Carregando…</p>;
+  if (erro) return <EstadoErro aoTentar={carregar} />;
 
   const solic = tcc?.solicitacoes?.[0];
   // Solicitação recusada → trata como "sem TCC ativo": estado inicial + aviso vermelho no topo.

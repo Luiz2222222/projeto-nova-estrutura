@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -264,6 +265,11 @@ export class TccsService {
       where: { alunoId_semestre: { alunoId, semestre } },
       include: { solicitacoes: { orderBy: { criadoEm: 'desc' }, take: 1 } },
     });
+    // Recomeço: se já existe um TCC deste semestre, só dá para abrir outro quando o anterior
+    // foi RECUSADO/CANCELADO e ainda está na abertura. NÃO apagamos nada aqui — a exclusão do
+    // TCC antigo (e dos arquivos) só acontece DEPOIS de toda a validação passar e DENTRO de uma
+    // transação, para que qualquer falha na nova solicitação deixe a anterior 100% íntegra.
+    let recomeco: { tccId: string } | null = null;
     if (jaTem) {
       // TCC do semestre EXCLUÍDO logicamente pela coordenação/orientador: a vaga única
       // (aluno, semestre) continua ocupada — não dá para abrir outro sem intervenção. Mensagem
@@ -277,13 +283,10 @@ export class TccsService {
       // Só dá pra recomeçar se o TCC anterior ainda está na abertura E foi recusado/cancelado.
       const podeRecomecar = jaTem.faseAtual === 'INICIALIZACAO' && (ult?.status === 'RECUSADA' || ult?.status === 'CANCELADA');
       if (!podeRecomecar) throw new BadRequestException({ mensagem: 'Você já tem um TCC neste semestre.' });
-      // Recomeço LIMPO: apaga o TCC recusado/cancelado (cascade em solicitações/documentos) e
-      // remove os arquivos físicos — a nova solicitação não reaproveita nada do anterior.
-      const docs = await this.prisma.documentoTcc.findMany({ where: { tccId: jaTem.id }, select: { caminho: true } });
-      await this.prisma.tcc.delete({ where: { id: jaTem.id } });
-      for (const d of docs) await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
+      recomeco = { tccId: jaTem.id };
     }
 
+    // ----- Validações ANTES de qualquer exclusão/gravação (item 1) -----
     // Prazo de envio de documentos iniciais (calendário da coordenação). Se vencido e SEM
     // liberação individual para este aluno+semestre, bloqueia a abertura. hoje===prazo ainda
     // vale; sem data, não bloqueia. A liberação é por aluno+semestre (não depende de TCC).
@@ -292,6 +295,11 @@ export class TccsService {
     const orientador = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
     if (!orientador || orientador.papel !== 'PROFESSOR') {
       throw new BadRequestException({ mensagem: 'Orientador inválido.' });
+    }
+    // Orientador escolhido pelo aluno precisa estar DISPONÍVEL para orientar — regra no backend
+    // (não só na tela): a lista some quando o professor se marca indisponível (item 5).
+    if (!orientador.disponivelParaOrientar) {
+      throw new BadRequestException({ mensagem: 'Este orientador não está disponível para novas orientações. Escolha outro.' });
     }
     if (dados.coorientadorId) {
       if (dados.coorientadorId === dados.orientadorId) {
@@ -302,24 +310,44 @@ export class TccsService {
       if (!co || !['PROFESSOR', 'AVALIADOR', 'COORDENADOR'].includes(co.papel)) {
         throw new BadRequestException({ mensagem: 'Coorientador inválido.' });
       }
+      // Mesma exigência de disponibilidade para o coorientador indicado pelo aluno (item 5).
+      if (!co.disponivelParaOrientar) {
+        throw new BadRequestException({ mensagem: 'Este coorientador não está disponível para novas orientações. Escolha outro.' });
+      }
     }
 
-    const tcc = await this.prisma.tcc.create({
-      data: {
-        titulo: dados.titulo,
-        semestre,
-        faseAtual: 'INICIALIZACAO',
-        alunoId,
-        orientadorId: dados.orientadorId,
-        coorientadorId: dados.coorientadorId || null,
-        coorientadorNome: dados.coorientadorNome || null,
-        coorientadorTitulacao: dados.coorientadorTitulacao || null,
-        coorientadorAfiliacao: dados.coorientadorAfiliacao || null,
-        coorientadorLattes: dados.coorientadorLattes || null,
-        solicitacoes: { create: { mensagem: dados.mensagem || null, status: 'PENDENTE' } },
-      },
-      include: { solicitacoes: true },
+    // ----- Troca transacional (item 1) -----
+    // Com tudo validado, criamos a nova solicitação. No recomeço, a exclusão do TCC antigo e a
+    // criação da nova ficam na MESMA transação (a unique aluno+semestre é respeitada); se
+    // qualquer passo falhar, o rollback preserva a solicitação anterior intacta.
+    let caminhosAntigos: string[] = [];
+    const tcc = await this.prisma.$transaction(async (tx) => {
+      if (recomeco) {
+        const docs = await tx.documentoTcc.findMany({ where: { tccId: recomeco.tccId }, select: { caminho: true } });
+        caminhosAntigos = docs.map((d) => d.caminho);
+        await tx.tcc.delete({ where: { id: recomeco.tccId } });
+      }
+      return tx.tcc.create({
+        data: {
+          titulo: dados.titulo,
+          semestre,
+          faseAtual: 'INICIALIZACAO',
+          alunoId,
+          orientadorId: dados.orientadorId,
+          coorientadorId: dados.coorientadorId || null,
+          coorientadorNome: dados.coorientadorNome || null,
+          coorientadorTitulacao: dados.coorientadorTitulacao || null,
+          coorientadorAfiliacao: dados.coorientadorAfiliacao || null,
+          coorientadorLattes: dados.coorientadorLattes || null,
+          solicitacoes: { create: { mensagem: dados.mensagem || null, status: 'PENDENTE' } },
+        },
+        include: { solicitacoes: true },
+      });
     });
+
+    // A nova solicitação já existe com sucesso: só AGORA removemos os arquivos físicos do TCC
+    // anterior (item 1). Uma falha ao apagar arquivo não afeta o novo registro.
+    for (const c of caminhosAntigos) await fs.rm(join(process.cwd(), c), { force: true }).catch(() => {});
 
     // Na abertura SÓ o coordenador é avisado. Orientador e coorientador só ficam sabendo
     // quando a solicitação for APROVADA (a indicação pode nem se concretizar).
@@ -396,7 +424,13 @@ export class TccsService {
     if (tcc.faseAtual !== 'INICIALIZACAO') {
       throw new BadRequestException({ mensagem: 'Só é possível cancelar enquanto aguarda aprovação.' });
     }
+    // Cancelar apaga o TCC de vez (cascade em solicitações/documentos). Os arquivos físicos
+    // precisam sair junto — senão viram órfãos no disco (item 4). Coletamos os caminhos DESTE
+    // TCC antes de excluir; só removemos os arquivos DEPOIS de a exclusão dar certo (se o delete
+    // falhar, nada é apagado do disco). O filtro por tccId garante não tocar em arquivo de outro TCC.
+    const docs = await this.prisma.documentoTcc.findMany({ where: { tccId }, select: { caminho: true } });
     await this.prisma.tcc.delete({ where: { id: tccId } });
+    for (const d of docs) await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
     return { ok: true };
   }
 
@@ -471,24 +505,33 @@ export class TccsService {
         mensagem: 'A solicitação precisa do Plano de Desenvolvimento e do Termo de Aceite válidos (documento rejeitado não conta — peça o reenvio ao aluno).',
       });
     }
-    await this.prisma.$transaction([
-      this.prisma.solicitacaoOrientacao.updateMany({
+    // Reserva ATÔMICA da decisão: só prossegue quem conseguir mover a solicitação PENDENTE→ACEITA
+    // (exatamente 1 linha). Se outro coordenador/aba já aprovou ou recusou, a reserva casa 0 linhas
+    // → conflito, sem mudar fase/documentos nem notificar (item 2). Fase e documentos só mudam na
+    // MESMA transação da reserva, e a transição de fase é condicional a INICIALIZACAO.
+    const reservado = await this.prisma.$transaction(async (tx) => {
+      const reserva = await tx.solicitacaoOrientacao.updateMany({
         where: { tccId, status: 'PENDENTE' },
         data: { status: 'ACEITA', respondidoEm: new Date() },
-      }),
-      this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'DESENVOLVIMENTO' } }),
+      });
+      if (reserva.count !== 1) return false;
+      await tx.tcc.updateMany({ where: { id: tccId, faseAtual: 'INICIALIZACAO' }, data: { faseAtual: 'DESENVOLVIMENTO' } });
       // Ao aprovar a abertura, os documentos iniciais deixam de estar "em análise" e ficam
       // APROVADO (limpa parecer). Não toca em MONOGRAFIA/VERSAO_FINAL/AVALIACAO_BANCA nem
       // em versões SUBSTITUIDA (filtro por tipo e status).
-      this.prisma.documentoTcc.updateMany({
+      await tx.documentoTcc.updateMany({
         where: {
           tccId,
           tipo: { in: ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE'] },
           status: { in: ['PENDENTE', 'EM_ANALISE'] },
         },
         data: { status: 'APROVADO', parecer: null },
-      }),
-    ]);
+      });
+      return true;
+    });
+    if (!reservado) {
+      throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
+    }
     await this.eventos.emitirParaUsuario('aluno_solicitacao_aprovada', tcc.alunoId, 'Solicitação de TCC aprovada', `Sua solicitação do TCC "${tcc.titulo}" foi aprovada. O TCC entrou na fase de desenvolvimento.`);
     await this.eventos.emitirParaUsuario('orientador_definido', tcc.orientadorId, 'Você é orientador de um novo TCC', `Você foi confirmado como orientador do TCC "${tcc.titulo}".`);
     await this.eventos.emitirParaUsuario('orientador_confirmar_continuidade', tcc.orientadorId, 'Confirmar continuidade do TCC', `Quando puder, confirme a continuidade do TCC "${tcc.titulo}" na sua área de orientandos.`, `/professor/orientandos/${tcc.id}#acao`);
@@ -505,10 +548,16 @@ export class TccsService {
     if (tcc.faseAtual !== 'INICIALIZACAO' || tcc.solicitacoes.length === 0) {
       throw new BadRequestException({ mensagem: 'Este TCC não está aguardando aprovação de abertura.' });
     }
-    await this.prisma.solicitacaoOrientacao.updateMany({
+    // Reserva ATÔMICA (item 2): move a solicitação PENDENTE→RECUSADA. Se outro coordenador já
+    // decidiu (aprovou/recusou), casa 0 linhas → conflito, sem notificar. A recusa não muda fase
+    // nem documentos, então a própria updateMany condicional já é a operação atômica.
+    const reserva = await this.prisma.solicitacaoOrientacao.updateMany({
       where: { tccId, status: 'PENDENTE' },
       data: { status: 'RECUSADA', parecer, respondidoEm: new Date() },
     });
+    if (reserva.count !== 1) {
+      throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
+    }
     await this.eventos.emitirParaUsuario('aluno_solicitacao_recusada', tcc.alunoId, 'Solicitação de TCC recusada', `Sua solicitação do TCC "${tcc.titulo}" foi recusada.${parecer ? ' Parecer: ' + parecer : ''} Você pode corrigir os documentos e reenviar.`);
     return { ok: true };
   }
@@ -542,7 +591,13 @@ export class TccsService {
     // serem "donos" do TCC — apenas por serem membros da banca correspondente.
     if (doc.tipo === 'AVALIACAO_BANCA') {
       const banca = t.bancas.find((b) => b.documentoAvaliacaoId === doc.id);
-      return banca && banca.membros.some((m) => m.avaliadorId === usuario.sub) ? doc : null;
+      if (!banca || !banca.membros.some((m) => m.avaliadorId === usuario.sub)) return null;
+      // DUPLO-CEGO (item 6): o avaliador da Fase I recebe o documento da banca, mas NUNCA o nome
+      // ORIGINAL do arquivo — um "Avaliacao_JoaoSilva.docx" entregaria o aluno. Devolve um nome
+      // genérico no lugar (o caminho real no disco é preservado, só o rótulo muda). O coordenador
+      // já retornou acima com o nome real; AVALIACAO_BANCA só existe na Fase I, então todo acesso
+      // que chega aqui é de um avaliador cego.
+      return { ...doc, nomeArquivo: 'Documento para avaliação' };
     }
 
     const ehDono =
@@ -858,8 +913,15 @@ export class TccsService {
       // (não no snapshot lido antes). Isso elimina a corrida em que monografia e
       // continuidade são decididas quase ao mesmo tempo e nenhuma das duas vê a outra —
       // o que deixava o TCC preso em DESENVOLVIMENTO com as duas flags ligadas.
-      const vaiPraBanca = await this.prisma.$transaction(async (tx) => {
-        await tx.documentoTcc.update({ where: { id: mono.id }, data: { status: 'APROVADO', parecer: null } });
+      // A transição do DOCUMENTO é condicional a PENDENTE (item 3): se uma decisão concorrente
+      // (aprovar/rejeitar) já mudou o status, casa 0 linhas → conflito, sem gravar estado
+      // parcial — nunca fica "monografia aprovada (flag) com documento rejeitado".
+      const resultado = await this.prisma.$transaction(async (tx) => {
+        const reserva = await tx.documentoTcc.updateMany({
+          where: { id: mono.id, status: 'PENDENTE' },
+          data: { status: 'APROVADO', parecer: null },
+        });
+        if (reserva.count !== 1) return { conflito: true, vaiPraBanca: false };
         await tx.tcc.update({
           where: { id: tccId },
           data: { monografiaAprovada: true, monografiaAprovadaEm: new Date() },
@@ -868,8 +930,12 @@ export class TccsService {
           where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: true, continuidadeConfirmada: true },
           data: { faseAtual: 'FORMACAO_BANCA_FASE_1' },
         });
-        return transicao.count === 1;
+        return { conflito: false, vaiPraBanca: transicao.count === 1 };
       });
+      if (resultado.conflito) {
+        throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
+      }
+      const vaiPraBanca = resultado.vaiPraBanca;
       await this.eventos.emitirParaUsuario('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.${vaiPraBanca ? ' Com a continuidade confirmada, seu TCC avançou para a formação da banca da Fase I.' : ''}`);
       // Coorientador recebe pelo evento de documentos (a mensagem já carrega o avanço de fase,
       // então não dispara também o coorientador_mudanca_fase — seria e-mail dobrado).
@@ -878,7 +944,15 @@ export class TccsService {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`, `/coordenador/tccs/${tcc.id}`);
       }
     } else {
-      await this.prisma.documentoTcc.update({ where: { id: mono.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } });
+      // Rejeição também condicional a PENDENTE (item 3): se uma aprovação concorrente já venceu,
+      // casa 0 linhas → conflito, sem sobrescrever a decisão que já valeu.
+      const reserva = await this.prisma.documentoTcc.updateMany({
+        where: { id: mono.id, status: 'PENDENTE' },
+        data: { status: 'REJEITADO', parecer: parecer ?? null },
+      });
+      if (reserva.count !== 1) {
+        throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
+      }
       await this.eventos.emitirParaUsuario('aluno_monografia_rejeitada', tcc.alunoId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na sua monografia do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }
@@ -896,17 +970,26 @@ export class TccsService {
       }
       // Junção "E" ATÔMICA (espelha avaliarMonografia): liga a flag e tenta a transição
       // com update condicional na MESMA transação, olhando o estado real do banco.
-      const vaiPraBanca = await this.prisma.$transaction(async (tx) => {
-        await tx.tcc.update({
-          where: { id: tccId },
+      // A confirmação é RESERVADA condicionalmente (item 3): só casa se o TCC ainda está em
+      // DESENVOLVIMENTO e a continuidade ainda NÃO foi decidida — impede a corrida com uma
+      // rejeição simultânea (não vira DESCONTINUADO + continuidade=true, nem sobrescreve um
+      // TCC que já avançou).
+      const resultado = await this.prisma.$transaction(async (tx) => {
+        const reserva = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', continuidadeConfirmada: false },
           data: { continuidadeConfirmada: true, continuidadeAvaliadaEm: new Date() },
         });
+        if (reserva.count !== 1) return { conflito: true, vaiPraBanca: false };
         const transicao = await tx.tcc.updateMany({
           where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: true, continuidadeConfirmada: true },
           data: { faseAtual: 'FORMACAO_BANCA_FASE_1' },
         });
-        return transicao.count === 1;
+        return { conflito: false, vaiPraBanca: transicao.count === 1 };
       });
+      if (resultado.conflito) {
+        throw new ConflictException({ mensagem: 'A continuidade deste TCC já foi decidida — atualize a página.' });
+      }
+      const vaiPraBanca = resultado.vaiPraBanca;
       await this.eventos.emitirParaUsuario('aluno_continuidade_confirmada', tcc.alunoId, 'Continuidade confirmada', `O orientador confirmou a continuidade do seu TCC "${tcc.titulo}".${vaiPraBanca ? ' Com a monografia aprovada, seu TCC avançou para a formação da banca da Fase I.' : ''}`);
       if (vaiPraBanca) {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`, `/coordenador/tccs/${tcc.id}`);
@@ -918,10 +1001,17 @@ export class TccsService {
         await this.eventos.emitirParaCoordenadores('coord_continuidade', 'Continuidade confirmada', `O orientador confirmou a continuidade do TCC "${tcc.titulo}".`, `/coordenador/tccs/${tcc.id}`);
       }
     } else {
-      await this.prisma.tcc.update({
-        where: { id: tccId },
+      // Descontinuar também é CONDICIONAL (item 3): só a partir de DESENVOLVIMENTO com a
+      // continuidade ainda não confirmada. Se uma confirmação concorrente já venceu (o TCC pode
+      // até ter avançado de fase), casa 0 linhas → conflito, sem "puxar" o TCC de volta para
+      // DESCONTINUADO nem apagar um avanço legítimo.
+      const reserva = await this.prisma.tcc.updateMany({
+        where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', continuidadeConfirmada: false },
         data: { faseAtual: 'DESCONTINUADO', parecerContinuidade: parecer ?? null, continuidadeAvaliadaEm: new Date() },
       });
+      if (reserva.count !== 1) {
+        throw new ConflictException({ mensagem: 'A continuidade deste TCC já foi decidida — atualize a página.' });
+      }
       await this.eventos.emitirParaUsuario('aluno_continuidade_rejeitada', tcc.alunoId, 'TCC descontinuado', `O orientador não confirmou a continuidade do TCC "${tcc.titulo}".${parecer ? ' Motivo: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC descontinuado', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi descontinuado — o orientador não confirmou a continuidade.`);
       await this.eventos.emitirParaCoordenadores('coord_continuidade', 'TCC descontinuado', `O TCC "${tcc.titulo}" foi descontinuado — o orientador não confirmou a continuidade.`, `/coordenador/tccs/${tcc.id}`);
@@ -981,22 +1071,40 @@ export class TccsService {
     });
     if (decisao === 'CONCLUIR') {
       const agora = new Date(); // mesma marca para "validação do orientador" e "concluído"
-      await this.prisma.$transaction([
-        ...(versao
-          ? [this.prisma.documentoTcc.update({ where: { id: versao.id }, data: { status: 'APROVADO', parecer: null } })]
-          : []),
-        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO', versaoFinalValidadaEm: agora, concluidoEm: agora } }),
-      ]);
+      // Transição de fase CONDICIONAL a VALIDACAO_VERSAO_FINAL (item 3): a mudança de fase é o
+      // guarda de vencedor único. O documento só é aprovado se a fase foi de fato reservada por
+      // esta chamada — assim duas decisões simultâneas (concluir/ajustes) nunca deixam a fase
+      // CONCLUIDO com o documento REJEITADO (ou vice-versa).
+      const conflito = await this.prisma.$transaction(async (tx) => {
+        const reserva = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'VALIDACAO_VERSAO_FINAL' },
+          data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO', versaoFinalValidadaEm: agora, concluidoEm: agora },
+        });
+        if (reserva.count !== 1) return true;
+        if (versao) await tx.documentoTcc.update({ where: { id: versao.id }, data: { status: 'APROVADO', parecer: null } });
+        return false;
+      });
+      if (conflito) {
+        throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
+      }
       await this.eventos.emitirParaUsuario('aluno_tcc_concluido', tcc.alunoId, 'TCC concluído 🎉', `Parabéns! Seu TCC "${tcc.titulo}" foi aprovado e concluído.`);
       await this.eventos.emitirParaCoordenadores('coord_tcc_concluido', 'TCC concluído', `O TCC "${tcc.titulo}" foi concluído — versão final validada pelo orientador.`, `/coordenador/tccs/${tccId}`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC concluído', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi concluído.`);
     } else {
-      await this.prisma.$transaction([
-        ...(versao
-          ? [this.prisma.documentoTcc.update({ where: { id: versao.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } })]
-          : []),
-        this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' } }),
-      ]);
+      // Pedido de ajustes também é CONDICIONAL a VALIDACAO_VERSAO_FINAL (item 3): a fase é o
+      // guarda de vencedor único; o documento só é rejeitado se esta chamada reservou a fase.
+      const conflito = await this.prisma.$transaction(async (tx) => {
+        const reserva = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'VALIDACAO_VERSAO_FINAL' },
+          data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' },
+        });
+        if (reserva.count !== 1) return true;
+        if (versao) await tx.documentoTcc.update({ where: { id: versao.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } });
+        return false;
+      });
+      if (conflito) {
+        throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
+      }
       await this.eventos.emitirParaUsuario('aluno_versao_final_rejeitada', tcc.alunoId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }

@@ -5,10 +5,12 @@
 // modal de edição administrativa direto na lista (como no projeto antigo).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import { apiGet } from '../../api';
+import { apiGet, ehNaoAutorizado } from '../../api';
+import { useAuth } from '../../autenticacao/contexto';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { ROTULO_CURSO, CURSOS } from '@tcc/compartilhado';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { EstadoErro } from '../../componentes/EstadoErro';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalBaixarDados } from '../../componentes/ModalBaixarDados';
 
@@ -63,9 +65,11 @@ const GRUPOS: Record<string, (t: any) => boolean> = {
 
 export function TccsCoordenador() {
   const navigate = useNavigate();
+  const { sessaoInvalida } = useAuth();
   const [searchParams] = useSearchParams();
   const [tccs, setTccs] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
 
   const [busca, setBusca] = useState('');
   const [filtroFase, setFiltroFase] = useState('TODAS');
@@ -86,14 +90,18 @@ export function TccsCoordenador() {
   // Recarrega a lista e, se o modal estiver aberto, sincroniza o TCC em edição com o
   // dado fresco (mantém o modal aberto após salvar, refletindo as alterações).
   const carregar = useCallback(async () => {
+    setErro(false);
     try {
       const lista: any[] = (await apiGet('/tccs')) ?? [];
       setTccs(lista);
       setTccEditando((prev: any) => (prev ? lista.find((x) => x.id === prev.id) ?? prev : prev));
-    } catch {
-      setTccs([]);
+    } catch (e) {
+      // 401 → sessão expirada (fluxo de login). Falha de rede/500 NÃO vira "não há TCCs":
+      // marca o estado de erro para a tela mostrar "Tentar novamente" (item 8).
+      if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+      setErro(true);
     }
-  }, []);
+  }, [sessaoInvalida]);
 
   useEffect(() => {
     setCarregando(true);
@@ -128,7 +136,9 @@ export function TccsCoordenador() {
       <h1>Gestão de TCCs</h1>
       <p className="legenda">Acompanhe todos os trabalhos de conclusão de curso.</p>
 
-      {tccs.length === 0 ? (
+      {erro ? (
+        <EstadoErro aoTentar={() => { setCarregando(true); carregar().finally(() => setCarregando(false)); }} />
+      ) : tccs.length === 0 ? (
         <section className="cartao-secao bloco"><p className="nota-vazio">Ainda não há TCCs cadastrados no período.</p></section>
       ) : (
         <>

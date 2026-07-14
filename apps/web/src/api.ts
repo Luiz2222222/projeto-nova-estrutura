@@ -14,6 +14,19 @@ async function tratar<T>(r: Response): Promise<T> {
   return dados as T;
 }
 
+// 401 = sessão inválida/expirada. As telas usam isto para separar "não autorizado" (que segue
+// o fluxo de login existente) de um erro genérico de rede/servidor. Uma falha de fetch (rede
+// fora) rejeita com um TypeError, que não tem `status`, então cai no ramo de erro genérico.
+export function ehNaoAutorizado(e: unknown): boolean {
+  return !!e && typeof e === 'object' && (e as ErroApi).status === 401;
+}
+
+// Mensagem amigável de um erro de API/rede. Erros de rede não trazem `mensagem`, então usamos
+// o texto padrão.
+export function mensagemErro(e: unknown, padrao = 'Não foi possível carregar os dados. Verifique sua conexão e tente novamente.'): string {
+  return (e as ErroApi)?.mensagem || padrao;
+}
+
 export async function apiGet<T = any>(caminho: string): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, { credentials: 'include' });
   return tratar<T>(r);

@@ -69,10 +69,10 @@ export const AFILIACOES = ['UFPE', 'UFRPE', 'IFPE', 'Outros'] as const;
 
 // ---------- Validações ----------
 
-// Login aceita e-mail OU usuário simples (ex.: "adm"); a validação forte de e-mail/senha
-// fica no cadastro. Aqui só exigimos que os campos não estejam vazios.
+// O backend autentica SOMENTE por e-mail (não há login por usuário). Aqui só exigimos que os
+// campos não estejam vazios — a validação forte de formato do e-mail fica no cadastro.
 export const esquemaLogin = z.object({
-  email: z.string().min(1, 'Informe o e-mail ou usuário'),
+  email: z.string().min(1, 'Informe o e-mail'),
   senha: z.string().min(1, 'Informe a senha'),
   manterLogin: z.boolean().optional().default(false),
 });
@@ -136,6 +136,25 @@ export interface UsuarioPublico {
 
 export const TITULACOES_COORIENTADOR = ['Mestre', 'Doutor'] as const;
 
+// Validação da URL do Lattes (coorientador externo). Aceita vazio (o campo é opcional). Quando
+// preenchida, exige uma URL https:// bem-formada no domínio oficial do CNPq (lattes.cnpq.br) —
+// bloqueando http, javascript:, data: e qualquer URL malformada (item 10). `new URL` existe tanto
+// no Node quanto no navegador, então a mesma regra vale na API e na tela.
+export function urlLattesValida(valor: string | null | undefined): boolean {
+  const v = (valor ?? '').trim();
+  if (!v) return true; // opcional
+  let u: URL;
+  try {
+    u = new URL(v);
+  } catch {
+    return false; // malformada
+  }
+  if (u.protocol !== 'https:') return false; // barra http:, javascript:, data:, etc.
+  const host = u.hostname.toLowerCase();
+  return host === 'lattes.cnpq.br' || host.endsWith('.lattes.cnpq.br');
+}
+const MSG_LATTES = 'Informe uma URL válida do Lattes (ex.: https://lattes.cnpq.br/0000000000000000).';
+
 export const esquemaAbrirTcc = z
   .object({
     titulo: z.string().min(3, 'O título deve ter ao menos 3 caracteres'),
@@ -147,7 +166,7 @@ export const esquemaAbrirTcc = z
     coorientadorNome: z.string().optional(),
     coorientadorTitulacao: z.string().optional(),
     coorientadorAfiliacao: z.string().optional(),
-    coorientadorLattes: z.string().optional(),
+    coorientadorLattes: z.string().trim().optional().refine(urlLattesValida, MSG_LATTES),
   })
   .superRefine((d, ctx) => {
     const temExterno = !!(
@@ -301,7 +320,7 @@ export const esquemaEditarTcc = z.object({
   coorientadorNome: z.string().trim().nullable().optional(),
   coorientadorTitulacao: z.string().trim().nullable().optional(),
   coorientadorAfiliacao: z.string().trim().nullable().optional(),
-  coorientadorLattes: z.string().trim().nullable().optional(),
+  coorientadorLattes: z.string().trim().nullable().optional().refine(urlLattesValida, MSG_LATTES),
 });
 export type DadosEditarTcc = z.infer<typeof esquemaEditarTcc>;
 

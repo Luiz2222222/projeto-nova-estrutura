@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, URL_API } from '../../api';
+import { apiGet, URL_API, ehNaoAutorizado } from '../../api';
+import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { EstadoErro } from '../../componentes/EstadoErro';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
@@ -124,21 +126,30 @@ type Acao = { titulo: string; desc: string; parecer?: string; botao?: { rotulo: 
 
 export function DashboardAluno() {
   const navegar = useNavigate();
+  const { sessaoInvalida } = useAuth();
   const [tcc, setTcc] = useState<any | null>(null);
   const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
   const [abertura, setAbertura] = useState<{ bloqueado: boolean } | null>(null);
   const [carregandoAbertura, setCarregandoAbertura] = useState(true);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
   const [recusaFechada, setRecusaFechada] = useState(false);
 
   function carregar() {
+    setCarregando(true);
+    setErro(false);
     apiGet('/tccs/meu')
-      .then(setTcc)
-      .catch(() => setTcc(null))
+      .then((r) => { setTcc(r); setErro(false); })
+      .catch((e) => {
+        // 401 → sessão expirada: segue o fluxo de login. Outros erros (rede/500) NÃO viram
+        // "sem TCC": mostramos o estado de erro com "Tentar novamente" (item 8).
+        if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+        setErro(true);
+      })
       .finally(() => setCarregando(false));
   }
-  useEffect(carregar, []);
+  useEffect(carregar, [sessaoInvalida]); // sessaoInvalida é estável (useCallback) → roda uma vez
   useEffect(() => {
     apiGet<Record<string, string | null>>('/calendario')
       .then(setCalendario)
@@ -216,6 +227,8 @@ export function DashboardAluno() {
     <>
       {carregando ? (
         <p className="nota-vazio">Carregando…</p>
+      ) : erro ? (
+        <EstadoErro aoTentar={carregar} />
       ) : (!tcc || recusada) ? (
         <>
           {recusada && !recusaFechada && (

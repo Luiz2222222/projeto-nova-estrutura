@@ -2,6 +2,7 @@ import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom
 import type { Papel } from '@tcc/compartilhado';
 import { ProvedorAuth, useAuth } from './autenticacao/contexto';
 import { ProvedorTema } from './tema/contexto';
+import { LimiteErro } from './componentes/LimiteErro';
 import { Login } from './paginas/Login';
 import { RecuperarSenha } from './paginas/RecuperarSenha';
 import { RedefinirSenha } from './paginas/RedefinirSenha';
@@ -56,6 +57,7 @@ export function App() {
     <ProvedorTema>
     <ProvedorAuth>
       <BrowserRouter>
+        <LimiteErro>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/recuperar-senha" element={<RecuperarSenha />} />
@@ -130,6 +132,7 @@ export function App() {
           <Route path="/" element={<RedirecionarHome />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </LimiteErro>
       </BrowserRouter>
     </ProvedorAuth>
     </ProvedorTema>

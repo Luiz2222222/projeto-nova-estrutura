@@ -188,7 +188,14 @@ export class BancasService {
           m.banca.fase === 'FASE_1'
             ? this.anonimizarTccFase1(tccSan)
             : { ...tccSan, documentos: (tccSan.documentos ?? []).filter((d: any) => ['MONOGRAFIA', 'VERSAO_FINAL'].includes(d.tipo)) };
-        const banca = { ...m.banca, tcc: tccVisao };
+        // DUPLO-CEGO (item 6): na Fase I, além de anonimizar o TCC, escondemos o nome ORIGINAL
+        // do arquivo da banca (documentoAvaliacao) — ele pode conter o nome do aluno
+        // ("Avaliacao_JoaoSilva.docx"). O avaliador cego vê um rótulo genérico; a coordenação
+        // (que não passa por aqui) mantém o nome real. Na Fase II o nome segue normal.
+        const banca =
+          m.banca.fase === 'FASE_1' && m.banca.documentoAvaliacao
+            ? { ...m.banca, tcc: tccVisao, documentoAvaliacao: { ...m.banca.documentoAvaliacao, nomeArquivo: 'Documento para avaliação' } }
+            : { ...m.banca, tcc: tccVisao };
         return { ...m, banca, pesos: porSemestre.get(m.banca.tcc.semestre) ?? null, bloqueado };
       }),
     );

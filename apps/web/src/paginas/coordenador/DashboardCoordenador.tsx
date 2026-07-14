@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet } from '../../api';
+import { apiGet, ehNaoAutorizado } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
+import { EstadoErro } from '../../componentes/EstadoErro';
 import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO } from '@tcc/compartilhado';
 
 const ic = (d: string) => (
@@ -60,23 +61,42 @@ const ETAPAS = [
 
 export function DashboardCoordenador() {
   const navegar = useNavigate();
-  const { usuario } = useAuth();
+  const { usuario, sessaoInvalida } = useAuth();
   const [tccs, setTccs] = useState<any[]>([]);
   const [pendentes, setPendentes] = useState<any[]>([]);
   const [calendario, setCalendario] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
+  const [erro, setErro] = useState(false);
   const [tooltip, setTooltip] = useState<{ vis: boolean; x: number; y: number; texto: string }>({ vis: false, x: 0, y: 0, texto: '' });
 
   const mostrarTooltip = (ev: { clientX: number; clientY: number }, texto: string) => setTooltip({ vis: true, x: ev.clientX, y: ev.clientY, texto });
   const esconderTooltip = () => setTooltip((t) => ({ ...t, vis: false }));
 
-  useEffect(() => {
+  const carregar = useCallback(() => {
+    setCarregando(true);
+    setErro(false);
+    // O dashboard é sobre a LISTA de TCCs: se ela falhar, mostramos erro (nunca "0 TCCs" —
+    // item 8). /pendentes e /calendario são complementares e degradam para vazio/null sem
+    // quebrar a tela. Só a falha do /tccs propaga para o catch.
     Promise.all([
-      apiGet('/tccs').then((r: any) => setTccs(r ?? [])).catch(() => setTccs([])),
-      apiGet('/tccs/pendentes').then((r: any) => setPendentes(r ?? [])).catch(() => setPendentes([])),
-      apiGet('/calendario').then(setCalendario).catch(() => setCalendario(null)),
-    ]).finally(() => setCarregando(false));
-  }, []);
+      apiGet('/tccs'),
+      apiGet('/tccs/pendentes').catch(() => []),
+      apiGet('/calendario').catch(() => null),
+    ])
+      .then(([lista, pend, cal]: any[]) => {
+        setTccs(lista ?? []);
+        setPendentes(pend ?? []);
+        setCalendario(cal);
+      })
+      .catch((e) => {
+        // 401 → sessão expirada: segue o fluxo de login. Rede/500 → estado de erro com retry.
+        if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+        setErro(true);
+      })
+      .finally(() => setCarregando(false));
+  }, [sessaoInvalida]);
+
+  useEffect(() => { carregar(); }, [carregar]);
 
   const stats = useMemo(() => {
     const total = tccs.length;
@@ -119,6 +139,17 @@ export function DashboardCoordenador() {
     { rotulo: 'Aprovados', sub: stats.pct(stats.aprovados), valor: stats.aprovados, icone: icoCheck, cor: 'verde', corNum: 'var(--aprovado)', grupo: 'aprovados' },
     { rotulo: 'Reprovados', sub: stats.pct(stats.reprovados), valor: stats.reprovados, icone: icoX, cor: 'vermelho', corNum: 'var(--reprovado)', grupo: 'reprovados' },
   ];
+
+  // Falha ao carregar a lista de TCCs (rede/500): mostra erro com "Tentar novamente" em vez
+  // de um dashboard zerado que parece "não há TCCs" (item 8).
+  if (erro) {
+    return (
+      <>
+        <h1>Seja bem-vindo(a), {primeiroNome}!</h1>
+        <EstadoErro aoTentar={carregar} />
+      </>
+    );
+  }
 
   return (
     <>
