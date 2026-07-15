@@ -125,13 +125,17 @@ export class AutenticacaoService {
     const u = await this.prisma.usuario.findUnique({ where: { email: (email || '').toLowerCase() } });
     if (!u) return;
 
-    // Invalida pedidos anteriores ainda pendentes desse usuário.
-    await this.prisma.tokenSenha.deleteMany({ where: { usuarioId: u.id, usadoEm: null } });
-
     const token = crypto.randomBytes(32).toString('hex');
     const expiraEm = new Date(Date.now() + 60 * 60 * 1000); // 1 hora
-    await this.prisma.tokenSenha.create({
-      data: { usuarioId: u.id, tokenHash: this.hashToken(token), expiraEm },
+    // Invalida os pedidos pendentes anteriores E cria o novo token na MESMA transação. Sem isso,
+    // dois pedidos simultâneos podiam intercalar (deleteMany/deleteMany/create/create) e deixar
+    // DOIS links válidos. No SQLite as escritas serializam, então o 2º pedido enxerga e apaga o
+    // token recém-criado pelo 1º — sobra sempre um único link válido por usuário.
+    await this.prisma.$transaction(async (tx) => {
+      await tx.tokenSenha.deleteMany({ where: { usuarioId: u.id, usadoEm: null } });
+      await tx.tokenSenha.create({
+        data: { usuarioId: u.id, tokenHash: this.hashToken(token), expiraEm },
+      });
     });
 
     const base = process.env.APP_URL || 'http://localhost:5173';

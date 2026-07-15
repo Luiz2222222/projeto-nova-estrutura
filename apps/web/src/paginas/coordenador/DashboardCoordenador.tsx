@@ -75,13 +75,15 @@ export function DashboardCoordenador() {
   const carregar = useCallback(() => {
     setCarregando(true);
     setErro(false);
-    // O dashboard é sobre a LISTA de TCCs: se ela falhar, mostramos erro (nunca "0 TCCs" —
-    // item 8). /pendentes e /calendario são complementares e degradam para vazio/null sem
-    // quebrar a tela. Só a falha do /tccs propaga para o catch.
+    // O dashboard monta três coisas a partir da API: a lista de TCCs, a fila de pendências e o
+    // calendário. Se QUALQUER uma falhar, mostramos o estado de erro com "Tentar novamente" em vez
+    // de silenciar a falha como lista vazia / "sem ações pendentes" / datas "A definir" (item 8).
+    // Uma rejeição em qualquer chamada derruba o Promise.all e cai no catch (que separa 401 —
+    // sessão expirada — de erro de rede/500).
     Promise.all([
       apiGet('/tccs'),
-      apiGet('/tccs/pendentes').catch(() => []),
-      apiGet('/calendario').catch(() => null),
+      apiGet('/tccs/pendentes'),
+      apiGet('/calendario'),
     ])
       .then(([lista, pend, cal]: any[]) => {
         setTccs(lista ?? []);

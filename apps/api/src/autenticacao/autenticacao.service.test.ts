@@ -54,3 +54,40 @@ describe('Item 7 — token de recuperação: consumo atômico e uso único', () 
     expect(p.usuario.update).not.toHaveBeenCalled();
   });
 });
+
+describe('Solicitação de recuperação: invalidar + criar token na MESMA transação (não deixa dois links válidos)', () => {
+  it('apaga tokens pendentes e cria o novo DENTRO de $transaction', async () => {
+    let dentroDaTransacao = false;
+    const p: any = {
+      usuario: { findUnique: vi.fn().mockResolvedValue({ id: 'u', email: 'a@a.com', nomeCompleto: 'Ana' }) },
+      tokenSenha: {
+        // Ambas as escritas precisam rodar enquanto a transação está aberta.
+        deleteMany: vi.fn().mockImplementation(async () => { expect(dentroDaTransacao).toBe(true); return { count: 0 }; }),
+        create: vi.fn().mockImplementation(async () => { expect(dentroDaTransacao).toBe(true); return {}; }),
+      },
+    };
+    p.$transaction = async (fn: any) => {
+      dentroDaTransacao = true;
+      try { return await fn(p); } finally { dentroDaTransacao = false; }
+    };
+    const email = { enviarRecuperacaoSenha: vi.fn().mockResolvedValue(undefined) };
+    const servico = new AutenticacaoService(p as any, {} as any, email as any);
+    await servico.solicitarRecuperacaoSenha('a@a.com');
+    expect(p.tokenSenha.deleteMany).toHaveBeenCalled();
+    expect(p.tokenSenha.create).toHaveBeenCalled();
+    expect(email.enviarRecuperacaoSenha).toHaveBeenCalled(); // e-mail enviado só APÓS a transação
+  });
+
+  it('e-mail inexistente: nem abre transação nem envia e-mail (resposta silenciosa)', async () => {
+    const p: any = {
+      usuario: { findUnique: vi.fn().mockResolvedValue(null) },
+      tokenSenha: { deleteMany: vi.fn(), create: vi.fn() },
+      $transaction: vi.fn(),
+    };
+    const email = { enviarRecuperacaoSenha: vi.fn() };
+    const servico = new AutenticacaoService(p as any, {} as any, email as any);
+    await expect(servico.solicitarRecuperacaoSenha('naoexiste@a.com')).resolves.toBeUndefined();
+    expect(p.$transaction).not.toHaveBeenCalled();
+    expect(email.enviarRecuperacaoSenha).not.toHaveBeenCalled();
+  });
+});

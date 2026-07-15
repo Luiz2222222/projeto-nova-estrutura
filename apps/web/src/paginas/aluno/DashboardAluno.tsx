@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, URL_API, ehNaoAutorizado } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
@@ -131,6 +131,7 @@ export function DashboardAluno() {
   const [calendario, setCalendario] = useState<Record<string, string | null> | null>(null);
   const [abertura, setAbertura] = useState<{ bloqueado: boolean } | null>(null);
   const [carregandoAbertura, setCarregandoAbertura] = useState(true);
+  const [erroAbertura, setErroAbertura] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
@@ -150,13 +151,28 @@ export function DashboardAluno() {
       .finally(() => setCarregando(false));
   }
   useEffect(carregar, [sessaoInvalida]); // sessaoInvalida é estável (useCallback) → roda uma vez
+  // Estado da abertura (considera liberação individual deste aluno+semestre). Se a checagem
+  // FALHAR, NÃO liberamos o botão "Iniciar meu TCC" (fail-closed, item 8): abertura fica nula, o
+  // botão segue desabilitado e mostramos um aviso com "Tentar novamente" — melhor do que liberar
+  // um envio que o backend vai barrar. 401 cai no fluxo de sessão expirada.
+  const carregarAbertura = useCallback(() => {
+    setCarregandoAbertura(true);
+    setErroAbertura(false);
+    apiGet<{ bloqueado: boolean }>('/tccs/abertura-prazo')
+      .then((r) => setAbertura(r))
+      .catch((e) => {
+        if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+        setAbertura(null);
+        setErroAbertura(true);
+      })
+      .finally(() => setCarregandoAbertura(false));
+  }, [sessaoInvalida]);
   useEffect(() => {
     apiGet<Record<string, string | null>>('/calendario')
       .then(setCalendario)
       .catch(() => setCalendario(null));
-    // Estado da abertura (considera liberação individual deste aluno+semestre).
-    apiGet('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
-  }, []);
+    carregarAbertura();
+  }, [carregarAbertura]);
 
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
@@ -255,10 +271,16 @@ export function DashboardAluno() {
                 <strong>Prazo encerrado.</strong> O período de envio de documentos iniciais já terminou — peça uma liberação individual à coordenação.
               </div>
             )}
+            {erroAbertura && (
+              <div className="alerta alerta-erro" style={{ marginTop: 16, textAlign: 'left' }}>
+                <strong>Não foi possível verificar o prazo de abertura.</strong> Tente novamente antes de iniciar o TCC.{' '}
+                <button className="link-inline" onClick={carregarAbertura}>Tentar novamente</button>
+              </div>
+            )}
             <button
               className="botao"
               style={{ marginTop: 16 }}
-              disabled={!!abertura?.bloqueado || carregandoAbertura}
+              disabled={carregandoAbertura || !abertura || abertura.bloqueado}
               onClick={() => navegar('/aluno/abrir')}
             >
               Iniciar meu TCC

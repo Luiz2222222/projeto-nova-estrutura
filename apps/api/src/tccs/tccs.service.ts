@@ -505,17 +505,26 @@ export class TccsService {
         mensagem: 'A solicitação precisa do Plano de Desenvolvimento e do Termo de Aceite válidos (documento rejeitado não conta — peça o reenvio ao aluno).',
       });
     }
-    // Reserva ATÔMICA da decisão: só prossegue quem conseguir mover a solicitação PENDENTE→ACEITA
-    // (exatamente 1 linha). Se outro coordenador/aba já aprovou ou recusou, a reserva casa 0 linhas
-    // → conflito, sem mudar fase/documentos nem notificar (item 2). Fase e documentos só mudam na
-    // MESMA transação da reserva, e a transição de fase é condicional a INICIALIZACAO.
-    const reservado = await this.prisma.$transaction(async (tx) => {
+    // Reserva ATÔMICA da decisão dentro de UMA transação: a solicitação PENDENTE→ACEITA E a fase
+    // INICIALIZACAO→DESENVOLVIMENTO precisam casar exatamente 1 linha CADA. Se qualquer uma falhar
+    // — outra decisão concorrente venceu, ou a coordenação moveu a fase por edição no mesmo
+    // instante — a transação é revertida (throw dentro do callback faz rollback). Assim nunca fica
+    // solicitação ACEITA + documentos aprovados com o TCC parado em outra fase (item 2).
+    await this.prisma.$transaction(async (tx) => {
       const reserva = await tx.solicitacaoOrientacao.updateMany({
         where: { tccId, status: 'PENDENTE' },
         data: { status: 'ACEITA', respondidoEm: new Date() },
       });
-      if (reserva.count !== 1) return false;
-      await tx.tcc.updateMany({ where: { id: tccId, faseAtual: 'INICIALIZACAO' }, data: { faseAtual: 'DESENVOLVIMENTO' } });
+      if (reserva.count !== 1) {
+        throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
+      }
+      const transicao = await tx.tcc.updateMany({
+        where: { id: tccId, faseAtual: 'INICIALIZACAO' },
+        data: { faseAtual: 'DESENVOLVIMENTO' },
+      });
+      if (transicao.count !== 1) {
+        throw new ConflictException({ mensagem: 'A fase deste TCC mudou durante a aprovação. Atualize a página e tente novamente.' });
+      }
       // Ao aprovar a abertura, os documentos iniciais deixam de estar "em análise" e ficam
       // APROVADO (limpa parecer). Não toca em MONOGRAFIA/VERSAO_FINAL/AVALIACAO_BANCA nem
       // em versões SUBSTITUIDA (filtro por tipo e status).
@@ -527,11 +536,7 @@ export class TccsService {
         },
         data: { status: 'APROVADO', parecer: null },
       });
-      return true;
     });
-    if (!reservado) {
-      throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
-    }
     await this.eventos.emitirParaUsuario('aluno_solicitacao_aprovada', tcc.alunoId, 'Solicitação de TCC aprovada', `Sua solicitação do TCC "${tcc.titulo}" foi aprovada. O TCC entrou na fase de desenvolvimento.`);
     await this.eventos.emitirParaUsuario('orientador_definido', tcc.orientadorId, 'Você é orientador de um novo TCC', `Você foi confirmado como orientador do TCC "${tcc.titulo}".`);
     await this.eventos.emitirParaUsuario('orientador_confirmar_continuidade', tcc.orientadorId, 'Confirmar continuidade do TCC', `Quando puder, confirme a continuidade do TCC "${tcc.titulo}" na sua área de orientandos.`, `/professor/orientandos/${tcc.id}#acao`);
@@ -548,16 +553,23 @@ export class TccsService {
     if (tcc.faseAtual !== 'INICIALIZACAO' || tcc.solicitacoes.length === 0) {
       throw new BadRequestException({ mensagem: 'Este TCC não está aguardando aprovação de abertura.' });
     }
-    // Reserva ATÔMICA (item 2): move a solicitação PENDENTE→RECUSADA. Se outro coordenador já
-    // decidiu (aprovou/recusou), casa 0 linhas → conflito, sem notificar. A recusa não muda fase
-    // nem documentos, então a própria updateMany condicional já é a operação atômica.
-    const reserva = await this.prisma.solicitacaoOrientacao.updateMany({
-      where: { tccId, status: 'PENDENTE' },
-      data: { status: 'RECUSADA', parecer, respondidoEm: new Date() },
+    // Reserva ATÔMICA (item 2) dentro de uma transação: move a solicitação PENDENTE→RECUSADA e
+    // confirma que o TCC AINDA está aguardando abertura (INICIALIZACAO). Se outro coordenador já
+    // decidiu (casa 0 linhas) ou a coordenação moveu a fase por edição no mesmo instante, reverte —
+    // a solicitação não é recusada isoladamente sobre um TCC que já saiu da inicialização.
+    await this.prisma.$transaction(async (tx) => {
+      const reserva = await tx.solicitacaoOrientacao.updateMany({
+        where: { tccId, status: 'PENDENTE' },
+        data: { status: 'RECUSADA', parecer, respondidoEm: new Date() },
+      });
+      if (reserva.count !== 1) {
+        throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
+      }
+      const atual = await tx.tcc.findUnique({ where: { id: tccId }, select: { faseAtual: true, excluidoEm: true } });
+      if (!atual || atual.excluidoEm || atual.faseAtual !== 'INICIALIZACAO') {
+        throw new ConflictException({ mensagem: 'A fase deste TCC mudou durante a recusa. Atualize a página e tente novamente.' });
+      }
     });
-    if (reserva.count !== 1) {
-      throw new ConflictException({ mensagem: 'Esta solicitação já foi decidida por outra pessoa. Atualize a página.' });
-    }
     await this.eventos.emitirParaUsuario('aluno_solicitacao_recusada', tcc.alunoId, 'Solicitação de TCC recusada', `Sua solicitação do TCC "${tcc.titulo}" foi recusada.${parecer ? ' Parecer: ' + parecer : ''} Você pode corrigir os documentos e reenviar.`);
     return { ok: true };
   }
@@ -916,26 +928,31 @@ export class TccsService {
       // A transição do DOCUMENTO é condicional a PENDENTE (item 3): se uma decisão concorrente
       // (aprovar/rejeitar) já mudou o status, casa 0 linhas → conflito, sem gravar estado
       // parcial — nunca fica "monografia aprovada (flag) com documento rejeitado".
-      const resultado = await this.prisma.$transaction(async (tx) => {
+      const vaiPraBanca = await this.prisma.$transaction(async (tx) => {
         const reserva = await tx.documentoTcc.updateMany({
           where: { id: mono.id, status: 'PENDENTE' },
           data: { status: 'APROVADO', parecer: null },
         });
-        if (reserva.count !== 1) return { conflito: true, vaiPraBanca: false };
-        await tx.tcc.update({
-          where: { id: tccId },
+        if (reserva.count !== 1) {
+          throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
+        }
+        // A flag monografiaAprovada SÓ é gravada se o TCC AINDA está em DESENVOLVIMENTO (item 3):
+        // um update por id apenas gravaria a flag mesmo que a coordenação tivesse descontinuado ou
+        // movido a fase neste instante. Com updateMany condicional, esse caso casa 0 linhas →
+        // rollback (não liga a flag nem dispara notificação sobre um TCC que já saiu da fase).
+        const flag = await tx.tcc.updateMany({
+          where: { id: tccId, faseAtual: 'DESENVOLVIMENTO' },
           data: { monografiaAprovada: true, monografiaAprovadaEm: new Date() },
         });
+        if (flag.count !== 1) {
+          throw new ConflictException({ mensagem: 'A fase do TCC mudou durante a avaliação da monografia — atualize a página.' });
+        }
         const transicao = await tx.tcc.updateMany({
           where: { id: tccId, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: true, continuidadeConfirmada: true },
           data: { faseAtual: 'FORMACAO_BANCA_FASE_1' },
         });
-        return { conflito: false, vaiPraBanca: transicao.count === 1 };
+        return transicao.count === 1;
       });
-      if (resultado.conflito) {
-        throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
-      }
-      const vaiPraBanca = resultado.vaiPraBanca;
       await this.eventos.emitirParaUsuario('aluno_monografia_aprovada', tcc.alunoId, 'Monografia aprovada', `Sua monografia do TCC "${tcc.titulo}" foi aprovada pelo orientador.${vaiPraBanca ? ' Com a continuidade confirmada, seu TCC avançou para a formação da banca da Fase I.' : ''}`);
       // Coorientador recebe pelo evento de documentos (a mensagem já carrega o avanço de fase,
       // então não dispara também o coorientador_mudanca_fase — seria e-mail dobrado).
@@ -1065,46 +1082,52 @@ export class TccsService {
     }
     // Mesmo prazo da versão final bloqueia a validação do ORIENTADOR (concluir/pedir ajustes).
     await this.prazos.exigirEtapaLiberada({ etapa: 'VERSAO_FINAL', semestre: tcc.semestre, tccId: tcc.id, alunoId: tcc.alunoId });
-    const versao = await this.prisma.documentoTcc.findFirst({
-      where: { tccId, tipo: 'VERSAO_FINAL' },
-      orderBy: { versao: 'desc' },
-    });
     if (decisao === 'CONCLUIR') {
       const agora = new Date(); // mesma marca para "validação do orientador" e "concluído"
       // Transição de fase CONDICIONAL a VALIDACAO_VERSAO_FINAL (item 3): a mudança de fase é o
-      // guarda de vencedor único. O documento só é aprovado se a fase foi de fato reservada por
-      // esta chamada — assim duas decisões simultâneas (concluir/ajustes) nunca deixam a fase
-      // CONCLUIDO com o documento REJEITADO (ou vice-versa).
-      const conflito = await this.prisma.$transaction(async (tx) => {
+      // guarda de vencedor único — duas decisões simultâneas (concluir/ajustes) nunca deixam a
+      // fase CONCLUIDO com o documento REJEITADO (ou vice-versa). E EXIGE uma versão final PENDENTE
+      // na MESMA transação (item 4): sem ela — ex.: a fase foi movida à mão pela coordenação sem
+      // envio de versão — o throw reverte tudo e o TCC não é concluído sem versão final.
+      await this.prisma.$transaction(async (tx) => {
         const reserva = await tx.tcc.updateMany({
           where: { id: tccId, faseAtual: 'VALIDACAO_VERSAO_FINAL' },
           data: { faseAtual: 'CONCLUIDO', resultado: 'APROVADO', versaoFinalValidadaEm: agora, concluidoEm: agora },
         });
-        if (reserva.count !== 1) return true;
-        if (versao) await tx.documentoTcc.update({ where: { id: versao.id }, data: { status: 'APROVADO', parecer: null } });
-        return false;
+        if (reserva.count !== 1) {
+          throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
+        }
+        const aprovaDoc = await tx.documentoTcc.updateMany({
+          where: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE' },
+          data: { status: 'APROVADO', parecer: null },
+        });
+        if (aprovaDoc.count < 1) {
+          throw new BadRequestException({ mensagem: 'Não há versão final aguardando validação.' });
+        }
       });
-      if (conflito) {
-        throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
-      }
       await this.eventos.emitirParaUsuario('aluno_tcc_concluido', tcc.alunoId, 'TCC concluído 🎉', `Parabéns! Seu TCC "${tcc.titulo}" foi aprovado e concluído.`);
       await this.eventos.emitirParaCoordenadores('coord_tcc_concluido', 'TCC concluído', `O TCC "${tcc.titulo}" foi concluído — versão final validada pelo orientador.`, `/coordenador/tccs/${tccId}`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC concluído', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi concluído.`);
     } else {
       // Pedido de ajustes também é CONDICIONAL a VALIDACAO_VERSAO_FINAL (item 3): a fase é o
-      // guarda de vencedor único; o documento só é rejeitado se esta chamada reservou a fase.
-      const conflito = await this.prisma.$transaction(async (tx) => {
+      // guarda de vencedor único; e EXIGE a versão final PENDENTE na MESMA transação (item 4) —
+      // sem uma versão em avaliação não há o que devolver para ajustes, então reverte.
+      await this.prisma.$transaction(async (tx) => {
         const reserva = await tx.tcc.updateMany({
           where: { id: tccId, faseAtual: 'VALIDACAO_VERSAO_FINAL' },
           data: { faseAtual: 'AGUARDANDO_AJUSTES_FINAIS' },
         });
-        if (reserva.count !== 1) return true;
-        if (versao) await tx.documentoTcc.update({ where: { id: versao.id }, data: { status: 'REJEITADO', parecer: parecer ?? null } });
-        return false;
+        if (reserva.count !== 1) {
+          throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
+        }
+        const rejeitaDoc = await tx.documentoTcc.updateMany({
+          where: { tccId, tipo: 'VERSAO_FINAL', status: 'PENDENTE' },
+          data: { status: 'REJEITADO', parecer: parecer ?? null },
+        });
+        if (rejeitaDoc.count < 1) {
+          throw new BadRequestException({ mensagem: 'Não há versão final aguardando validação.' });
+        }
       });
-      if (conflito) {
-        throw new ConflictException({ mensagem: 'A versão final já foi avaliada — atualize a página.' });
-      }
       await this.eventos.emitirParaUsuario('aluno_versao_final_rejeitada', tcc.alunoId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }

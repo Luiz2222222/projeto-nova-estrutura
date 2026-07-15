@@ -90,6 +90,27 @@ describe('Item 2 — corrida aprovar/recusar (reserva condicional da solicitaç�
     await expect(servico.recusar('t1', 'parecer')).rejects.toMatchObject({ status: 409 });
     expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
   });
+
+  it('aprovar: reserva a solicitação mas a fase mudou no instante (transição casa 0) → 409 e reverte, sem notificar', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccPendente);
+    p.solicitacaoOrientacao.updateMany.mockResolvedValue({ count: 1 }); // reserva OK…
+    p.tcc.updateMany.mockResolvedValue({ count: 0 }); // …mas o TCC já não está em INICIALIZACAO
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.aprovar('t1')).rejects.toMatchObject({ status: 409 });
+    expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('recusar: reserva a solicitação mas a fase mudou no meio da transação → 409 e não notifica', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique
+      .mockResolvedValueOnce({ ...tccPendente }) // pré-leitura: ainda INICIALIZACAO
+      .mockResolvedValueOnce({ faseAtual: 'DESENVOLVIMENTO', excluidoEm: null }); // dentro da tx: mudou
+    p.solicitacaoOrientacao.updateMany.mockResolvedValue({ count: 1 });
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.recusar('t1', 'parecer')).rejects.toMatchObject({ status: 409 });
+    expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
+  });
 });
 
 describe('Item 3 — decisões concorrentes do orientador (transições condicionais)', () => {
@@ -121,6 +142,37 @@ describe('Item 3 — decisões concorrentes do orientador (transições condicio
     const { servico } = criarServico(p);
     await expect(servico.validarVersaoFinal('prof', 't1', 'CONCLUIR')).rejects.toMatchObject({ status: 409 });
     expect(p.documentoTcc.update).not.toHaveBeenCalled();
+  });
+
+  it('avaliarMonografia APROVAR: reserva o doc mas a fase mudou (flag casa 0) → 409, sem transição nem notificação', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(emDesenvolvimento);
+    p.documentoTcc.findFirst.mockResolvedValue({ id: 'm1', status: 'PENDENTE' });
+    p.documentoTcc.updateMany.mockResolvedValue({ count: 1 }); // reserva do documento OK…
+    p.tcc.updateMany.mockResolvedValue({ count: 0 }); // …mas o TCC já não está em DESENVOLVIMENTO (flag não grava)
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.avaliarMonografia('prof', 't1', 'APROVAR')).rejects.toMatchObject({ status: 409 });
+    expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('validarVersaoFinal CONCLUIR: fase reservada mas SEM versão final PENDENTE → 400 e NÃO conclui', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, orientadorId: 'prof', faseAtual: 'VALIDACAO_VERSAO_FINAL', alunoId: 'a', coorientadorId: null, titulo: 'T', semestre: '2026.1' });
+    p.tcc.updateMany.mockResolvedValue({ count: 1 }); // fase reservada…
+    p.documentoTcc.updateMany.mockResolvedValue({ count: 0 }); // …mas não há versão final PENDENTE
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.validarVersaoFinal('prof', 't1', 'CONCLUIR')).rejects.toMatchObject({ status: 400 });
+    expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('validarVersaoFinal CONCLUIR: com versão final PENDENTE → conclui e notifica', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, orientadorId: 'prof', faseAtual: 'VALIDACAO_VERSAO_FINAL', alunoId: 'a', coorientadorId: null, titulo: 'T', semestre: '2026.1' });
+    p.tcc.updateMany.mockResolvedValue({ count: 1 }); // fase reservada
+    p.documentoTcc.updateMany.mockResolvedValue({ count: 1 }); // versão final PENDENTE aprovada na mesma tx
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.validarVersaoFinal('prof', 't1', 'CONCLUIR')).resolves.toEqual({ ok: true });
+    expect(eventos.emitirParaUsuario).toHaveBeenCalled();
   });
 });
 
