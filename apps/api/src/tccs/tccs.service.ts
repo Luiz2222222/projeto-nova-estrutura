@@ -961,15 +961,23 @@ export class TccsService {
         await this.eventos.emitirParaCoordenadores('coord_formar_banca_fase1', 'Formar banca da Fase I', `O TCC "${tcc.titulo}" teve monografia aprovada e continuidade confirmada — é preciso formar a banca da Fase I.`, `/coordenador/tccs/${tcc.id}`);
       }
     } else {
-      // Rejeição também condicional a PENDENTE (item 3): se uma aprovação concorrente já venceu,
-      // casa 0 linhas → conflito, sem sobrescrever a decisão que já valeu.
-      const reserva = await this.prisma.documentoTcc.updateMany({
-        where: { id: mono.id, status: 'PENDENTE' },
-        data: { status: 'REJEITADO', parecer: parecer ?? null },
+      // Rejeição CONDICIONAL a PENDENTE e à fase DESENVOLVIMENTO, na MESMA transação (item 3):
+      // se uma aprovação concorrente já venceu (documento não-PENDENTE) OU a coordenação moveu a
+      // fase no instante, reverte com conflito — sem sobrescrever a decisão que já valeu nem
+      // notificar sobre um TCC que já saiu do desenvolvimento.
+      await this.prisma.$transaction(async (tx) => {
+        const reserva = await tx.documentoTcc.updateMany({
+          where: { id: mono.id, status: 'PENDENTE' },
+          data: { status: 'REJEITADO', parecer: parecer ?? null },
+        });
+        if (reserva.count !== 1) {
+          throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
+        }
+        const atual = await tx.tcc.findUnique({ where: { id: tccId }, select: { faseAtual: true, excluidoEm: true } });
+        if (!atual || atual.excluidoEm || atual.faseAtual !== 'DESENVOLVIMENTO') {
+          throw new ConflictException({ mensagem: 'A fase do TCC mudou durante a avaliação da monografia — atualize a página.' });
+        }
       });
-      if (reserva.count !== 1) {
-        throw new ConflictException({ mensagem: 'A monografia já foi avaliada — atualize a página.' });
-      }
       await this.eventos.emitirParaUsuario('aluno_monografia_rejeitada', tcc.alunoId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na sua monografia do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }

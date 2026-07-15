@@ -132,6 +132,7 @@ export function DashboardAluno() {
   const [abertura, setAbertura] = useState<{ bloqueado: boolean } | null>(null);
   const [carregandoAbertura, setCarregandoAbertura] = useState(true);
   const [erroAbertura, setErroAbertura] = useState(false);
+  const [erroCalendario, setErroCalendario] = useState(false);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState(false);
   const [modalUpload, setModalUpload] = useState<null | 'monografia' | 'versaoFinal'>(null);
@@ -167,12 +168,22 @@ export function DashboardAluno() {
       })
       .finally(() => setCarregandoAbertura(false));
   }, [sessaoInvalida]);
-  useEffect(() => {
+  // Calendário: uma falha NÃO vira silenciosamente "sem prazos" — marca erroCalendario para o
+  // card "Próximo prazo" avisar e oferecer "Tentar novamente" (item 8). 401 cai no fluxo de sessão.
+  const carregarCalendario = useCallback(() => {
+    setErroCalendario(false);
     apiGet<Record<string, string | null>>('/calendario')
-      .then(setCalendario)
-      .catch(() => setCalendario(null));
+      .then((r) => setCalendario(r))
+      .catch((e) => {
+        if (ehNaoAutorizado(e)) { sessaoInvalida(); return; }
+        setCalendario(null);
+        setErroCalendario(true);
+      });
+  }, [sessaoInvalida]);
+  useEffect(() => {
+    carregarCalendario();
     carregarAbertura();
-  }, [carregarAbertura]);
+  }, [carregarCalendario, carregarAbertura]);
 
   const solic = tcc?.solicitacoes?.[0];
   const idx = tcc ? faseParaIndice(tcc.faseAtual) : null;
@@ -320,6 +331,11 @@ export function DashboardAluno() {
                   <>
                     <span className="grande">{ROTULO_MARCO[prazo.marco]}</span>
                     <span className="num">{fmtData(prazo.iso)}</span>
+                  </>
+                ) : erroCalendario ? (
+                  <>
+                    <span className="grande">Prazos indisponíveis</span>
+                    <button className="link-inline" onClick={carregarCalendario}>Tentar novamente</button>
                   </>
                 ) : (
                   <span className="grande">Sem prazos futuros</span>

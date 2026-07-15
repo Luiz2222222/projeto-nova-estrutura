@@ -155,6 +155,28 @@ describe('Item 3 — decisões concorrentes do orientador (transições condicio
     expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
   });
 
+  it('avaliarMonografia REJEITAR: reserva o doc mas a fase mudou no meio → 409, sem rejeitar de fato nem notificar', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique
+      .mockResolvedValueOnce(emDesenvolvimento) // exigirOrientadorEmDesenvolvimento: passa
+      .mockResolvedValueOnce({ faseAtual: 'DESCONTINUADO', excluidoEm: null }); // dentro da tx: fase mudou
+    p.documentoTcc.findFirst.mockResolvedValue({ id: 'm1', status: 'PENDENTE' });
+    p.documentoTcc.updateMany.mockResolvedValue({ count: 1 }); // doc reservado…
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.avaliarMonografia('prof', 't1', 'REJEITAR', 'ajustes')).rejects.toMatchObject({ status: 409 });
+    expect(eventos.emitirParaUsuario).not.toHaveBeenCalled();
+  });
+
+  it('avaliarMonografia REJEITAR: doc PENDENTE e TCC em DESENVOLVIMENTO → rejeita e notifica', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(emDesenvolvimento); // pré-checagem e checagem interna
+    p.documentoTcc.findFirst.mockResolvedValue({ id: 'm1', status: 'PENDENTE' });
+    p.documentoTcc.updateMany.mockResolvedValue({ count: 1 });
+    const { servico, eventos } = criarServico(p);
+    await expect(servico.avaliarMonografia('prof', 't1', 'REJEITAR', 'ajustes')).resolves.toEqual({ ok: true });
+    expect(eventos.emitirParaUsuario).toHaveBeenCalled();
+  });
+
   it('validarVersaoFinal CONCLUIR: fase reservada mas SEM versão final PENDENTE → 400 e NÃO conclui', async () => {
     const p = fakePrisma();
     p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, orientadorId: 'prof', faseAtual: 'VALIDACAO_VERSAO_FINAL', alunoId: 'a', coorientadorId: null, titulo: 'T', semestre: '2026.1' });
