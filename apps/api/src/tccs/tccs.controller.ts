@@ -19,6 +19,7 @@ import type { Response } from 'express';
 import { extname, join } from 'path';
 import { FORMATOS_ARQUIVO } from '@tcc/compartilhado';
 import { TccsService } from './tccs.service';
+import { HistoricoTccsService } from './historico-tccs.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
@@ -58,7 +59,10 @@ type Req = { usuario: { sub: string; papel: string } };
 
 @Controller()
 export class TccsController {
-  constructor(private readonly tccs: TccsService) {}
+  constructor(
+    private readonly tccs: TccsService,
+    private readonly historico: HistoricoTccsService,
+  ) {}
 
   @Get('usuarios/professores-disponiveis')
   @UseGuards(GuardaJwt)
@@ -162,7 +166,7 @@ export class TccsController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR')
   historicoProfessor(@Req() req: Req) {
-    return this.tccs.historicoProfessor(req.usuario.sub);
+    return this.historico.historicoProfessor(req.usuario.sub);
   }
 
   // Ocultar/mostrar um TCC no histórico do PRÓPRIO usuário (preferência por usuário). NÃO é
@@ -171,14 +175,14 @@ export class TccsController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR', 'COORDENADOR')
   ocultarHistorico(@Req() req: Req, @Param('id') id: string) {
-    return this.tccs.ocultarDoHistorico(req.usuario, id);
+    return this.historico.ocultarDoHistorico(req.usuario, id);
   }
 
   @Delete('tccs/:id/historico/ocultar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR', 'COORDENADOR')
   desocultarHistorico(@Req() req: Req, @Param('id') id: string) {
-    return this.tccs.desocultarDoHistorico(req.usuario, id);
+    return this.historico.desocultarDoHistorico(req.usuario, id);
   }
 
   // Coorientações: visão de leitura dos TCCs em que o usuário é coorientador.
@@ -247,7 +251,7 @@ export class TccsController {
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   historicoCoordenador(@Req() req: Req) {
-    return this.tccs.historicoCoordenador(req.usuario.sub);
+    return this.historico.historicoCoordenador(req.usuario.sub);
   }
 
   @Get('tccs/pendentes')
