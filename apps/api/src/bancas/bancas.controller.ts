@@ -24,9 +24,11 @@ import {
   esquemaAvaliarBanca,
   esquemaEditarAvaliacaoMembro,
   esquemaTrocarAvaliadores,
+  esquemaAgendarDefesa,
   type DadosAvaliarBanca,
   type DadosEditarAvaliacaoMembro,
   type DadosTrocarAvaliadores,
+  type DadosAgendarDefesa,
 } from '@tcc/compartilhado';
 
 // Documento de avaliação da banca: aceita PDF ou Word (.doc, .docx). Valida pela
@@ -141,12 +143,18 @@ export class BancasController {
     return this.bancas.validar(id);
   }
 
-  // Orientador prepara as bancas / libera a avaliação da Fase II (AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2).
-  @Post('tccs/:id/liberar-defesa')
+  // Orientador agenda/edita a defesa (Fase II). Idempotente: repetir o PUT só regrava os
+  // dados. A avaliação é liberada automaticamente quando a data/hora chega — não existe
+  // mais rota que libere a Fase II sem agendamento.
+  @Put('tccs/:id/defesa')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('PROFESSOR')
-  liberarDefesa(@Req() req: Req, @Param('id') id: string) {
-    return this.bancas.liberarDefesa(req.usuario.sub, id);
+  agendarDefesa(
+    @Req() req: Req,
+    @Param('id') id: string,
+    @Body(new ZodValidacaoPipe(esquemaAgendarDefesa)) dados: DadosAgendarDefesa,
+  ) {
+    return this.bancas.agendarDefesa(req.usuario.sub, id, dados);
   }
 
   // ----- Edição administrativa da banca (só coordenador) -----

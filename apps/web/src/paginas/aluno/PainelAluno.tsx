@@ -10,6 +10,7 @@ import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { faseParaIndice, ROTULO_FASE, ROTULO_STATUS_SOLIC, ROTULO_TIPO_DOC, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
+import { CardDefesa } from '../../componentes/CardDefesa';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
   docs.filter((d) => d.tipo === tipo).sort((a, b) => b.versao - a.versao)[0] ?? null;
@@ -188,6 +189,13 @@ export function PainelAluno() {
             <dd>{ROTULO_STATUS_SOLIC[solic?.status] ?? solic?.status}</dd>
           </div>
         </dl>
+
+        {tcc.defesaAgendadaPara && (
+          <>
+            <h3 style={{ marginTop: 18, fontSize: 14 }}>Defesa agendada</h3>
+            <CardDefesa tcc={tcc} />
+          </>
+        )}
 
         <h3 style={{ marginTop: 18, fontSize: 14 }}>Documentos</h3>
         {tcc.documentos?.length ? (

@@ -5,13 +5,13 @@
 // documentos iniciais, monografias, continuidade, versão final e notas.
 // Regras do projeto NOVO:
 //  - a banca da Fase II é o orientador + os 2 avaliadores da Fase I (o orientador
-//    prepara as bancas / libera a avaliação e avalia a Fase II AQUI mesmo, nesta
-//    página do orientando, não em "Participações em bancas");
+//    AGENDA A DEFESA e avalia a Fase II AQUI mesmo, nesta página do orientando; a
+//    avaliação da banca é liberada automaticamente na data/hora marcada);
 //  - a versão final pós-Fase II é validada pelo ORIENTADOR (aqui), não pelo coordenador;
 //  - sem nenhuma etapa de análise final do coordenador.
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
-import { apiGet, apiPost, apiDelete, URL_API, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiPut, apiDelete, URL_API, type ErroApi } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { Modal } from '../../componentes/Modal';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
@@ -22,6 +22,7 @@ import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
+import { CardDefesa } from '../../componentes/CardDefesa';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -80,7 +81,14 @@ export function DetalheOrientando() {
   const [bancasMinhas, setBancasMinhas] = useState<any[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [recusa, setRecusa] = useState<{ tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
-  const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal' | 'liberardefesa'>(null);
+  const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal'>(null);
+  // Agendamento da defesa (Fase II): modal com data/hora/local/comentário.
+  const [agendando, setAgendando] = useState(false);
+  const [defData, setDefData] = useState('');
+  const [defHora, setDefHora] = useState('');
+  const [defLocal, setDefLocal] = useState('');
+  const [defComentario, setDefComentario] = useState('');
+  const [erroDefesa, setErroDefesa] = useState('');
   const [parecer, setParecer] = useState('');
   const [erro, setErro] = useState('');
   const [erroAcao, setErroAcao] = useState('');
@@ -135,7 +143,7 @@ export function DetalheOrientando() {
 
   // Ações positivas diretas (confirmar continuidade / aprovar monografia / aprovar e
   // concluir) passam por um modal de confirmação antes de executar.
-  function pedirConfirmacao(qual: 'continuidade' | 'monografia' | 'versaofinal' | 'liberardefesa') {
+  function pedirConfirmacao(qual: 'continuidade' | 'monografia' | 'versaofinal') {
     setErroAcao('');
     setConfirmarAcao(qual);
   }
@@ -146,12 +154,48 @@ export function DetalheOrientando() {
     try {
       if (confirmarAcao === 'continuidade') await apiPost(`/tccs/${tcc.id}/continuidade`, { decisao: 'CONFIRMAR' });
       else if (confirmarAcao === 'monografia') await apiPost(`/tccs/${tcc.id}/monografia/avaliar`, { decisao: 'APROVAR' });
-      else if (confirmarAcao === 'liberardefesa') await apiPost(`/tccs/${tcc.id}/liberar-defesa`, {});
       else await apiPost(`/tccs/${tcc.id}/validar-versao-final`, { decisao: 'CONCLUIR' });
       setConfirmarAcao(null);
       carregar();
     } catch (e) {
       setErroAcao((e as ErroApi).mensagem || 'Não foi possível concluir a ação.');
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  // Abre o modal de agendamento pré-preenchido (edição) ou vazio (primeiro agendamento).
+  function abrirAgendamento() {
+    const d = tcc?.defesaAgendadaPara ? new Date(tcc.defesaAgendadaPara) : null;
+    setDefData(d ? d.toLocaleDateString('en-CA') : '');
+    setDefHora(d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '');
+    setDefLocal(tcc?.defesaLocal ?? '');
+    setDefComentario(tcc?.defesaComentario ?? '');
+    setErroDefesa('');
+    setAgendando(true);
+  }
+
+  // Salva o agendamento (PUT idempotente). Qualquer data vale — se já passou, o backend
+  // libera a avaliação da Fase II imediatamente; se é futura, libera na hora marcada.
+  async function salvarDefesa() {
+    if (!tcc) return;
+    if (!defData || !defHora) { setErroDefesa('Informe a data e a hora da defesa.'); return; }
+    if (!defLocal.trim()) { setErroDefesa('Informe o local da defesa.'); return; }
+    const quando = new Date(`${defData}T${defHora}`);
+    if (Number.isNaN(quando.getTime())) { setErroDefesa('Data e hora inválidas.'); return; }
+    setErroDefesa('');
+    setEnviando(true);
+    try {
+      await apiPut(`/tccs/${tcc.id}/defesa`, {
+        dataHora: quando.toISOString(),
+        local: defLocal.trim(),
+        comentario: defComentario.trim() || undefined,
+      });
+      setAgendando(false);
+      carregar();
+    } catch (e) {
+      const er = e as ErroApi;
+      setErroDefesa(er.erros?.[0]?.mensagem || er.mensagem || 'Não foi possível salvar o agendamento.');
     } finally {
       setEnviando(false);
     }
@@ -201,7 +245,10 @@ export function DetalheOrientando() {
   // do orientador acontecem AQUI (não em "Participações em bancas").
   const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
   const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
-  const podeAgendarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2';
+  // Agendar/editar a defesa: enquanto aguarda o agendamento OU durante a avaliação
+  // (reagendar depois de liberada só atualiza os dados — nunca regride a fase).
+  const podeEditarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2' || fase === 'AVALIACAO_FASE_2';
+  const mostrarCardDefesa = podeEditarDefesa || !!tcc.defesaAgendadaPara;
   const podeAvaliarFase2 = (fase === 'AVALIACAO_FASE_2' || fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' || fase === 'VALIDACAO_FASE_2') && !!meuMembroF2;
   const avisoPrazo = (rot: string) => <div className="aviso-prazo">⏰ O prazo de {rot} venceu. Peça à coordenação uma liberação individual deste TCC.</div>;
   const coorient = tcc.coorientador
@@ -341,20 +388,43 @@ export function DetalheOrientando() {
         </section>
       )}
 
-      {/* Ação: preparação das bancas da Fase II (orientador). Ao liberar, a avaliação da
-          Fase II é habilitada para os avaliadores. */}
-      {podeAgendarDefesa && (
-        <section id="acao-fase2" className="cartao-secao bloco secao-acao">
-          <h2>{icoBanca} Preparação das bancas (Fase II)</h2>
-          <div className="aviso-cabecalho">
-            <p className="nota-vazio" style={{ margin: 0 }}>
-              Formação das bancas para apresentação. Ao liberar, os avaliadores poderão avaliar a Fase II.
-            </p>
-            <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando preparação</span>
-          </div>
-          <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-            <button className="botao" disabled={enviando} onClick={() => pedirConfirmacao('liberardefesa')}>Liberar avaliação da Fase II</button>
-          </div>
+      {/* Ação: agendamento da defesa (Fase II, orientador). A avaliação da banca é
+          liberada automaticamente quando a data/hora marcada chega. */}
+      {mostrarCardDefesa && (
+        <section id={fase === 'AGENDAMENTO_DEFESA_FASE_2' ? 'acao-fase2' : undefined} className="cartao-secao bloco secao-acao">
+          <h2>{icoBanca} Agendamento da defesa (Fase II)</h2>
+          {tcc.defesaAgendadaPara ? (
+            <>
+              <div className="aviso-cabecalho">
+                <p className="nota-vazio" style={{ margin: 0 }}>
+                  {fase === 'AGENDAMENTO_DEFESA_FASE_2'
+                    ? 'A avaliação da banca será liberada automaticamente na data e hora marcadas.'
+                    : 'A defesa foi liberada — a banca já pode avaliar a Fase II.'}
+                </p>
+                <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>
+                  {fase === 'AGENDAMENTO_DEFESA_FASE_2' ? 'Defesa agendada' : 'Avaliação liberada'}
+                </span>
+              </div>
+              <CardDefesa tcc={tcc} />
+              {podeEditarDefesa && (
+                <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                  <button className="botao botao-secundario" disabled={enviando} onClick={abrirAgendamento}>Editar agendamento</button>
+                </div>
+              )}
+            </>
+          ) : (
+            <>
+              <div className="aviso-cabecalho">
+                <p className="nota-vazio" style={{ margin: 0 }}>
+                  Informe data, hora e local da defesa. A avaliação da banca abre automaticamente no horário marcado (datas já passadas liberam na hora).
+                </p>
+                <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Aguardando agendamento</span>
+              </div>
+              <div className="acoes" style={{ justifyContent: 'flex-start' }}>
+                <button className="botao" disabled={enviando} onClick={abrirAgendamento}>Agendar defesa</button>
+              </div>
+            </>
+          )}
         </section>
       )}
 
@@ -485,17 +555,34 @@ export function DetalheOrientando() {
         />
       )}
 
-      {confirmarAcao === 'liberardefesa' && (
-        <ModalConfirmacao
-          titulo="Liberar avaliação da Fase II"
-          mensagem="Deseja liberar a avaliação da Fase II? O TCC entra em avaliação e os avaliadores serão notificados para avaliar."
-          textoConfirmar="Liberar avaliação"
-          textoProcessando="Liberando…"
-          processando={enviando}
-          erro={erroAcao}
-          aoConfirmar={executarAcao}
-          aoCancelar={() => setConfirmarAcao(null)}
-        />
+      {agendando && (
+        <Modal
+          titulo={tcc.defesaAgendadaPara ? 'Editar agendamento da defesa' : 'Agendar defesa'}
+          subtitulo="A avaliação da banca é liberada automaticamente na data e hora marcadas."
+          aoFechar={() => !enviando && setAgendando(false)}
+        >
+          {erroDefesa && <div className="erro-geral">{erroDefesa}</div>}
+          <label className="campo">
+            <span>Data</span>
+            <input type="date" value={defData} onChange={(e) => setDefData(e.target.value)} />
+          </label>
+          <label className="campo">
+            <span>Hora</span>
+            <input type="time" value={defHora} onChange={(e) => setDefHora(e.target.value)} />
+          </label>
+          <label className="campo">
+            <span>Local (sala ou link HTTPS)</span>
+            <input value={defLocal} onChange={(e) => setDefLocal(e.target.value)} placeholder="Ex.: Auditório do DEE ou https://meet.google.com/…" />
+          </label>
+          <label className="campo">
+            <span>Comentário (opcional)</span>
+            <textarea rows={3} value={defComentario} onChange={(e) => setDefComentario(e.target.value)} placeholder="Orientações para o aluno e a banca…" />
+          </label>
+          <div className="acoes">
+            <button className="botao botao-secundario" disabled={enviando} onClick={() => setAgendando(false)}>Cancelar</button>
+            <button className="botao" disabled={enviando} onClick={salvarDefesa}>{enviando ? 'Salvando…' : 'Salvar agendamento'}</button>
+          </div>
+        </Modal>
       )}
 
       {excluindo && (

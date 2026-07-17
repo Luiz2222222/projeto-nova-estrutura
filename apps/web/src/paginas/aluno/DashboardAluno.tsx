@@ -5,7 +5,7 @@ import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 import { EstadoErro } from '../../componentes/EstadoErro';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
-import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
+import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha, formatarDefesa } from '../../utils/fases';
 import { ROTULO_MARCO, type MarcoCalendario } from '@tcc/compartilhado';
 
 const ultimoDoc = (docs: any[] = [], tipo: string) =>
@@ -77,7 +77,13 @@ function faseMacroSub(tcc: any): { macro: string; sub: string } {
         : 'Aguardando monografia e continuidade';
       return { macro: 'Desenvolvimento', sub };
     }
-    case 'AGENDAMENTO_DEFESA_FASE_2': return { macro: 'Fase II', sub: 'Aguardando preparação das bancas' };
+    case 'AGENDAMENTO_DEFESA_FASE_2':
+      return {
+        macro: 'Fase II',
+        sub: tcc?.defesaAgendadaPara
+          ? `Defesa agendada para ${formatarDefesa(tcc.defesaAgendadaPara)}`
+          : 'Aguardando agendamento da defesa',
+      };
     case 'FORMACAO_BANCA_FASE_1': return { macro: 'Fase I', sub: 'Formação da banca' };
     case 'AVALIACAO_FASE_1': return { macro: 'Fase I', sub: 'Avaliação da banca' };
     case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1': return { macro: 'Fase I', sub: 'Aguardando análise da coordenação' };

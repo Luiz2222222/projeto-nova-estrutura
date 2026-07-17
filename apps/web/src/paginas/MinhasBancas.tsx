@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, URL_API } from '../api';
 import { useAuth } from '../autenticacao/contexto';
 import { ROTULO_FASE } from '../utils/fases';
+import { CardDefesa } from '../componentes/CardDefesa';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -126,6 +127,15 @@ export function MinhasBancas() {
                       <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${doc.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
                       <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${doc.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
                     </span>
+                  </div>
+                )}
+
+                {/* Defesa agendada (Fase II): a banca vê data/local/comentário antes do horário,
+                    mas a avaliação só abre quando a defesa é liberada automaticamente. */}
+                {tcc.defesaAgendadaPara && (
+                  <div style={{ marginTop: 12 }}>
+                    <div className="trilha-titulo" style={{ marginBottom: 6 }}><strong>Defesa (Fase II)</strong></div>
+                    <CardDefesa tcc={tcc} />
                   </div>
                 )}
 

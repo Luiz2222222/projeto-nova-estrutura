@@ -1,9 +1,10 @@
 import { useState } from 'react';
+import { formatarDefesa } from '../utils/fases';
 
 // Timeline vertical detalhada (espelha o projeto antigo): 5 grupos numerados e
 // expansíveis, cada um com seus subestados. Adaptada às regras NOVAS do fluxo:
-//  - Fase II não forma banca nova (é orientador + 2 avaliadores da Fase I): só
-//    Avaliação da banca + Validação da Fase II.
+//  - Fase II não forma banca nova (é orientador + 2 avaliadores da Fase I):
+//    Agendamento da defesa -> Avaliação da banca -> Validação da Fase II.
 //  - Finalização: envio da versão final -> validação do ORIENTADOR -> concluído
 //    (sem "Análise do coordenador final").
 
@@ -25,13 +26,14 @@ const GRUPOS: { num: number; label: string; subs: { i: number; label: string }[]
     { i: 7, label: 'Validação da Fase I' },
   ] },
   { num: 4, label: 'Fase II', subs: [
-    { i: 8, label: 'Avaliação da banca' },
-    { i: 9, label: 'Validação da Fase II' },
+    { i: 8, label: 'Agendamento da defesa' },
+    { i: 9, label: 'Avaliação da banca' },
+    { i: 10, label: 'Validação da Fase II' },
   ] },
   { num: 5, label: 'Finalização', subs: [
-    { i: 10, label: 'Envio da versão final' },
-    { i: 11, label: 'Validação do orientador' },
-    { i: 12, label: 'Concluído' },
+    { i: 11, label: 'Envio da versão final' },
+    { i: 12, label: 'Validação do orientador' },
+    { i: 13, label: 'Concluído' },
   ] },
 ];
 
@@ -77,15 +79,17 @@ function dataRealDoSub(tcc: any, i: number): string | null {
       return fmtDataBR(avaliacaoBanca('FASE_1'));
     case 7: // Validação da Fase I
       return fmtDataBR(tcc?.fase1ValidadaEm);
-    case 8: // Avaliação da banca (Fase II)
+    case 8: // Agendamento da defesa — mostra a data/hora REAL da defesa marcada
+      return tcc?.defesaAgendadaPara ? formatarDefesa(tcc.defesaAgendadaPara) : null;
+    case 9: // Avaliação da banca (Fase II)
       return fmtDataBR(avaliacaoBanca('FASE_2'));
-    case 9: // Validação da Fase II
+    case 10: // Validação da Fase II
       return fmtDataBR(tcc?.fase2ValidadaEm);
-    case 10: // Envio da versão final
+    case 11: // Envio da versão final
       return fmtDataBR(ultimaDoc('VERSAO_FINAL')?.criadoEm);
-    case 11: // Validação do orientador
+    case 12: // Validação do orientador
       return fmtDataBR(tcc?.versaoFinalValidadaEm);
-    case 12: // Concluído
+    case 13: // Concluído
       return fmtDataBR(tcc?.concluidoEm);
     default:
       return null;
@@ -106,13 +110,13 @@ function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: 
   }
   const mapa: Record<string, number> = {
     FORMACAO_BANCA_FASE_1: 5, AVALIACAO_FASE_1: 6, AGUARDANDO_ANALISE_COORDENACAO_FASE_1: 7, VALIDACAO_FASE_1: 7,
-    AGENDAMENTO_DEFESA_FASE_2: 8, AVALIACAO_FASE_2: 8, AGUARDANDO_ANALISE_COORDENACAO_FASE_2: 9, VALIDACAO_FASE_2: 9,
-    AGUARDANDO_AJUSTES_FINAIS: 10, VALIDACAO_VERSAO_FINAL: 11,
+    AGENDAMENTO_DEFESA_FASE_2: 8, AVALIACAO_FASE_2: 9, AGUARDANDO_ANALISE_COORDENACAO_FASE_2: 10, VALIDACAO_FASE_2: 10,
+    AGUARDANDO_AJUSTES_FINAIS: 11, VALIDACAO_VERSAO_FINAL: 12,
   };
   if (f in mapa) return { indice: mapa[f], problema: false, concluido: false };
-  if (f === 'CONCLUIDO') return { indice: 12, problema: false, concluido: true };
+  if (f === 'CONCLUIDO') return { indice: 13, problema: false, concluido: true };
   if (f === 'REPROVADO_FASE_1') return { indice: 7, problema: true, concluido: false };
-  if (f === 'REPROVADO_FASE_2') return { indice: 9, problema: true, concluido: false };
+  if (f === 'REPROVADO_FASE_2') return { indice: 10, problema: true, concluido: false };
   if (f === 'DESCONTINUADO') return { indice: 4, problema: true, concluido: false };
   return { indice: 0, problema: false, concluido: false };
 }

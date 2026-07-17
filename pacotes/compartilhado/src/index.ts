@@ -371,6 +371,25 @@ export const esquemaTrocarAvaliadores = z.object({
 });
 export type DadosTrocarAvaliadores = z.infer<typeof esquemaTrocarAvaliadores>;
 
+// ---------- Agendamento da defesa (Fase II, pelo orientador) ----------
+
+// Data/hora em ISO (armazenada em UTC no backend; pode ser passada — aí a avaliação
+// libera na hora). Local obrigatório: texto livre OU link — se for link, só HTTPS.
+export const esquemaAgendarDefesa = z.object({
+  dataHora: z
+    .string()
+    .min(1, 'Informe a data e a hora da defesa')
+    .refine((v) => !Number.isNaN(new Date(v).getTime()), 'Data e hora inválidas'),
+  local: z
+    .string()
+    .trim()
+    .min(1, 'Informe o local da defesa')
+    .max(300, 'Local muito longo (máximo 300 caracteres)')
+    .refine((v) => !/^http:\/\//i.test(v), 'Se o local for um link, use HTTPS'),
+  comentario: z.string().trim().max(1000, 'Comentário muito longo (máximo 1000 caracteres)').optional(),
+});
+export type DadosAgendarDefesa = z.infer<typeof esquemaAgendarDefesa>;
+
 // ---------- Conclusão (validação da versão final pelo orientador) ----------
 
 export const esquemaAnaliseFinal = z
@@ -427,7 +446,7 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'orientador_monografia_enviada', rotulo: 'Aluno enviou/reenviou monografia', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_confirmar_continuidade', rotulo: 'Precisa confirmar continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_banca_formada', rotulo: 'Banca da Fase I formada', grupo: 'Orientação', papeis: ['PROFESSOR'] },
-  { chave: 'orientador_agendar_defesa', rotulo: 'Preparar as bancas / liberar a avaliação da Fase II', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  { chave: 'orientador_agendar_defesa', rotulo: 'Agendar a defesa (Fase II)', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_enviada', rotulo: 'Aluno enviou versão final', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_reenviada', rotulo: 'Versão final reenviada após ajustes', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   // Coordenador
@@ -443,10 +462,12 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   // Avaliadores / membros da banca (professor ou avaliador)
   { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase1_liberada', rotulo: 'Avaliação da Fase I liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
-  { chave: 'avaliador_adicionado_fase2', rotulo: 'Adicionado à banca da Fase II', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase2_liberada', rotulo: 'Avaliação da Fase II liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_ajuste_solicitado', rotulo: 'Coordenação solicitou ajuste na sua avaliação', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_ajuste_cancelado', rotulo: 'Solicitação de ajuste cancelada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  // Defesa (Fase II): agendada/reagendada pelo orientador — vai para aluno, coorientador,
+  // coordenadores e membros da banca da Fase II.
+  { chave: 'defesa_agendada', rotulo: 'Defesa agendada ou reagendada', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR', 'COORDENADOR'] },
   // Progresso da fase (aluno + orientador + membros da banca)
   { chave: 'fase_avaliacoes_concluidas', rotulo: 'Avaliações da banca concluídas (segue para análise)', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR'] },
   { chave: 'fase_analise_iniciada', rotulo: 'Coordenação iniciou a análise das avaliações', grupo: 'Banca', papeis: ['ALUNO', 'PROFESSOR', 'AVALIADOR'] },

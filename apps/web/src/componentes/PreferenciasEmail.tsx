@@ -21,7 +21,7 @@ const DESC_EVENTO: Record<string, string> = {
   orientador_monografia_enviada: 'Quando um orientando enviar ou reenviar a monografia.',
   orientador_confirmar_continuidade: 'Lembrete para confirmar a continuidade de um orientando.',
   orientador_banca_formada: 'Quando a banca da Fase I de um orientando for formada.',
-  orientador_agendar_defesa: 'Quando a Fase I for aprovada e você precisar preparar as bancas / liberar a avaliação da Fase II.',
+  orientador_agendar_defesa: 'Quando a Fase I for aprovada e você precisar agendar a defesa (Fase II).',
   orientador_versao_final_enviada: 'Quando um orientando enviar a versão final.',
   orientador_versao_final_reenviada: 'Quando a versão final for reenviada após ajustes.',
   coord_nova_solicitacao: 'Quando houver uma nova solicitação aguardando análise.',
@@ -33,8 +33,8 @@ const DESC_EVENTO: Record<string, string> = {
   coord_tcc_concluido: 'Quando um TCC for concluído (versão final validada pelo orientador).',
   avaliador_adicionado_fase1: 'Quando você for adicionado a uma banca da Fase I.',
   avaliador_fase1_liberada: 'Quando a avaliação da Fase I for liberada para você.',
-  avaliador_adicionado_fase2: 'Quando você for adicionado a uma banca da Fase II.',
-  avaliador_fase2_liberada: 'Quando a avaliação da Fase II for liberada para você.',
+  avaliador_fase2_liberada: 'Quando a defesa acontecer e a avaliação da Fase II for liberada para você.',
+  defesa_agendada: 'Quando a defesa de um TCC que envolve você for agendada ou reagendada.',
   avaliador_ajuste_solicitado: 'Quando a coordenação solicitar um ajuste na sua avaliação.',
   avaliador_ajuste_cancelado: 'Quando a coordenação cancelar uma solicitação de ajuste.',
   fase_avaliacoes_concluidas: 'Quando todos os membros enviarem as avaliações e a fase seguir para análise.',
@@ -51,7 +51,7 @@ const DESC_EVENTO: Record<string, string> = {
 const CHAVES_BANCA = [
   'avaliador_adicionado_fase1',
   'avaliador_fase1_liberada',
-  'avaliador_adicionado_fase2',
+  'defesa_agendada',
   'avaliador_fase2_liberada',
   'avaliador_ajuste_solicitado',
   'avaliador_ajuste_cancelado',
@@ -65,7 +65,7 @@ const GRUPOS_EXIBICAO: Record<string, [string, string[]][]> = {
   ALUNO: [
     ['Abertura', ['aluno_solicitacao_aprovada', 'aluno_solicitacao_recusada']],
     ['Desenvolvimento', ['aluno_monografia_aprovada', 'aluno_monografia_rejeitada', 'aluno_continuidade_confirmada', 'aluno_continuidade_rejeitada']],
-    ['Bancas e avaliação', ['aluno_banca_fase1_formada', 'fase_avaliacoes_concluidas', 'fase_analise_iniciada', 'fase_validada', 'aluno_resultado_fase1', 'aluno_resultado_fase2']],
+    ['Bancas e avaliação', ['aluno_banca_fase1_formada', 'fase_avaliacoes_concluidas', 'fase_analise_iniciada', 'fase_validada', 'aluno_resultado_fase1', 'defesa_agendada', 'aluno_resultado_fase2']],
     ['Conclusão', ['aluno_versao_final_solicitada', 'aluno_versao_final_rejeitada', 'aluno_tcc_concluido']],
   ],
   PROFESSOR: [
@@ -80,7 +80,7 @@ const GRUPOS_EXIBICAO: Record<string, [string, string[]][]> = {
   COORDENADOR: [
     ['Abertura', ['coord_nova_solicitacao']],
     ['Desenvolvimento', ['coord_continuidade']],
-    ['Bancas e avaliação', ['coord_formar_banca_fase1', 'coord_validar_fase1', 'coord_validar_fase2', 'coord_avaliacao_reenviada']],
+    ['Bancas e avaliação', ['coord_formar_banca_fase1', 'coord_validar_fase1', 'defesa_agendada', 'coord_validar_fase2', 'coord_avaliacao_reenviada']],
     ['Conclusão', ['coord_tcc_concluido']],
   ],
 };

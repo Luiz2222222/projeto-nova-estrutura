@@ -166,6 +166,15 @@ model Tcc {
   nf        Float?
   resultado String?
 
+  // Agendamento da defesa (Fase II): o orientador marca data/hora (UTC), local e comentário.
+  // A avaliação da banca abre automaticamente quando o horário chega; a liberação é
+  // idempotente (registrada em defesaLiberadaEm — nunca regride nem notifica duas vezes).
+  defesaAgendadaPara DateTime?
+  defesaLocal        String?
+  defesaComentario   String?
+  defesaAgendadaEm   DateTime?
+  defesaLiberadaEm   DateTime?
+
   // Datas REAIS em que cada ato do fluxo aconteceu (preenchidas no momento da ação).
   // Usadas pela timeline. Ficam null para registros antigos (não há data confiável).
   monografiaAprovadaEm   DateTime?

@@ -8,7 +8,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, apiUpload, apiDelete, URL_API, type ErroApi } from '../../api';
-import { ROTULO_FASE } from '../../utils/fases';
+import { ROTULO_FASE, formatarDefesa } from '../../utils/fases';
+import { CardDefesa } from '../../componentes/CardDefesa';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
@@ -313,7 +314,11 @@ export function TccDetalheCoordenador() {
       if (fase === 'REPROVADO_FASE_1') return { rotulo: 'Reprovada', classe: 'status-urgente' };
       return { rotulo: 'Validada', classe: 'status-normal' };
     }
-    if (fase === 'AGENDAMENTO_DEFESA_FASE_2') return { rotulo: 'Aguardando preparação das bancas', classe: 'status-atencao' };
+    if (fase === 'AGENDAMENTO_DEFESA_FASE_2') {
+      return tcc?.defesaAgendadaPara
+        ? { rotulo: `Defesa agendada — ${formatarDefesa(tcc.defesaAgendadaPara)}`, classe: 'status-atencao' }
+        : { rotulo: 'Aguardando agendamento da defesa', classe: 'status-atencao' };
+    }
     if (fase === 'AVALIACAO_FASE_2') return { rotulo: 'Avaliação da banca', classe: 'status-atencao' };
     if (fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2') return { rotulo: 'Aguardando análise', classe: 'status-atencao' };
     if (fase === 'VALIDACAO_FASE_2') return { rotulo: 'Em análise da coordenação', classe: 'status-atencao' };
@@ -346,6 +351,14 @@ export function TccDetalheCoordenador() {
 
       {/* Notas Finais (topo) — coordenador vê as notas (incl. estimativa antes da confirmação). */}
       <CardNotasFinais tcc={tcc} coordenador pesoF1={pesoF1c} pesoF2={pesoF2c} />
+
+      {/* Defesa agendada (Fase II) — informações visíveis à coordenação. */}
+      {tcc.defesaAgendadaPara && (
+        <section className="cartao-secao bloco">
+          <h2>Defesa (Fase II)</h2>
+          <CardDefesa tcc={tcc} />
+        </section>
+      )}
 
       {/* Informações gerais — aluno e orientação */}
       <div className="grade-detalhe bloco">

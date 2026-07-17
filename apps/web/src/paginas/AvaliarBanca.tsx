@@ -7,6 +7,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { apiGet, URL_API } from '../api';
 import { useAuth } from '../autenticacao/contexto';
 import { AvaliacaoBancaForm } from '../componentes/AvaliacaoBancaForm';
+import { CardDefesa } from '../componentes/CardDefesa';
 import { ROTULO_FASE } from '../utils/fases';
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota } from '@tcc/compartilhado';
 
@@ -95,6 +96,11 @@ export function AvaliarBanca() {
           <div className="info-campo"><span className="info-rotulo">Aluno</span><span className="info-valor">{ehF2 ? (tcc.aluno?.nomeCompleto ?? '—') : 'Anônimo — avaliação às cegas'}</span></div>
           <div className="info-campo"><span className="info-rotulo">Fase atual</span><span className="info-valor">{ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}</span></div>
         </div>
+        {ehF2 && tcc.defesaAgendadaPara && (
+          <div style={{ marginBottom: 14 }}>
+            <CardDefesa tcc={tcc} />
+          </div>
+        )}
         {doc ? (
           <div className="item-arquivo">
             <div className="item-arquivo-info">

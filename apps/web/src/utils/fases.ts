@@ -20,6 +20,17 @@ export const ROTULO_TIPO_DOC: Record<string, string> = {
   AVALIACAO_BANCA: 'Documento para avaliação (banca)',
 };
 
+// Data/hora da defesa em pt-BR no fuso oficial do curso (America/Fortaleza); o backend
+// armazena em UTC. Usada nos status, cards e timeline.
+export function formatarDefesa(iso?: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const data = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  return `${data} às ${hora}`;
+}
+
 // A versão final só entra depois da Fase II aprovada (TCC vai para AGUARDANDO_AJUSTES_FINAIS),
 // segue para validação do orientador e conclusão. Antes disso ela não deve aparecer.
 export const FASES_VERSAO_FINAL = ['AGUARDANDO_AJUSTES_FINAIS', 'VALIDACAO_VERSAO_FINAL', 'CONCLUIDO'];
@@ -73,7 +84,10 @@ export function subfaseTcc(tcc: any): string {
     case 'AVALIACAO_FASE_1': return 'Avaliação da banca';
     case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1': return 'Aguardando análise da coordenação';
     case 'VALIDACAO_FASE_1': return 'Validação da Fase I';
-    case 'AGENDAMENTO_DEFESA_FASE_2': return 'Aguardando preparação das bancas';
+    case 'AGENDAMENTO_DEFESA_FASE_2':
+      return tcc?.defesaAgendadaPara
+        ? `Defesa agendada para ${formatarDefesa(tcc.defesaAgendadaPara)}`
+        : 'Aguardando agendamento da defesa';
     case 'AVALIACAO_FASE_2': return 'Avaliação da banca';
     case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2': return 'Aguardando análise da coordenação';
     case 'VALIDACAO_FASE_2': return 'Validação da Fase II';

@@ -23,7 +23,16 @@ import {
   soma,
   arquivoPermitidoParaTipo,
   formatoDoTipoDoc,
+  type DadosAgendarDefesa,
 } from '@tcc/compartilhado';
+
+// Data/hora da defesa nos avisos: sempre pt-BR no fuso oficial do curso (America/Fortaleza);
+// no banco a data fica em UTC.
+function formatarDefesa(d: Date): string {
+  const data = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', day: '2-digit', month: '2-digit', year: 'numeric' }).format(d);
+  const hora = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Fortaleza', hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  return `${data} às ${hora}`;
+}
 
 @Injectable()
 export class BancasService {
@@ -891,11 +900,11 @@ export class BancasService {
         return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
       }
       // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
-      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador liberar a avaliação da Fase II. A nota final ainda não foi confirmada.`);
-      // Só o ORIENTADOR é avisado agora — para preparar as bancas / liberar a avaliação. Os
-      // avaliadores só recebem ação/notificação depois que a avaliação for liberada.
-      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Preparar as bancas (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Prepare as bancas / libere a avaliação da Fase II na página do orientando para habilitar a avaliação da banca.`, `/professor/orientandos/${tccId}#acao-fase2`);
-      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda a preparação das bancas da Fase II.`);
+      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador agendar a defesa da Fase II. A nota final ainda não foi confirmada.`);
+      // Só o ORIENTADOR é avisado agora — para agendar a defesa. Os avaliadores recebem
+      // aviso quando a defesa for agendada e ação quando a avaliação for liberada.
+      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Agendar defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Agende a defesa na página do orientando — a avaliação da banca será liberada automaticamente na data marcada.`, `/professor/orientandos/${tccId}#acao-fase2`);
+      await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda o agendamento da defesa (Fase II).`);
       await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
       return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
     }
@@ -913,32 +922,118 @@ export class BancasService {
     return { ok: true, fase: r.fase, nf2: r.nf2, nf: r.nf, aprovado: r.aprovado };
   }
 
-  // Orientador libera a avaliação da Fase II: AGENDAMENTO_DEFESA_FASE_2 → AVALIACAO_FASE_2.
-  // Só o orientador do TCC. A partir daqui os AVALIADORES (não o orientador) recebem a ação.
-  async liberarDefesa(profId: string, tccId: string) {
+  // ----- Agendamento da defesa (Fase II) -----
+
+  // Orientador agenda (ou reagenda) a defesa: data/hora + local + comentário. Pode marcar
+  // QUALQUER data, inclusive passada — o calendário não bloqueia o agendamento (ele segue
+  // valendo só como prazo final do envio das avaliações da Fase II). Data já vencida →
+  // avaliação liberada imediatamente; data futura → o agendador libera na hora marcada.
+  // Reagendar após a liberação só atualiza os dados e avisa todo mundo — NUNCA regride a
+  // fase nem volta a bloquear avaliações.
+  async agendarDefesa(profId: string, tccId: string, dados: DadosAgendarDefesa) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
-    if (tcc.faseAtual !== 'AGENDAMENTO_DEFESA_FASE_2') {
-      throw new BadRequestException({ mensagem: 'A avaliação da Fase II só pode ser liberada após a Fase I ser validada e antes de iniciar a avaliação.' });
+    if (!['AGENDAMENTO_DEFESA_FASE_2', 'AVALIACAO_FASE_2'].includes(tcc.faseAtual)) {
+      throw new BadRequestException({ mensagem: 'A defesa só pode ser agendada ou alterada entre a validação da Fase I e o fim da avaliação da Fase II.' });
     }
+    // Guarda: sem banca da Fase II (ou sem membros) a liberação deixaria o TCC preso em
+    // AVALIACAO_FASE_2 sem avaliadores. validar() da Fase I cria a banca; isto barra
+    // estados vindos de mexida administrativa/manual.
     const banca = await this.prisma.banca.findUnique({
       where: { tccId_fase: { tccId, fase: 'FASE_2' } },
-      include: { membros: { include: { avaliador: { select: { id: true, papel: true } } } } },
+      include: { membros: true },
     });
-    // Guarda: sem banca da Fase II (ou sem membros) a fase avançaria SEM avaliadores e o TCC
-    // ficaria preso em AVALIACAO_FASE_2. Não deve acontecer no fluxo normal (validar() da
-    // Fase I cria a banca), mas barra estados vindos de mexida administrativa/manual.
     if (!banca || banca.membros.length === 0) {
-      throw new BadRequestException({ mensagem: 'A banca da Fase II não está formada — peça à coordenação para corrigir a banca antes de liberar a avaliação.' });
+      throw new BadRequestException({ mensagem: 'A banca da Fase II não está formada — peça à coordenação para corrigir a banca antes de agendar a defesa.' });
     }
-    await this.prisma.tcc.update({ where: { id: tccId }, data: { faseAtual: 'AVALIACAO_FASE_2' } });
-    // Notifica os avaliadores (exceto o orientador) com link DIRETO para a avaliação.
-    for (const m of banca?.membros ?? []) {
-      if (m.avaliadorId === tcc.orientadorId) continue;
+    const quando = new Date(dados.dataHora); // ISO → UTC no banco
+    const reagendamento = !!tcc.defesaAgendadaEm;
+    await this.prisma.tcc.update({
+      where: { id: tccId },
+      data: {
+        defesaAgendadaPara: quando,
+        defesaLocal: dados.local,
+        defesaComentario: dados.comentario?.trim() ? dados.comentario.trim() : null,
+        defesaAgendadaEm: new Date(),
+      },
+    });
+    await this.notificarDefesaAgendada(tccId, reagendamento);
+    const liberadaAgora = await this.liberarDefesaSeVencida(tccId);
+    return { ok: true, liberada: liberadaAgora || tcc.faseAtual === 'AVALIACAO_FASE_2' };
+  }
+
+  // Liberação automática e IDEMPOTENTE da avaliação da Fase II: um único updateMany
+  // condicional (fase + defesaLiberadaEm null + horário vencido) garante que agendador,
+  // reagendamento e requisições simultâneas nunca liberem nem notifiquem duas vezes.
+  async liberarDefesaSeVencida(tccId: string): Promise<boolean> {
+    const agora = new Date();
+    const r = await this.prisma.tcc.updateMany({
+      where: {
+        id: tccId,
+        excluidoEm: null,
+        faseAtual: 'AGENDAMENTO_DEFESA_FASE_2',
+        defesaLiberadaEm: null,
+        defesaAgendadaPara: { lte: agora },
+      },
+      data: { faseAtual: 'AVALIACAO_FASE_2', defesaLiberadaEm: agora },
+    });
+    if (r.count !== 1) return false;
+    await this.notificarDefesaLiberada(tccId);
+    return true;
+  }
+
+  // Varredura das defesas com horário vencido — chamada pelo agendador na inicialização
+  // e a cada minuto, para liberar mesmo sem ninguém com a tela aberta.
+  async liberarDefesasVencidas(): Promise<number> {
+    const pendentes = await this.prisma.tcc.findMany({
+      where: { excluidoEm: null, faseAtual: 'AGENDAMENTO_DEFESA_FASE_2', defesaLiberadaEm: null, defesaAgendadaPara: { lte: new Date() } },
+      select: { id: true },
+    });
+    let liberadas = 0;
+    for (const t of pendentes) if (await this.liberarDefesaSeVencida(t.id)) liberadas += 1;
+    return liberadas;
+  }
+
+  // Avisos do agendamento/reagendamento: aluno, coorientador INTERNO (externo não tem
+  // conta nem e-mail), coordenadores e todos os membros da banca F2 (inclui o orientador),
+  // cada um UMA vez, com link para a própria área. Sem notas em nenhuma mensagem.
+  private async notificarDefesaAgendada(tccId: string, reagendamento: boolean) {
+    const tcc = await this.prisma.tcc.findUnique({
+      where: { id: tccId },
+      include: { bancas: { where: { fase: 'FASE_2' }, include: { membros: { include: { avaliador: { select: { id: true, papel: true } } } } } } },
+    });
+    if (!tcc?.defesaAgendadaPara) return;
+    const titulo = reagendamento ? 'Defesa reagendada' : 'Defesa agendada';
+    const detalhes =
+      `Defesa do TCC "${tcc.titulo}" agendada para ${formatarDefesa(tcc.defesaAgendadaPara)}. Local: ${tcc.defesaLocal}.` +
+      (tcc.defesaComentario ? ` Comentário: ${tcc.defesaComentario}` : '');
+    const enviados = new Set<string>();
+    const enviar = async (uid: string | null | undefined, link: string) => {
+      if (!uid || enviados.has(uid)) return;
+      enviados.add(uid);
+      await this.eventos.emitirParaUsuario('defesa_agendada', uid, titulo, detalhes, link);
+    };
+    await enviar(tcc.alunoId, '/aluno/meu-tcc');
+    await enviar(tcc.coorientadorId, '/coorientacoes');
+    for (const m of tcc.bancas[0]?.membros ?? []) {
+      const link = m.avaliadorId === tcc.orientadorId
+        ? `/professor/orientandos/${tcc.id}`
+        : `${m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas'}/${m.id}`;
+      await enviar(m.avaliadorId, link);
+    }
+    await this.eventos.emitirParaCoordenadores('defesa_agendada', titulo, detalhes, `/coordenador/tccs/${tcc.id}`);
+  }
+
+  // A banca é avisada de que a avaliação abriu (sem notas), com link direto por membro.
+  private async notificarDefesaLiberada(tccId: string) {
+    const tcc = await this.prisma.tcc.findUnique({
+      where: { id: tccId },
+      include: { bancas: { where: { fase: 'FASE_2' }, include: { membros: { include: { avaliador: { select: { id: true, papel: true } } } } } } },
+    });
+    if (!tcc) return;
+    for (const m of tcc.bancas[0]?.membros ?? []) {
       const base = m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
-      await this.eventos.emitirParaUsuario('avaliador_adicionado_fase2', m.avaliadorId, 'Você está na banca da Fase II', `Você integra a banca da Fase II do TCC "${tcc.titulo}".`, `${base}/${m.id}`);
-      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A avaliação da Fase II do TCC "${tcc.titulo}" foi liberada — você já pode avaliar.`, `${base}/${m.id}`);
+      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" aconteceu — a avaliação da Fase II está liberada, você já pode avaliar.`, `${base}/${m.id}`);
     }
-    return { ok: true };
   }
 }
