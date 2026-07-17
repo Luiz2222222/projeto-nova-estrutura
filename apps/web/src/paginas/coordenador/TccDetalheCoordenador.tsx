@@ -303,6 +303,10 @@ export function TccDetalheCoordenador() {
   const faseIIouDepois = fasesFaseIIouDepois.includes(fase);
   const faseCardAtiva = faseIIouDepois ? 'FASE_2' : 'FASE_1';
   const bancasOrdenadas = faseIIouDepois ? [...bancas].reverse() : bancas;
+  // Membros da banca da fase ativa para o card de Orientação (sem o orientador, que já
+  // aparece na linha própria). Antes de formar a banca, a linha "Banca" nem aparece.
+  const bancaAtivaCard = (tcc.bancas ?? []).find((b: any) => b.fase === faseCardAtiva);
+  const membrosBancaCard = (bancaAtivaCard?.membros ?? []).filter((m: any) => m.avaliadorId !== tcc.orientadorId);
 
   // Status (rótulo + cor) do card de cada fase, conforme a fase atual do TCC.
   function statusFaseCard(bancaFase: 'FASE_1' | 'FASE_2'): { rotulo: string; classe: string } {
@@ -376,6 +380,16 @@ export function TccDetalheCoordenador() {
           <div className="info-lista">
             <div className="info-campo"><span className="info-rotulo">Orientador</span><span className="info-valor">{nomeComTrat(tcc.orientador)}</span></div>
             <div className="info-campo"><span className="info-rotulo">Coorientador</span><span className="info-valor">{coorient ?? 'Sem coorientador'}</span></div>
+            {membrosBancaCard.length > 0 && (
+              <div className="info-campo">
+                <span className="info-rotulo">Banca</span>
+                <span className="info-valor">
+                  {membrosBancaCard.map((m: any) => (
+                    <span key={m.id} style={{ display: 'block' }}>{nomeComTrat(m.avaliador)}</span>
+                  ))}
+                </span>
+              </div>
+            )}
           </div>
         </section>
         {descricao && (

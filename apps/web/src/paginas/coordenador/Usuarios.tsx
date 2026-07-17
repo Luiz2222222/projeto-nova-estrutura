@@ -265,7 +265,7 @@ export function Usuarios() {
       {resetando && (
         <Modal titulo="Resetar senha" subtitulo={resetando.nomeCompleto} aoFechar={() => !salvando && setResetando(null)}>
           {erroReset && <div className="erro-geral">{erroReset}</div>}
-          <label className="campo"><span>Nova senha</span><input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 6 caracteres" /></label>
+          <label className="campo"><span>Nova senha</span><input type="password" autoFocus value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 6 caracteres" /></label>
           <label className="campo"><span>Confirmar senha</span><input type="password" value={confirmar} onChange={(e) => setConfirmar(e.target.value)} /></label>
           <div className="acoes">
             <button className="botao botao-secundario" disabled={salvando} onClick={() => setResetando(null)}>Cancelar</button>

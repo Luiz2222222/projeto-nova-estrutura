@@ -1403,10 +1403,10 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 /* Valor somente leitura (ex.: notas finais calculadas) com aparência de campo desabilitado */
 .campo-leitura { padding: 9px 12px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); color: var(--tinta-2); font-weight: 600; min-height: 20px; }
 
-/* Card com as informações da defesa agendada (Fase II) */
-.defesa-info { display: flex; flex-direction: column; gap: 8px; padding: 12px 14px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); }
-.defesa-linha { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
-.defesa-rotulo { flex: 0 0 96px; font-size: 12px; font-weight: 600; color: var(--tinta-3); text-transform: uppercase; letter-spacing: 0.03em; }
+/* Card com as informações da defesa agendada (Fase II): rótulo em cima, valor embaixo. */
+.defesa-info { display: flex; flex-direction: column; gap: 14px; padding: 14px 16px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); }
+.defesa-linha { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.defesa-rotulo { font-size: 11px; font-weight: 600; color: var(--tinta-3); text-transform: uppercase; letter-spacing: 0.04em; }
 .defesa-valor { font-size: 14px; color: var(--tinta-1); overflow-wrap: anywhere; }
 a.defesa-valor { color: var(--azul-forte); text-decoration: underline; }
 /* Botão compacto "Adicionar documento", abaixo da lista de documentos do TCC */

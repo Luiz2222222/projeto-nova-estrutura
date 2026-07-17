@@ -410,16 +410,14 @@ export function DetalheOrientando() {
           <h2>{icoBanca} Agendamento da defesa (Fase II)</h2>
           {tcc.defesaAgendadaPara ? (
             <>
-              <div className="aviso-cabecalho">
-                <p className="nota-vazio" style={{ margin: 0 }}>
-                  {fase === 'AGENDAMENTO_DEFESA_FASE_2'
-                    ? 'A avaliação da banca será liberada automaticamente na data e hora marcadas.'
-                    : 'A defesa foi liberada — a banca já pode avaliar a Fase II.'}
-                </p>
-                <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>
-                  {fase === 'AGENDAMENTO_DEFESA_FASE_2' ? 'Defesa agendada' : 'Avaliação liberada'}
-                </span>
-              </div>
+              {fase === 'AGENDAMENTO_DEFESA_FASE_2' && (
+                <div className="aviso-cabecalho">
+                  <p className="nota-vazio" style={{ margin: 0 }}>
+                    A avaliação da banca será liberada automaticamente na data e hora marcadas.
+                  </p>
+                  <span className="selo" style={{ background: 'var(--inset)', color: 'var(--tinta-3)' }}>Defesa agendada</span>
+                </div>
+              )}
               <CardDefesa tcc={tcc} />
               {podeEditarDefesa && (
                 <div className="acoes" style={{ justifyContent: 'flex-start' }}>
