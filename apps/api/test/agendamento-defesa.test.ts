@@ -224,13 +224,26 @@ describe('7 — Reagendamento após a liberação nunca regride', () => {
     expect(chamadas.filter((c) => c.evento === 'avaliador_fase2_liberada')).toHaveLength(3);
   });
 
-  it('em fases posteriores (ex.: análise da coordenação) ainda pode alterar, sem mexer na fase', async () => {
+  it('em fases posteriores (ex.: análise da coordenação) ainda pode alterar uma defesa JÁ marcada, sem mexer na fase', async () => {
     const { tcc, orientador } = await cenario(true, 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2');
+    // Defesa que existiu de verdade (marcada e liberada quando o TCC passou pela Fase II).
+    await prisma.tcc.update({
+      where: { id: tcc.id },
+      data: { defesaAgendadaPara: new Date(Date.now() - 3 * 60 * 60 * 1000), defesaAgendadaEm: new Date(), defesaLiberadaEm: new Date(), defesaLocal: 'Sala antiga' },
+    });
     await bancas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia(), { local: 'Sala corrigida' }));
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AGUARDANDO_ANALISE_COORDENACAO_FASE_2'); // não regride nem avança
     expect(dep?.defesaLocal).toBe('Sala corrigida');
-    expect(dep?.defesaLiberadaEm).toBeNull(); // não "libera" um TCC que já passou da avaliação
+  });
+
+  it('fase posterior SEM defesa marcada recusa o "primeiro agendamento" por API direta', async () => {
+    const { tcc, orientador } = await cenario(true, 'CONCLUIDO');
+    await expect(bancas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy((e: any) =>
+      /não está aguardando agendamento/.test(e?.getResponse?.()?.mensagem ?? ''),
+    );
+    // Nenhum aviso indevido disparado.
+    expect(chamadas.filter((c) => c.evento === 'defesa_agendada')).toHaveLength(0);
   });
 });
 

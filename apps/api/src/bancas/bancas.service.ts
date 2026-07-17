@@ -933,9 +933,14 @@ export class BancasService {
   async agendarDefesa(profId: string, tccId: string, dados: DadosAgendarDefesa) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
-    // SEM trava de fase aqui: o orientador pode alterar o agendamento QUANDO QUISER
-    // (inclusive com o TCC já em análise/validação da coordenação). A alteração nunca
-    // regride a fase — a liberação só dispara se o TCC ainda estiver aguardando.
+    // PRIMEIRO agendamento: só na fase própria (AGENDAMENTO_DEFESA_FASE_2). Depois disso o
+    // orientador pode ALTERAR quando quiser (inclusive em análise/validação da coordenação),
+    // mas SOMENTE se já existe defesa marcada — barra chamada direta à API "inventando"
+    // defesa em TCC concluído/reprovado que nunca teve uma (dispararia avisos indevidos).
+    // A alteração nunca regride a fase — a liberação só dispara se o TCC ainda aguarda.
+    if (tcc.faseAtual !== 'AGENDAMENTO_DEFESA_FASE_2' && !tcc.defesaAgendadaPara) {
+      throw new BadRequestException({ mensagem: 'Este TCC não está aguardando agendamento e não tem defesa marcada para alterar.' });
+    }
     // Guarda: sem banca da Fase II (ou sem membros) a liberação deixaria o TCC preso em
     // AVALIACAO_FASE_2 sem avaliadores. validar() da Fase I cria a banca; isto barra
     // estados vindos de mexida administrativa/manual.
