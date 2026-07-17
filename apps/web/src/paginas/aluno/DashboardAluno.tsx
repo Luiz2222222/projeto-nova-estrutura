@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { apiGet, URL_API, ehNaoAutorizado } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
+import { CardDefesa } from '../../componentes/CardDefesa';
 import { EstadoErro } from '../../componentes/EstadoErro';
 import { ModalEnviarPdf } from '../../componentes/ModalEnviarPdf';
 import { faseParaIndice, ROTULO_FASE, ROTULO_TIPO_DOC, mostrarVersaoFinal, subfaseTcc, notasTrilhaTcc, chipsTrilha, formatarDefesa } from '../../utils/fases';
@@ -384,6 +385,15 @@ export function DashboardAluno() {
               <TrilhaFases atual={idx} sub={subfaseTcc(tcc)} chips={chipsTrilha(tcc)} notas={notasTrilhaTcc(tcc, false)} />
             )}
           </section>
+
+          {/* Defesa agendada (Fase II): card completo (data/hora, local e comentário)
+              também no dashboard, não só em "Meu TCC". */}
+          {tcc.defesaAgendadaPara && (
+            <section className="cartao-secao bloco">
+              <h2>Defesa agendada</h2>
+              <CardDefesa tcc={tcc} />
+            </section>
+          )}
 
           {/* Documentos */}
           <section className="cartao-secao bloco">

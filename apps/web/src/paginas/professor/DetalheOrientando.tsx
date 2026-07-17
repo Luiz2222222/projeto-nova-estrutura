@@ -45,6 +45,19 @@ const fmtData = (iso?: string | null) => {
   const [a, m, d] = iso.split('T')[0].split('-');
   return a && m && d ? `${d}/${m}/${a}` : '—';
 };
+// O formulário de agendamento edita SEMPRE no fuso oficial do curso (America/Fortaleza,
+// UTC-3 fixo, sem horário de verão) — independente do fuso do computador de quem edita.
+// Abrir e salvar sem mexer em nada preserva exatamente o mesmo instante.
+const OFFSET_FORTALEZA = '-03:00';
+function partesDefesaFortaleza(iso: string): { data: string; hora: string } {
+  const partes = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Fortaleza', hourCycle: 'h23',
+    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+  }).formatToParts(new Date(iso));
+  const p = (t: string) => partes.find((x) => x.type === t)?.value ?? '';
+  return { data: `${p('year')}-${p('month')}-${p('day')}`, hora: `${p('hour')}:${p('minute')}` };
+}
+
 const rotuloStatusDoc = (s: string) =>
   ({ PENDENTE: 'Aguardando avaliação', EM_ANALISE: 'Em análise', APROVADO: 'Aprovada', REJEITADO: 'Rejeitada (aguardando reenvio)', SUBSTITUIDA: 'Substituída' } as Record<string, string>)[s] ?? s;
 
@@ -165,10 +178,11 @@ export function DetalheOrientando() {
   }
 
   // Abre o modal de agendamento pré-preenchido (edição) ou vazio (primeiro agendamento).
+  // Pré-preenchimento SEMPRE no fuso de Fortaleza (não no fuso do navegador).
   function abrirAgendamento() {
-    const d = tcc?.defesaAgendadaPara ? new Date(tcc.defesaAgendadaPara) : null;
-    setDefData(d ? d.toLocaleDateString('en-CA') : '');
-    setDefHora(d ? `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}` : '');
+    const d = tcc?.defesaAgendadaPara ? partesDefesaFortaleza(tcc.defesaAgendadaPara) : null;
+    setDefData(d?.data ?? '');
+    setDefHora(d?.hora ?? '');
     setDefLocal(tcc?.defesaLocal ?? '');
     setDefComentario(tcc?.defesaComentario ?? '');
     setErroDefesa('');
@@ -181,7 +195,8 @@ export function DetalheOrientando() {
     if (!tcc) return;
     if (!defData || !defHora) { setErroDefesa('Informe a data e a hora da defesa.'); return; }
     if (!defLocal.trim()) { setErroDefesa('Informe o local da defesa.'); return; }
-    const quando = new Date(`${defData}T${defHora}`);
+    // Interpreta o que foi digitado como horário de Fortaleza (UTC-3 fixo), não do navegador.
+    const quando = new Date(`${defData}T${defHora}:00${OFFSET_FORTALEZA}`);
     if (Number.isNaN(quando.getTime())) { setErroDefesa('Data e hora inválidas.'); return; }
     setErroDefesa('');
     setEnviando(true);
@@ -245,10 +260,10 @@ export function DetalheOrientando() {
   // do orientador acontecem AQUI (não em "Participações em bancas").
   const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
   const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
-  // Agendar/editar a defesa: enquanto aguarda o agendamento OU durante a avaliação
-  // (reagendar depois de liberada só atualiza os dados — nunca regride a fase).
-  const podeEditarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2' || fase === 'AVALIACAO_FASE_2';
-  const mostrarCardDefesa = podeEditarDefesa || !!tcc.defesaAgendadaPara;
+  // Agendar na fase própria; depois disso o orientador pode ALTERAR o agendamento quando
+  // quiser (reagendar nunca regride a fase nem bloqueia avaliações — regra do backend).
+  const podeEditarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2' || !!tcc.defesaAgendadaPara;
+  const mostrarCardDefesa = podeEditarDefesa;
   const podeAvaliarFase2 = (fase === 'AVALIACAO_FASE_2' || fase === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' || fase === 'VALIDACAO_FASE_2') && !!meuMembroF2;
   const avisoPrazo = (rot: string) => <div className="aviso-prazo">⏰ O prazo de {rot} venceu. Peça à coordenação uma liberação individual deste TCC.</div>;
   const coorient = tcc.coorientador
@@ -567,7 +582,7 @@ export function DetalheOrientando() {
             <input type="date" value={defData} onChange={(e) => setDefData(e.target.value)} />
           </label>
           <label className="campo">
-            <span>Hora</span>
+            <span>Hora (horário de Fortaleza)</span>
             <input type="time" value={defHora} onChange={(e) => setDefHora(e.target.value)} />
           </label>
           <label className="campo">

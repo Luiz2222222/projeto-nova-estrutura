@@ -933,9 +933,9 @@ export class BancasService {
   async agendarDefesa(profId: string, tccId: string, dados: DadosAgendarDefesa) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     if (tcc.orientadorId !== profId) throw new ForbiddenException();
-    if (!['AGENDAMENTO_DEFESA_FASE_2', 'AVALIACAO_FASE_2'].includes(tcc.faseAtual)) {
-      throw new BadRequestException({ mensagem: 'A defesa só pode ser agendada ou alterada entre a validação da Fase I e o fim da avaliação da Fase II.' });
-    }
+    // SEM trava de fase aqui: o orientador pode alterar o agendamento QUANDO QUISER
+    // (inclusive com o TCC já em análise/validação da coordenação). A alteração nunca
+    // regride a fase — a liberação só dispara se o TCC ainda estiver aguardando.
     // Guarda: sem banca da Fase II (ou sem membros) a liberação deixaria o TCC preso em
     // AVALIACAO_FASE_2 sem avaliadores. validar() da Fase I cria a banca; isto barra
     // estados vindos de mexida administrativa/manual.
@@ -959,7 +959,7 @@ export class BancasService {
     });
     await this.notificarDefesaAgendada(tccId, reagendamento);
     const liberadaAgora = await this.liberarDefesaSeVencida(tccId);
-    return { ok: true, liberada: liberadaAgora || tcc.faseAtual === 'AVALIACAO_FASE_2' };
+    return { ok: true, liberada: liberadaAgora || !!tcc.defesaLiberadaEm };
   }
 
   // Liberação automática e IDEMPOTENTE da avaliação da Fase II: um único updateMany
@@ -1032,8 +1032,11 @@ export class BancasService {
     });
     if (!tcc) return;
     for (const m of tcc.bancas[0]?.membros ?? []) {
+      // O ORIENTADOR avalia a Fase II na página do orientando (não em "Participações em
+      // bancas") — o link dele aponta para lá; os demais vão direto para a avaliação.
       const base = m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
-      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" aconteceu — a avaliação da Fase II está liberada, você já pode avaliar.`, `${base}/${m.id}`);
+      const link = m.avaliadorId === tcc.orientadorId ? `/professor/orientandos/${tcc.id}#acao-fase2` : `${base}/${m.id}`;
+      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" aconteceu — a avaliação da Fase II está liberada, você já pode avaliar.`, link);
     }
   }
 }

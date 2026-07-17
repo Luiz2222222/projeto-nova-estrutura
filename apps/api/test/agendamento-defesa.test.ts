@@ -224,11 +224,13 @@ describe('7 — Reagendamento após a liberação nunca regride', () => {
     expect(chamadas.filter((c) => c.evento === 'avaliador_fase2_liberada')).toHaveLength(3);
   });
 
-  it('fora do intervalo permitido (ex.: já em análise da coordenação) recusa com erro claro', async () => {
+  it('em fases posteriores (ex.: análise da coordenação) ainda pode alterar, sem mexer na fase', async () => {
     const { tcc, orientador } = await cenario(true, 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2');
-    await expect(bancas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy((e: any) =>
-      /agendada ou alterada/.test(e?.getResponse?.()?.mensagem ?? ''),
-    );
+    await bancas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia(), { local: 'Sala corrigida' }));
+    const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
+    expect(dep?.faseAtual).toBe('AGUARDANDO_ANALISE_COORDENACAO_FASE_2'); // não regride nem avança
+    expect(dep?.defesaLocal).toBe('Sala corrigida');
+    expect(dep?.defesaLiberadaEm).toBeNull(); // não "libera" um TCC que já passou da avaliação
   });
 });
 
