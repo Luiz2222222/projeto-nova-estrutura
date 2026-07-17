@@ -15,6 +15,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { extname } from 'path';
 import { FORMATOS_ARQUIVO } from '@tcc/compartilhado';
 import { BancasService } from './bancas.service';
+import { DefesasService } from './defesas.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
@@ -46,7 +47,10 @@ type Req = { usuario: { sub: string; papel: string } };
 
 @Controller()
 export class BancasController {
-  constructor(private readonly bancas: BancasService) {}
+  constructor(
+    private readonly bancas: BancasService,
+    private readonly defesas: DefesasService,
+  ) {}
 
   @Get('tccs/:id/banca/candidatos')
   @UseGuards(GuardaJwt, GuardaPapeis)
@@ -154,7 +158,7 @@ export class BancasController {
     @Param('id') id: string,
     @Body(new ZodValidacaoPipe(esquemaAgendarDefesa)) dados: DadosAgendarDefesa,
   ) {
-    return this.bancas.agendarDefesa(req.usuario.sub, id, dados);
+    return this.defesas.agendarDefesa(req.usuario.sub, id, dados);
   }
 
   // ----- Edição administrativa da banca (só coordenador) -----

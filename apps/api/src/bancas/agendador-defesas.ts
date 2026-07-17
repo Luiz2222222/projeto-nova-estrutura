@@ -1,5 +1,5 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { BancasService } from './bancas.service';
+import { DefesasService } from './defesas.service';
 
 // Agendador das defesas (Fase II): roda na inicialização e a cada minuto, liberando a
 // avaliação dos TCCs cuja data/hora de defesa já venceu — mesmo sem ninguém com a tela
@@ -11,7 +11,7 @@ export class AgendadorDefesas implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger('AgendadorDefesas');
   private timer?: NodeJS.Timeout;
 
-  constructor(private readonly bancas: BancasService) {}
+  constructor(private readonly defesas: DefesasService) {}
 
   onModuleInit() {
     void this.rodar(); // varredura imediata na subida (pega defesas vencidas com a API parada)
@@ -25,7 +25,7 @@ export class AgendadorDefesas implements OnModuleInit, OnModuleDestroy {
 
   private async rodar() {
     try {
-      const liberadas = await this.bancas.liberarDefesasVencidas();
+      const liberadas = await this.defesas.liberarDefesasVencidas();
       if (liberadas > 0) this.logger.log(`Avaliação da Fase II liberada para ${liberadas} TCC(s) com defesa vencida.`);
     } catch (e) {
       this.logger.error('Falha na varredura de defesas vencidas: ' + (e as Error).message);
