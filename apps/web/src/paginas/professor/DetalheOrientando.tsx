@@ -23,6 +23,7 @@ import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { CardDefesa } from '../../componentes/CardDefesa';
+import { partesDefesaFortaleza, montarInstanteDefesa } from '../../utils/defesa';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -45,19 +46,6 @@ const fmtData = (iso?: string | null) => {
   const [a, m, d] = iso.split('T')[0].split('-');
   return a && m && d ? `${d}/${m}/${a}` : '—';
 };
-// O formulário de agendamento edita SEMPRE no fuso oficial do curso (America/Fortaleza,
-// UTC-3 fixo, sem horário de verão) — independente do fuso do computador de quem edita.
-// Abrir e salvar sem mexer em nada preserva exatamente o mesmo instante.
-const OFFSET_FORTALEZA = '-03:00';
-function partesDefesaFortaleza(iso: string): { data: string; hora: string } {
-  const partes = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Fortaleza', hourCycle: 'h23',
-    year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-  }).formatToParts(new Date(iso));
-  const p = (t: string) => partes.find((x) => x.type === t)?.value ?? '';
-  return { data: `${p('year')}-${p('month')}-${p('day')}`, hora: `${p('hour')}:${p('minute')}` };
-}
-
 const rotuloStatusDoc = (s: string) =>
   ({ PENDENTE: 'Aguardando avaliação', EM_ANALISE: 'Em análise', APROVADO: 'Aprovada', REJEITADO: 'Rejeitada (aguardando reenvio)', SUBSTITUIDA: 'Substituída' } as Record<string, string>)[s] ?? s;
 
@@ -196,7 +184,7 @@ export function DetalheOrientando() {
     if (!defData || !defHora) { setErroDefesa('Informe a data e a hora da defesa.'); return; }
     if (!defLocal.trim()) { setErroDefesa('Informe o local da defesa.'); return; }
     // Interpreta o que foi digitado como horário de Fortaleza (UTC-3 fixo), não do navegador.
-    const quando = new Date(`${defData}T${defHora}:00${OFFSET_FORTALEZA}`);
+    const quando = montarInstanteDefesa(defData, defHora);
     if (Number.isNaN(quando.getTime())) { setErroDefesa('Data e hora inválidas.'); return; }
     setErroDefesa('');
     setEnviando(true);

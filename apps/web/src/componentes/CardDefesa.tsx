@@ -1,4 +1,5 @@
 import { formatarDefesa } from '../utils/fases';
+import { ehLinkHttpsSeguro } from '../utils/defesa';
 
 // Informações da defesa agendada (Fase II), reutilizadas em todas as visões (aluno,
 // orientador, coorientador, coordenador e banca). Local e comentário NUNCA viram HTML:
@@ -7,7 +8,7 @@ import { formatarDefesa } from '../utils/fases';
 export function CardDefesa({ tcc }: { tcc: any }) {
   if (!tcc?.defesaAgendadaPara) return null;
   const local = String(tcc.defesaLocal ?? '').trim();
-  const ehLink = /^https:\/\//i.test(local);
+  const ehLink = ehLinkHttpsSeguro(local);
   return (
     <div className="defesa-info">
       <div className="defesa-linha-inline">

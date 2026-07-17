@@ -97,7 +97,8 @@ function dataRealDoSub(tcc: any, i: number): string | null {
 }
 
 // Estado atual do TCC -> índice linear do subestado + se é um estado-problema.
-function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: boolean } {
+// Exportada para os testes de mapeamento da timeline (função pura, sem DOM).
+export function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: boolean } {
   const f = tcc?.faseAtual;
   const solic = tcc?.solicitacoes?.[0];
   if (f === 'INICIALIZACAO') {
