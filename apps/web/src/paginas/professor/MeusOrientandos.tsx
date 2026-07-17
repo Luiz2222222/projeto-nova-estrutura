@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet } from '../../api';
+import type { Tcc } from '../../tipos';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../../utils/fases';
 import { TrilhaFases } from '../../componentes/TrilhaFases';
 
@@ -50,7 +51,7 @@ export function MeusOrientandos() {
 
   useEffect(() => {
     setCarregando(true);
-    apiGet('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+    apiGet<Tcc[]>('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
   }, []);
 
   const pendentes = useMemo(() => tccs.filter(monoPendente), [tccs]);

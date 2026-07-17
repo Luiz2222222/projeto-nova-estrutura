@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
+import type { Tcc } from '../../tipos';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { ROTULO_TIPO_DOC } from '../../utils/fases';
 import { Modal } from '../../componentes/Modal';
@@ -42,7 +43,7 @@ export function PainelCoordenador() {
 
   function carregar() {
     setCarregando(true);
-    apiGet('/tccs/pendentes')
+    apiGet<Tcc[]>('/tccs/pendentes')
       .then(setPendentes)
       .catch(() => setPendentes([]))
       .finally(() => setCarregando(false));

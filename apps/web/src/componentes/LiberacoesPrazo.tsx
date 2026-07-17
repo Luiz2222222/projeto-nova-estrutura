@@ -22,7 +22,7 @@ export function LiberacoesPrazo({ tccId }: { tccId: string }) {
   const [confirmar, setConfirmar] = useState<{ etapa: string; liberado: boolean } | null>(null);
   const [erroAcao, setErroAcao] = useState('');
 
-  const carregar = () => apiGet(`/tccs/${tccId}/liberacoes`).then(setEstado).catch(() => setEstado(null));
+  const carregar = () => apiGet<Record<string, EstadoEtapa>>(`/tccs/${tccId}/liberacoes`).then(setEstado).catch(() => setEstado(null));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { carregar(); }, [tccId]);
 

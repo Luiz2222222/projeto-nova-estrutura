@@ -1,5 +1,6 @@
 // Fases: rótulos e índice da trilha vêm do domínio compartilhado (fonte única, com testes).
 import { indiceFase } from '@tcc/compartilhado';
+import type { DocumentoTcc, TccResumo } from '../tipos';
 
 export { ROTULO_FASE, INDICE_FASE } from '@tcc/compartilhado';
 
@@ -45,14 +46,14 @@ export type EstadoChip = 'ok' | 'pendente' | 'alerta';
 export interface Chip { texto: string; estado: EstadoChip }
 
 // Última monografia enviada (maior versão).
-function ultimaMono(tcc: any): any | null {
+function ultimaMono(tcc: TccResumo | null | undefined): DocumentoTcc | null {
   return [...(tcc?.documentos ?? [])]
-    .filter((d: any) => d.tipo === 'MONOGRAFIA')
-    .sort((a: any, b: any) => b.versao - a.versao)[0] ?? null;
+    .filter((d) => d.tipo === 'MONOGRAFIA')
+    .sort((a, b) => b.versao - a.versao)[0] ?? null;
 }
 
 // Estado da monografia dentro do Desenvolvimento (chip).
-function chipMonografia(tcc: any): Chip {
+function chipMonografia(tcc: TccResumo | null | undefined): Chip {
   const mono = ultimaMono(tcc);
   if (tcc?.monografiaAprovada) return { texto: 'Monografia aprovada', estado: 'ok' };
   if (mono?.status === 'PENDENTE') return { texto: 'Monografia em análise', estado: 'pendente' };
@@ -64,7 +65,7 @@ function chipMonografia(tcc: any): Chip {
 // Mesmo texto usado no card "Fase atual" do dashboard do aluno.
 // No Desenvolvimento o status é COMPOSTO: monografia e continuidade são trilhas
 // paralelas; o TCC só avança quando as duas concluem (regra do backend, intocada).
-export function subfaseTcc(tcc: any): string {
+export function subfaseTcc(tcc: TccResumo | null | undefined): string {
   const f = tcc?.faseAtual;
   const solic = tcc?.solicitacoes?.[0];
   switch (f) {
@@ -103,7 +104,7 @@ export function subfaseTcc(tcc: any): string {
 
 // Chips de status paralelos do TCC. Hoje só o Desenvolvimento tem trilhas
 // paralelas (monografia + continuidade); nas demais fases não há chips.
-export function chipsTrilha(tcc: any): Chip[] {
+export function chipsTrilha(tcc: TccResumo | null | undefined): Chip[] {
   if (tcc?.faseAtual !== 'DESENVOLVIMENTO') return [];
   const continuidade: Chip = tcc?.continuidadeConfirmada
     ? { texto: 'Continuidade confirmada', estado: 'ok' }
@@ -117,12 +118,12 @@ export interface NotasTrilha { fase1?: number | null; fase2?: number | null; fin
 //  - coordenador vê NF1/NF2 assim que existem (antes mesmo da nota final);
 //  - aluno/orientador/coorientador veem as notas DEPOIS da nota final confirmada (nf != null)
 //    OU em reprovação terminal (mesmo critério do backend, que já libera as notas nesses casos).
-export function notasTrilhaTcc(tcc: any, ehCoordenador: boolean): NotasTrilha {
+export function notasTrilhaTcc(tcc: TccResumo | null | undefined, ehCoordenador: boolean): NotasTrilha {
   const nf1 = tcc?.nf1 ?? null;
   const nf2 = tcc?.nf2 ?? null;
   const nf = tcc?.nf ?? null;
   if (ehCoordenador) return { fase1: nf1, fase2: nf2, final: nf };
-  const terminal = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual);
+  const terminal = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual ?? '');
   if (nf == null && !terminal) return {}; // nota ainda não liberada para os demais papéis
   return { fase1: nf1, fase2: nf2, final: nf };
 }

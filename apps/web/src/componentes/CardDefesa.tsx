@@ -1,11 +1,12 @@
 import { formatarDefesa } from '../utils/fases';
 import { ehLinkHttpsSeguro } from '../utils/defesa';
+import type { TccResumo } from '../tipos';
 
 // Informações da defesa agendada (Fase II), reutilizadas em todas as visões (aluno,
 // orientador, coorientador, coordenador e banca). Local e comentário NUNCA viram HTML:
 // texto é renderizado como texto; só um local começando com https:// vira link seguro.
 // Formato: "Data e hora: …" e "Local: …" na mesma linha; comentário com rótulo em cima.
-export function CardDefesa({ tcc }: { tcc: any }) {
+export function CardDefesa({ tcc }: { tcc: TccResumo | null | undefined }) {
   if (!tcc?.defesaAgendadaPara) return null;
   const local = String(tcc.defesaLocal ?? '').trim();
   const ehLink = ehLinkHttpsSeguro(local);

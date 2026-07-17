@@ -74,7 +74,7 @@ describe('chipsTrilha — trilhas paralelas do Desenvolvimento', () => {
       faseAtual: 'DESENVOLVIMENTO',
       monografiaAprovada: false,
       continuidadeConfirmada: true,
-      documentos: [{ tipo: 'MONOGRAFIA', versao: 1, status: 'PENDENTE' }],
+      documentos: [{ id: 'd1', nomeArquivo: 'mono.docx', tipo: 'MONOGRAFIA', versao: 1, status: 'PENDENTE' }],
     });
     expect(chips).toEqual([
       { texto: 'Monografia em análise', estado: 'pendente' },
@@ -85,7 +85,7 @@ describe('chipsTrilha — trilhas paralelas do Desenvolvimento', () => {
   it('monografia rejeitada vira alerta de ajustes', () => {
     const chips = chipsTrilha({
       faseAtual: 'DESENVOLVIMENTO',
-      documentos: [{ tipo: 'MONOGRAFIA', versao: 2, status: 'REJEITADO' }],
+      documentos: [{ id: 'd2', nomeArquivo: 'mono.docx', tipo: 'MONOGRAFIA', versao: 2, status: 'REJEITADO' }],
     });
     expect(chips[0]).toEqual({ texto: 'Ajustes na monografia', estado: 'alerta' });
   });

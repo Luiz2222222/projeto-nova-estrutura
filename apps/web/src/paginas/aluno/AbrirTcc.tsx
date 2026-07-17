@@ -10,12 +10,13 @@ import {
   TITULACOES_COORIENTADOR,
   type DadosAbrirTcc,
 } from '@tcc/compartilhado';
+import type { UsuarioResumo } from '../../tipos';
 
 export function AbrirTcc() {
   const navegar = useNavigate();
   const { usuario } = useAuth();
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [coorientadores, setCoorientadores] = useState<any[]>([]);
+  const [professores, setProfessores] = useState<UsuarioResumo[]>([]);
+  const [coorientadores, setCoorientadores] = useState<UsuarioResumo[]>([]);
   const [abertura, setAbertura] = useState<{ prazo: string | null; vencido: boolean; liberado: boolean; bloqueado: boolean } | null>(null);
   const [carregandoAbertura, setCarregandoAbertura] = useState(true);
 
@@ -39,9 +40,9 @@ export function AbrirTcc() {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    apiGet('/usuarios/professores-disponiveis').then(setProfessores).catch(() => {});
-    apiGet('/usuarios/coorientadores').then(setCoorientadores).catch(() => {});
-    apiGet('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
+    apiGet<UsuarioResumo[]>('/usuarios/professores-disponiveis').then(setProfessores).catch(() => {});
+    apiGet<UsuarioResumo[]>('/usuarios/coorientadores').then(setCoorientadores).catch(() => {});
+    apiGet<{ prazo: string | null; vencido: boolean; liberado: boolean; bloqueado: boolean }>('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
   }, []);
 
   // Estado do prazo de abertura: considera a liberação individual deste aluno+semestre

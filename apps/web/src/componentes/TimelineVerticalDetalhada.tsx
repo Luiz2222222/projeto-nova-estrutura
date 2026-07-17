@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { formatarDefesa } from '../utils/fases';
+import type { DocumentoTcc, TccResumo } from '../tipos';
 
 // Timeline vertical detalhada (espelha o projeto antigo): 5 grupos numerados e
 // expansíveis, cada um com seus subestados. Adaptada às regras NOVAS do fluxo:
@@ -47,24 +48,26 @@ const fmtDataBR = (iso?: string | null): string | null => {
 // Data REAL em que cada ato aconteceu, a partir dos registros do próprio TCC
 // (solicitação, documentos, banca). Atos sem timestamp próprio no sistema
 // (aprovação da monografia, continuidade, validações) ficam sem data — não inventa.
-function dataRealDoSub(tcc: any, i: number): string | null {
-  const docs: any[] = tcc?.documentos ?? [];
+function dataRealDoSub(tcc: TccResumo | null | undefined, i: number): string | null {
+  const docs: DocumentoTcc[] = tcc?.documentos ?? [];
   const ultimaDoc = (tipo: string) =>
     docs
       .filter((d) => d.tipo === tipo)
-      .sort((a, b) => b.versao - a.versao || +new Date(b.criadoEm) - +new Date(a.criadoEm))[0];
-  const sols: any[] = tcc?.solicitacoes ?? [];
-  const banca = (fase: string) => (tcc?.bancas ?? []).find((b: any) => b.fase === fase);
+      .sort((a, b) => b.versao - a.versao || +new Date(b.criadoEm ?? 0) - +new Date(a.criadoEm ?? 0))[0];
+  const sols = tcc?.solicitacoes ?? [];
+  const banca = (fase: string) => (tcc?.bancas ?? []).find((b) => b.fase === fase);
   // Data da última avaliação enviada da banca (maior avaliadoEm entre os membros).
   const avaliacaoBanca = (fase: string): string | null => {
-    const datas = (banca(fase)?.membros ?? []).map((m: any) => m.avaliadoEm).filter(Boolean);
+    const datas = (banca(fase)?.membros ?? [])
+      .map((m) => m.avaliadoEm)
+      .filter((d): d is string => !!d);
     if (!datas.length) return null;
-    return new Date(Math.max(...datas.map((d: string) => +new Date(d)))).toISOString();
+    return new Date(Math.max(...datas.map((d) => +new Date(d)))).toISOString();
   };
 
   switch (i) {
     case 0: // Envio da solicitação (a mais antiga)
-      return fmtDataBR([...sols].sort((a, b) => +new Date(a.criadoEm) - +new Date(b.criadoEm))[0]?.criadoEm);
+      return fmtDataBR([...sols].sort((a, b) => +new Date(a.criadoEm ?? 0) - +new Date(b.criadoEm ?? 0))[0]?.criadoEm);
     case 1: // Aceite da solicitação
       return fmtDataBR(sols.find((s) => s.status === 'ACEITA')?.respondidoEm);
     case 2: // Envio da monografia
@@ -98,7 +101,7 @@ function dataRealDoSub(tcc: any, i: number): string | null {
 
 // Estado atual do TCC -> índice linear do subestado + se é um estado-problema.
 // Exportada para os testes de mapeamento da timeline (função pura, sem DOM).
-export function estadoAtual(tcc: any): { indice: number; problema: boolean; concluido: boolean } {
+export function estadoAtual(tcc: TccResumo | null | undefined): { indice: number; problema: boolean; concluido: boolean } {
   const f = tcc?.faseAtual;
   const solic = tcc?.solicitacoes?.[0];
   if (f === 'INICIALIZACAO') {
@@ -106,7 +109,7 @@ export function estadoAtual(tcc: any): { indice: number; problema: boolean; conc
     return { indice: 1, problema: false, concluido: false }; // envio feito, aguardando aceite
   }
   if (f === 'DESENVOLVIMENTO') {
-    if (!tcc.monografiaAprovada) return { indice: 2, problema: false, concluido: false };
+    if (!tcc?.monografiaAprovada) return { indice: 2, problema: false, concluido: false };
     return { indice: 4, problema: false, concluido: false };
   }
   const mapa: Record<string, number> = {
@@ -114,7 +117,7 @@ export function estadoAtual(tcc: any): { indice: number; problema: boolean; conc
     AGENDAMENTO_DEFESA_FASE_2: 8, AVALIACAO_FASE_2: 9, AGUARDANDO_ANALISE_COORDENACAO_FASE_2: 10, VALIDACAO_FASE_2: 10,
     AGUARDANDO_AJUSTES_FINAIS: 11, VALIDACAO_VERSAO_FINAL: 12,
   };
-  if (f in mapa) return { indice: mapa[f], problema: false, concluido: false };
+  if (f && f in mapa) return { indice: mapa[f], problema: false, concluido: false };
   if (f === 'CONCLUIDO') return { indice: 13, problema: false, concluido: true };
   if (f === 'REPROVADO_FASE_1') return { indice: 7, problema: true, concluido: false };
   if (f === 'REPROVADO_FASE_2') return { indice: 10, problema: true, concluido: false };
@@ -140,7 +143,7 @@ const icoCheck = (
   </svg>
 );
 
-export function TimelineVerticalDetalhada({ tcc }: { tcc: any }) {
+export function TimelineVerticalDetalhada({ tcc }: { tcc: TccResumo | null | undefined }) {
   const { indice, problema, concluido } = estadoAtual(tcc);
 
   // Grupo que contém o subestado atual (expandido por padrão).

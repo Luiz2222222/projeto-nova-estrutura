@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { apiGet, URL_API } from '../api';
 import { ROTULO_FASE, faseParaIndice, subfaseTcc, notasTrilhaTcc, chipsTrilha } from '../utils/fases';
 import { CardDefesa } from '../componentes/CardDefesa';
+import type { Tcc } from '../tipos';
 import { TrilhaFases } from '../componentes/TrilhaFases';
 
 const icoBaixar = (
@@ -25,7 +26,7 @@ export function Coorientacoes() {
   const [carregando, setCarregando] = useState(true);
 
   useEffect(() => {
-    apiGet('/tccs/coorientando')
+    apiGet<Tcc[]>('/tccs/coorientando')
       .then(setTccs)
       .catch(() => setTccs([]))
       .finally(() => setCarregando(false));

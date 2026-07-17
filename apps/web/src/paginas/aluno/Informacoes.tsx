@@ -50,7 +50,7 @@ export function Informacoes() {
 
   useEffect(() => {
     apiGet('/calendario').then(setCalendario).catch(() => setCalendario(null));
-    apiGet('/documentos-referencia').then(setModelos).catch(() => setModelos([]));
+    apiGet<any[]>('/documentos-referencia').then(setModelos).catch(() => setModelos([]));
   }, []);
 
   return (

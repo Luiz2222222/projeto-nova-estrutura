@@ -24,6 +24,7 @@ import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { CardDefesa } from '../../componentes/CardDefesa';
 import { partesDefesaFortaleza, montarInstanteDefesa } from '../../utils/defesa';
+import type { Tcc, MembroBanca } from '../../tipos';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -100,10 +101,10 @@ export function DetalheOrientando() {
 
   function carregar() {
     setCarregando(true);
-    apiGet('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+    apiGet<Tcc[]>('/tccs/orientando').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
     // Carrega também o membro da banca do próprio orientador (com pesos/bloqueio) para
     // avaliar a Fase II aqui mesmo, sem ir para "Participações em bancas".
-    apiGet('/bancas/minhas').then(setBancasMinhas).catch(() => setBancasMinhas([]));
+    apiGet<MembroBanca[]>('/bancas/minhas').then(setBancasMinhas).catch(() => setBancasMinhas([]));
   }
   useEffect(carregar, []);
 

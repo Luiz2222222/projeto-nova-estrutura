@@ -39,7 +39,7 @@ export function SecaoModelos() {
   const [erroRem, setErroRem] = useState('');
 
   function carregar() {
-    apiGet('/documentos-referencia').then(setDocs).catch(() => setDocs([]));
+    apiGet<any[]>('/documentos-referencia').then(setDocs).catch(() => setDocs([]));
   }
   useEffect(carregar, []);
 

@@ -10,6 +10,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, apiUpload, apiDelete, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE, formatarDefesa } from '../../utils/fases';
 import { CardDefesa } from '../../componentes/CardDefesa';
+import type { Tcc, UsuarioResumo } from '../../tipos';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
@@ -108,7 +109,7 @@ export function TccDetalheCoordenador() {
 
   function carregar() {
     setCarregando(true);
-    apiGet('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+    apiGet<Tcc[]>('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
   }
   useEffect(carregar, []);
 
@@ -119,7 +120,7 @@ export function TccDetalheCoordenador() {
   // Carrega candidatos quando o TCC está na formação da banca da Fase I.
   useEffect(() => {
     if (tccId && tccFase === 'FORMACAO_BANCA_FASE_1') {
-      apiGet(`/tccs/${tccId}/banca/candidatos`).then(setCandidatos).catch(() => setCandidatos([]));
+      apiGet<UsuarioResumo[]>(`/tccs/${tccId}/banca/candidatos`).then(setCandidatos).catch(() => setCandidatos([]));
     }
   }, [tccId, tccFase]);
 

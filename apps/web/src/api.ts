@@ -27,12 +27,12 @@ export function mensagemErro(e: unknown, padrao = 'Não foi possível carregar o
   return (e as ErroApi)?.mensagem || padrao;
 }
 
-export async function apiGet<T = any>(caminho: string): Promise<T> {
+export async function apiGet<T = unknown>(caminho: string): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, { credentials: 'include' });
   return tratar<T>(r);
 }
 
-export async function apiPost<T = any>(caminho: string, corpo: unknown): Promise<T> {
+export async function apiPost<T = unknown>(caminho: string, corpo: unknown): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, {
     method: 'POST',
     credentials: 'include',
@@ -42,7 +42,7 @@ export async function apiPost<T = any>(caminho: string, corpo: unknown): Promise
   return tratar<T>(r);
 }
 
-export async function apiPut<T = any>(caminho: string, corpo: unknown): Promise<T> {
+export async function apiPut<T = unknown>(caminho: string, corpo: unknown): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, {
     method: 'PUT',
     credentials: 'include',
@@ -52,7 +52,7 @@ export async function apiPut<T = any>(caminho: string, corpo: unknown): Promise<
   return tratar<T>(r);
 }
 
-export async function apiDelete<T = any>(caminho: string, corpo?: unknown): Promise<T> {
+export async function apiDelete<T = unknown>(caminho: string, corpo?: unknown): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, {
     method: 'DELETE',
     credentials: 'include',
@@ -62,7 +62,7 @@ export async function apiDelete<T = any>(caminho: string, corpo?: unknown): Prom
 }
 
 // Upload de arquivo (multipart). Não setar Content-Type (o navegador cuida do boundary).
-export async function apiUpload<T = any>(caminho: string, form: FormData): Promise<T> {
+export async function apiUpload<T = unknown>(caminho: string, form: FormData): Promise<T> {
   const r = await fetch(`${URL_API}${caminho}`, { method: 'POST', credentials: 'include', body: form });
   return tratar<T>(r);
 }
