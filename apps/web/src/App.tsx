@@ -1,42 +1,47 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import type { Papel } from '@tcc/compartilhado';
 import { ProvedorAuth, useAuth } from './autenticacao/contexto';
 import { ProvedorTema } from './tema/contexto';
 import { LimiteErro } from './componentes/LimiteErro';
+import { LayoutApp } from './componentes/LayoutApp';
+// Telas de entrada ficam no bundle principal (primeira pintura sem espera extra).
 import { Login } from './paginas/Login';
 import { RecuperarSenha } from './paginas/RecuperarSenha';
 import { RedefinirSenha } from './paginas/RedefinirSenha';
-import { LayoutApp } from './componentes/LayoutApp';
 import { RedirecionarHome } from './paginas/RedirecionarHome';
 import { PlaceholderPapel } from './paginas/PlaceholderPapel';
-import { DashboardAluno } from './paginas/aluno/DashboardAluno';
-import { PainelAluno } from './paginas/aluno/PainelAluno';
-import { Documentos } from './paginas/aluno/Documentos';
-import { Informacoes } from './paginas/aluno/Informacoes';
-import { MuralAvisos } from './paginas/aluno/MuralAvisos';
-import { AbrirTcc } from './paginas/aluno/AbrirTcc';
-import { DashboardCoordenador } from './paginas/coordenador/DashboardCoordenador';
-import { PainelCoordenador } from './paginas/coordenador/PainelCoordenador';
-import { PlanejamentoCoordenador } from './paginas/coordenador/PlanejamentoCoordenador';
-import { TccsCoordenador } from './paginas/coordenador/TccsCoordenador';
-import { TccDetalheCoordenador } from './paginas/coordenador/TccDetalheCoordenador';
-import { HistoricoCoordenador } from './paginas/coordenador/HistoricoCoordenador';
-import { DetalheHistoricoCoordenador } from './paginas/coordenador/DetalheHistoricoCoordenador';
-import { AvisosCoordenador } from './paginas/coordenador/AvisosCoordenador';
-import { DashboardProfessor } from './paginas/professor/DashboardProfessor';
-import { MeusOrientandos } from './paginas/professor/MeusOrientandos';
-import { DetalheOrientando } from './paginas/professor/DetalheOrientando';
-import { HistoricoProfessor } from './paginas/professor/HistoricoProfessor';
-import { DetalheHistorico } from './paginas/professor/DetalheHistorico';
-import { DashboardAvaliador } from './paginas/avaliador/DashboardAvaliador';
-import { Coorientacoes } from './paginas/Coorientacoes';
-import { MinhasBancas } from './paginas/MinhasBancas';
-import { AvaliarBanca } from './paginas/AvaliarBanca';
-import { Configuracoes } from './paginas/Configuracoes';
-import { Perfil } from './paginas/Perfil';
-import { Relatorios } from './paginas/coordenador/Relatorios';
-import { Usuarios } from './paginas/coordenador/Usuarios';
-import { ListaDoPeriodo } from './paginas/coordenador/ListaDoPeriodo';
+
+// Code splitting POR PÁGINA: cada rota vira um chunk próprio, carregado quando o
+// usuário navega até ela (as páginas exportam componentes nomeados, daí o .then).
+const DashboardAluno = lazy(() => import('./paginas/aluno/DashboardAluno').then((m) => ({ default: m.DashboardAluno })));
+const PainelAluno = lazy(() => import('./paginas/aluno/PainelAluno').then((m) => ({ default: m.PainelAluno })));
+const Documentos = lazy(() => import('./paginas/aluno/Documentos').then((m) => ({ default: m.Documentos })));
+const Informacoes = lazy(() => import('./paginas/aluno/Informacoes').then((m) => ({ default: m.Informacoes })));
+const MuralAvisos = lazy(() => import('./paginas/aluno/MuralAvisos').then((m) => ({ default: m.MuralAvisos })));
+const AbrirTcc = lazy(() => import('./paginas/aluno/AbrirTcc').then((m) => ({ default: m.AbrirTcc })));
+const DashboardCoordenador = lazy(() => import('./paginas/coordenador/DashboardCoordenador').then((m) => ({ default: m.DashboardCoordenador })));
+const PainelCoordenador = lazy(() => import('./paginas/coordenador/PainelCoordenador').then((m) => ({ default: m.PainelCoordenador })));
+const PlanejamentoCoordenador = lazy(() => import('./paginas/coordenador/PlanejamentoCoordenador').then((m) => ({ default: m.PlanejamentoCoordenador })));
+const TccsCoordenador = lazy(() => import('./paginas/coordenador/TccsCoordenador').then((m) => ({ default: m.TccsCoordenador })));
+const TccDetalheCoordenador = lazy(() => import('./paginas/coordenador/TccDetalheCoordenador').then((m) => ({ default: m.TccDetalheCoordenador })));
+const HistoricoCoordenador = lazy(() => import('./paginas/coordenador/HistoricoCoordenador').then((m) => ({ default: m.HistoricoCoordenador })));
+const DetalheHistoricoCoordenador = lazy(() => import('./paginas/coordenador/DetalheHistoricoCoordenador').then((m) => ({ default: m.DetalheHistoricoCoordenador })));
+const AvisosCoordenador = lazy(() => import('./paginas/coordenador/AvisosCoordenador').then((m) => ({ default: m.AvisosCoordenador })));
+const Relatorios = lazy(() => import('./paginas/coordenador/Relatorios').then((m) => ({ default: m.Relatorios })));
+const Usuarios = lazy(() => import('./paginas/coordenador/Usuarios').then((m) => ({ default: m.Usuarios })));
+const ListaDoPeriodo = lazy(() => import('./paginas/coordenador/ListaDoPeriodo').then((m) => ({ default: m.ListaDoPeriodo })));
+const DashboardProfessor = lazy(() => import('./paginas/professor/DashboardProfessor').then((m) => ({ default: m.DashboardProfessor })));
+const MeusOrientandos = lazy(() => import('./paginas/professor/MeusOrientandos').then((m) => ({ default: m.MeusOrientandos })));
+const DetalheOrientando = lazy(() => import('./paginas/professor/DetalheOrientando').then((m) => ({ default: m.DetalheOrientando })));
+const HistoricoProfessor = lazy(() => import('./paginas/professor/HistoricoProfessor').then((m) => ({ default: m.HistoricoProfessor })));
+const DetalheHistorico = lazy(() => import('./paginas/professor/DetalheHistorico').then((m) => ({ default: m.DetalheHistorico })));
+const DashboardAvaliador = lazy(() => import('./paginas/avaliador/DashboardAvaliador').then((m) => ({ default: m.DashboardAvaliador })));
+const Coorientacoes = lazy(() => import('./paginas/Coorientacoes').then((m) => ({ default: m.Coorientacoes })));
+const MinhasBancas = lazy(() => import('./paginas/MinhasBancas').then((m) => ({ default: m.MinhasBancas })));
+const AvaliarBanca = lazy(() => import('./paginas/AvaliarBanca').then((m) => ({ default: m.AvaliarBanca })));
+const Configuracoes = lazy(() => import('./paginas/Configuracoes').then((m) => ({ default: m.Configuracoes })));
+const Perfil = lazy(() => import('./paginas/Perfil').then((m) => ({ default: m.Perfil })));
 
 function Protegido({ children }: { children: JSX.Element }) {
   const { usuario, carregando } = useAuth();
@@ -58,6 +63,8 @@ export function App() {
     <ProvedorAuth>
       <BrowserRouter>
         <LimiteErro>
+        {/* Fallback mínimo enquanto o chunk da página baixa — mesmo texto do Protegido. */}
+        <Suspense fallback={<div className="centro">Carregando…</div>}>
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/recuperar-senha" element={<RecuperarSenha />} />
@@ -132,6 +139,7 @@ export function App() {
           <Route path="/" element={<RedirecionarHome />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        </Suspense>
         </LimiteErro>
       </BrowserRouter>
     </ProvedorAuth>
