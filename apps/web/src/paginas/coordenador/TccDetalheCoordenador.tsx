@@ -383,9 +383,9 @@ export function TccDetalheCoordenador() {
             {membrosBancaCard.length > 0 && (
               <div className="info-campo">
                 <span className="info-rotulo">Banca</span>
-                <span className="info-valor">
+                <span className="info-valor" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {membrosBancaCard.map((m: any) => (
-                    <span key={m.id} style={{ display: 'block' }}>{nomeComTrat(m.avaliador)}</span>
+                    <span key={m.id}>{nomeComTrat(m.avaliador)}</span>
                   ))}
                 </span>
               </div>
