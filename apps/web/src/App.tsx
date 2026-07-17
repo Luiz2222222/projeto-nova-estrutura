@@ -43,7 +43,8 @@ const AvaliarBanca = lazy(() => import('./paginas/AvaliarBanca').then((m) => ({ 
 const Configuracoes = lazy(() => import('./paginas/Configuracoes').then((m) => ({ default: m.Configuracoes })));
 const Perfil = lazy(() => import('./paginas/Perfil').then((m) => ({ default: m.Perfil })));
 
-function Protegido({ children }: { children: JSX.Element }) {
+// Exportados para os testes de guard (render puro, sem navegador real).
+export function Protegido({ children }: { children: JSX.Element }) {
   const { usuario, carregando } = useAuth();
   if (carregando) return <div className="centro">Carregando…</div>;
   if (!usuario) return <Navigate to="/login" replace />;
@@ -51,7 +52,7 @@ function Protegido({ children }: { children: JSX.Element }) {
 }
 
 // Guarda de papel: quem não tem o papel certo é mandado pra sua própria home.
-function ExigePapel({ papeis }: { papeis: Papel[] }) {
+export function ExigePapel({ papeis }: { papeis: Papel[] }) {
   const { usuario } = useAuth();
   if (usuario && !papeis.includes(usuario.papel)) return <Navigate to="/" replace />;
   return <Outlet />;
