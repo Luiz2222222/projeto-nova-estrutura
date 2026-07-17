@@ -7,28 +7,29 @@
 // STATUS do membro aparece; depois, os critérios e o parecer completos.
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, pesoDe, fmtNum, STATUS_AVAL } from '../utils/avaliacao';
+import type { PesosCalendario, TccResumo, UsuarioResumo } from '../tipos';
 
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
-const fmtNota = (v: any) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
+const nomeComTrat = (p?: UsuarioResumo | null) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const fmtNota = (v: unknown) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
 
 // pesos = linha do calendário do semestre (para o denominador "/ peso"); se ausente, usa o
 // peso padrão de cada critério (pesoDe faz esse fallback).
-export function BancaNotasTcc({ tcc, pesos = null }: { tcc: any; pesos?: any }) {
-  const bancas = [...(tcc?.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+export function BancaNotasTcc({ tcc, pesos = null }: { tcc: TccResumo | null | undefined; pesos?: PesosCalendario | null }) {
+  const bancas = [...(tcc?.bancas ?? [])].sort((a, b) => (a.fase < b.fase ? -1 : 1));
   // Mesmo critério do backend (sanitizarNotasTcc): nota final confirmada OU reprovação
   // terminal (resultado definitivo → o backend já envia as notas reais nesses casos).
-  const notasLiberadas = tcc?.nf != null || ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual);
+  const notasLiberadas = tcc?.nf != null || ['REPROVADO_FASE_1', 'REPROVADO_FASE_2'].includes(tcc?.faseAtual ?? '');
   if (bancas.length === 0) return <p className="nota-vazio">Banca ainda não formada.</p>;
   return (
     <>
-      {bancas.map((b: any) => {
+      {bancas.map((b) => {
         const ehF2b = b.fase === 'FASE_2';
         const criterios: Criterio[] = ehF2b ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
         const membros = b.membros ?? [];
         let contaAval = 0;
         const papelDe = new Map<string, string>();
         for (const mm of membros) {
-          const ehOri = ehF2b && mm.avaliadorId === tcc.orientadorId;
+          const ehOri = ehF2b && mm.avaliadorId === tcc?.orientadorId;
           papelDe.set(mm.id, ehOri ? 'Orientador' : `Avaliador ${++contaAval}`);
         }
         return (
@@ -37,8 +38,8 @@ export function BancaNotasTcc({ tcc, pesos = null }: { tcc: any; pesos?: any }) 
             {membros.length === 0 ? (
               <p className="nota-vazio">Sem membros nesta banca.</p>
             ) : (
-              membros.map((m: any) => {
-                const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+              membros.map((m) => {
+                const st = STATUS_AVAL[m.status ?? ''] ?? { rotulo: m.status ?? '—', classe: 'status-atencao' };
                 const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
                 return (
                   <div key={m.id} className="aval-card">

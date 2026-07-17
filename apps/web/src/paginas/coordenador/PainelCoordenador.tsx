@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { apiGet, apiPost, URL_API, type ErroApi } from '../../api';
-import type { Tcc } from '../../tipos';
+import type { Tcc, UsuarioResumo } from '../../tipos';
 import { ROTULO_CURSO } from '@tcc/compartilhado';
 import { ROTULO_TIPO_DOC } from '../../utils/fases';
 import { Modal } from '../../componentes/Modal';
@@ -20,18 +20,18 @@ const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
   return new Date(iso).toLocaleDateString('pt-BR'); // dd/mm/aaaa, sem horário
 };
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const nomeComTrat = (p?: UsuarioResumo | null) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 // Coorientador: interno (relação) ou externo (campos soltos). null se não houver.
-const coorientadorDe = (t: any) => {
+const coorientadorDe = (t: Tcc) => {
   if (t.coorientador) return { nome: t.coorientador.nomeCompleto, titulacao: t.coorientador.tratamento, afiliacao: t.coorientador.afiliacao, lattes: null as string | null };
   if (t.coorientadorNome) return { nome: t.coorientadorNome, titulacao: t.coorientadorTitulacao, afiliacao: t.coorientadorAfiliacao, lattes: t.coorientadorLattes };
   return null;
 };
 
 export function PainelCoordenador() {
-  const [pendentes, setPendentes] = useState<any[]>([]);
+  const [pendentes, setPendentes] = useState<Tcc[]>([]);
   const [carregando, setCarregando] = useState(true);
-  const [recusando, setRecusando] = useState<any | null>(null);
+  const [recusando, setRecusando] = useState<Tcc | null>(null);
   const [parecer, setParecer] = useState('');
   const [erroRecusa, setErroRecusa] = useState('');
   const [aprovando, setAprovando] = useState<any | null>(null);
@@ -82,6 +82,7 @@ export function PainelCoordenador() {
   async function confirmarRecusa() {
     setErroRecusa('');
     try {
+      if (!recusando) return;
       await apiPost(`/tccs/${recusando.id}/recusar`, { parecer });
       setRecusando(null);
       setParecer('');
@@ -118,9 +119,9 @@ export function PainelCoordenador() {
                 <div className="solic-cabecalho">
                   <div className="solic-cabecalho-esq">
                     <span className="solic-data"><strong>Data da solicitação:</strong> {fmtData(s?.criadoEm)}</span>
-                    {t.documentos?.length > 0 && (
+                    {(t.documentos?.length ?? 0) > 0 && (
                       <span className="solic-docs">
-                        {t.documentos.map((d: any) => (
+                        {(t.documentos ?? []).map((d) => (
                           <a key={d.id} className="botao-doc" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer" title="Visualizar">
                             {icoOlho}<span>{ROTULO_TIPO_DOC[d.tipo] ?? d.tipo}</span>
                           </a>

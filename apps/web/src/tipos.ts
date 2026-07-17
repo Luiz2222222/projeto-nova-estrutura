@@ -10,6 +10,8 @@ export interface UsuarioResumo {
   email?: string | null;
   papel?: Papel | string;
   tratamento?: string | null;
+  disponivelParaOrientar?: boolean;
+  _count?: { tccsComoOrientador?: number; tccsComoCoorientador?: number; bancasComoAvaliador?: number };
   afiliacao?: string | null;
   curso?: string | null;
 }
@@ -40,17 +42,27 @@ export interface MembroBanca {
   id: string;
   avaliadorId: string;
   status?: string;
+  nota?: number | null;
   parecer?: string | null;
   rascunho?: string | null;
   avaliadoEm?: string | null;
+  ajusteMotivo?: string | null;
   avaliador?: UsuarioResumo;
   banca?: Banca;
-  pesos?: Record<string, number> | null;
+  pesos?: PesosCalendario | null;
+  [coluna: string]: unknown;
+}
+
+// Linha do calendário do semestre com os pesos: pesoFase1/pesoFase2 + colunas dinâmicas
+// de peso por critério (peso1F1...) — quem lê usa pesoDe() com fallback do domínio.
+export interface PesosCalendario {
+  pesoFase1?: number | null;
+  pesoFase2?: number | null;
   [coluna: string]: unknown;
 }
 
 export interface Banca {
-  id?: string;
+  id: string;
   fase: 'FASE_1' | 'FASE_2';
   criadoEm?: string;
   membros?: MembroBanca[];
@@ -66,6 +78,8 @@ export interface Tcc {
   monografiaAprovada?: boolean;
   continuidadeConfirmada?: boolean;
   parecerContinuidade?: string | null;
+  faseAnteriorDescontinuacao?: string | null;
+  objetivos?: string | null;
   resumo?: string | null;
   descricao?: string | null;
 

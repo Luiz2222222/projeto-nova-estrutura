@@ -10,7 +10,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { apiGet, apiPost, apiUpload, apiDelete, URL_API, type ErroApi } from '../../api';
 import { ROTULO_FASE, formatarDefesa } from '../../utils/fases';
 import { CardDefesa } from '../../componentes/CardDefesa';
-import type { Tcc, UsuarioResumo } from '../../tipos';
+import type { PesosCalendario, Tcc, UsuarioResumo } from '../../tipos';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
@@ -35,9 +35,9 @@ const icoBanca = ic('M12 2l9 4.5-9 4.5-9-4.5L12 2z|M3 12l9 4.5 9-4.5');
 const icoLapis = ic('M12 20h9|M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z');
 
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const nomeComTrat = (p?: UsuarioResumo | null) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
 // Rótulo do candidato no dropdown: nome (com tratamento) + tipo/afiliação.
-const rotuloCandidato = (c: any) =>
+const rotuloCandidato = (c: UsuarioResumo) =>
   `${c.tratamento ? c.tratamento + ' ' : ''}${c.nomeCompleto}${c.papel === 'AVALIADOR' ? ` (Externo${c.afiliacao ? ' · ' + c.afiliacao : ''})` : ' (Professor)'}`;
 
 const ROTULO_DOC: Record<string, string> = {
@@ -85,14 +85,14 @@ export function TccDetalheCoordenador() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
 
-  const [tccs, setTccs] = useState<any[]>([]);
+  const [tccs, setTccs] = useState<Tcc[]>([]);
   const [carregando, setCarregando] = useState(true);
 
-  const [candidatos, setCandidatos] = useState<any[]>([]);
+  const [candidatos, setCandidatos] = useState<UsuarioResumo[]>([]);
   const [avaliador1, setAvaliador1] = useState('');
   const [avaliador2, setAvaliador2] = useState('');
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
-  const [resultado, setResultado] = useState<any | null>(null);
+  const [resultado, setResultado] = useState<{ fase?: string; aprovado?: boolean; nf1?: number | null; nf2?: number | null; nf?: number | null } | null>(null);
   const [erroAcao, setErroAcao] = useState('');
   const [confirmando, setConfirmando] = useState<null | 'banca' | 'validar' | 'iniciar' | 'cancelarAjuste'>(null);
   const [ajusteMembro, setAjusteMembro] = useState<string | null>(null); // membroId p/ solicitar ajuste
@@ -102,7 +102,7 @@ export function TccDetalheCoordenador() {
   const [avisoRecarregar, setAvisoRecarregar] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [editando, setEditando] = useState(false);
-  const [pesos, setPesos] = useState<any | null>(null);
+  const [pesos, setPesos] = useState<PesosCalendario | null>(null);
   const [excluindo, setExcluindo] = useState(false); // modal "Excluir TCC" aberto
   const [excluindoProc, setExcluindoProc] = useState(false);
   const [erroExcluir, setErroExcluir] = useState('');
@@ -126,7 +126,7 @@ export function TccDetalheCoordenador() {
 
   // Pesos do calendário do semestre do TCC (para a área de banca/notas).
   useEffect(() => {
-    if (tccId) apiGet(`/tccs/${tccId}/banca/pesos`).then(setPesos).catch(() => setPesos(null));
+    if (tccId) apiGet<PesosCalendario>(`/tccs/${tccId}/banca/pesos`).then(setPesos).catch(() => setPesos(null));
   }, [tccId]);
 
   // Deep link: rola até a seção de validação (#validacao) e a destaca por alguns segundos.
@@ -160,12 +160,13 @@ export function TccDetalheCoordenador() {
       ? `${tcc.coorientadorTitulacao ? tcc.coorientadorTitulacao + ' ' : ''}${tcc.coorientadorNome}${tcc.coorientadorAfiliacao ? ' · ' + tcc.coorientadorAfiliacao : ''}`
       : null;
   const descricao = tcc.resumo || tcc.descricao || tcc.objetivos || null;
-  const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+  const bancas = [...(tcc.bancas ?? [])].sort((a, b) => (a.fase < b.fase ? -1 : 1));
   // Pesos das fases (configuráveis pela coordenação) — do calendário do semestre; default 60/40.
   const pesoF1c = Number(pesos?.pesoFase1 ?? 0.6);
   const pesoF2c = Number(pesos?.pesoFase2 ?? 0.4);
 
   async function formarBanca() {
+    if (!tcc) return;
     setErroAcao('');
     if (!avaliador1 || !avaliador2) return setErroAcao('Escolha o Avaliador 1 e o Avaliador 2.');
     if (avaliador1 === avaliador2) return setErroAcao('Os dois avaliadores devem ser pessoas diferentes.');
@@ -192,10 +193,11 @@ export function TccDetalheCoordenador() {
   // membro) e em seguida valida a fase (mesma validação de sempre). Não há mais aprovação
   // individual pela UI. Bloqueia se houver ajuste pendente (evita aprovar avaliação em ajuste).
   async function validar() {
+    if (!tcc) return;
     setErroAcao('');
-    const bancaAtiva = bancas.find((b: any) => b.fase === faseCardAtiva);
+    const bancaAtiva = bancas.find((b) => b.fase === faseCardAtiva);
     const membros = bancaAtiva?.membros ?? [];
-    if (membros.some((m: any) => m.status === 'AJUSTE_SOLICITADO')) {
+    if (membros.some((m) => m.status === 'AJUSTE_SOLICITADO')) {
       setErroAcao('Há avaliação com ajuste solicitado ainda pendente. Cancele o ajuste ou aguarde o reenvio antes de aprovar as avaliações.');
       return;
     }
@@ -204,7 +206,7 @@ export function TccDetalheCoordenador() {
       for (const m of membros) {
         if (m.status !== 'APROVADO') await apiPost(`/bancas/membros/${m.id}/aprovar`, {});
       }
-      const r = await apiPost(`/tccs/${tcc.id}/banca/validar`, {});
+      const r = await apiPost<{ fase?: string; aprovado?: boolean; nf1?: number | null; nf2?: number | null; nf?: number | null }>(`/tccs/${tcc.id}/banca/validar`, {});
       setResultado(r);
       setConfirmando(null);
       carregar();
@@ -217,6 +219,7 @@ export function TccDetalheCoordenador() {
 
   // Coordenador inicia a análise (AGUARDANDO_ANALISE_* → VALIDACAO_*, trava a banca).
   async function iniciarAnalise() {
+    if (!tcc) return;
     setErroAcao('');
     setEnviando(true);
     try {
@@ -288,6 +291,7 @@ export function TccDetalheCoordenador() {
 
   // Exclusão LÓGICA do TCC (coordenador). Após excluir, volta para a lista de TCCs.
   async function excluirTcc(motivo: string) {
+    if (!tcc) return;
     setErroExcluir('');
     setExcluindoProc(true);
     try {
@@ -306,8 +310,8 @@ export function TccDetalheCoordenador() {
   const bancasOrdenadas = faseIIouDepois ? [...bancas].reverse() : bancas;
   // Membros da banca da fase ativa para o card de Orientação (sem o orientador, que já
   // aparece na linha própria). Antes de formar a banca, a linha "Banca" nem aparece.
-  const bancaAtivaCard = (tcc.bancas ?? []).find((b: any) => b.fase === faseCardAtiva);
-  const membrosBancaCard = (bancaAtivaCard?.membros ?? []).filter((m: any) => m.avaliadorId !== tcc.orientadorId);
+  const bancaAtivaCard = (tcc.bancas ?? []).find((b) => b.fase === faseCardAtiva);
+  const membrosBancaCard = (bancaAtivaCard?.membros ?? []).filter((m) => m.avaliadorId !== tcc.orientadorId);
 
   // Status (rótulo + cor) do card de cada fase, conforme a fase atual do TCC.
   function statusFaseCard(bancaFase: 'FASE_1' | 'FASE_2'): { rotulo: string; classe: string } {
@@ -372,7 +376,7 @@ export function TccDetalheCoordenador() {
           <div className="info-lista">
             <div className="info-campo"><span className="info-rotulo">Nome</span><span className="info-valor">{tcc.aluno?.nomeCompleto ?? '—'}</span></div>
             <div className="info-campo"><span className="info-rotulo">E-mail</span><span className="info-valor">{tcc.aluno?.email ?? '—'}</span></div>
-            <div className="info-campo"><span className="info-rotulo">Curso</span><span className="info-valor">{cursoDe(tcc.aluno?.curso)}</span></div>
+            <div className="info-campo"><span className="info-rotulo">Curso</span><span className="info-valor">{cursoDe(tcc.aluno?.curso ?? undefined)}</span></div>
             <div className="info-campo"><span className="info-rotulo">Semestre</span><span className="info-valor">{tcc.semestre ?? '—'}</span></div>
           </div>
         </section>
@@ -385,7 +389,7 @@ export function TccDetalheCoordenador() {
               <div className="info-campo">
                 <span className="info-rotulo">Banca</span>
                 <span className="info-valor" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {membrosBancaCard.map((m: any) => (
+                  {membrosBancaCard.map((m) => (
                     <span key={m.id}>{nomeComTrat(m.avaliador)}</span>
                   ))}
                 </span>
@@ -459,7 +463,7 @@ export function TccDetalheCoordenador() {
           </section>
         )
       ) : (
-        bancasOrdenadas.map((b: any) => {
+        bancasOrdenadas.map((b) => {
           const ehF2 = b.fase === 'FASE_2';
           const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
           const membros = b.membros ?? [];
@@ -467,7 +471,7 @@ export function TccDetalheCoordenador() {
           const emValidacao = fase === (ehF2 ? 'VALIDACAO_FASE_2' : 'VALIDACAO_FASE_1');
           const stFase = statusFaseCard(b.fase);
           // Resumo da fase (só coordenador — esta tela). Média simples, nota com peso e resultado.
-          const notas: number[] = membros.map((m: any) => m.nota).filter((n: any) => n != null);
+          const notas: number[] = membros.map((m) => m.nota).filter((n): n is number => n != null);
           const media = notas.length ? notas.reduce((s: number, n: number) => s + n, 0) / notas.length : null;
           const pesoFase = ehF2 ? pesoF2c : pesoF1c;
           const notaPeso = media != null ? media * pesoFase : null;
@@ -500,8 +504,8 @@ export function TccDetalheCoordenador() {
               {membros.length === 0 ? (
                 <p className="nota-vazio">Sem membros nesta banca.</p>
               ) : (
-                membros.map((m: any) => {
-                  const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+                membros.map((m) => {
+                  const st = STATUS_AVAL[m.status ?? ''] ?? { rotulo: m.status ?? '—', classe: 'status-atencao' };
                   const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
                   return (
                     <div key={m.id} className="aval-card">
@@ -552,7 +556,7 @@ export function TccDetalheCoordenador() {
               {/* Resumo da fase */}
               {membros.length > 0 && (
                 <div className="resumo-fase">
-                  {membros.map((m: any) => (
+                  {membros.map((m) => (
                     <div key={m.id} className="resumo-item">
                       <span className="resumo-item-rot">{papelDe.get(m.id)}</span>
                       <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
@@ -602,7 +606,7 @@ export function TccDetalheCoordenador() {
             {(tcc.documentos ?? []).length === 0 ? (
               <p className="nota-vazio">Nenhum documento enviado.</p>
             ) : (
-              tcc.documentos.map((d: any) => (
+              (tcc.documentos ?? []).map((d) => (
                 <div key={d.id} className="item-arquivo">
                   <div className="item-arquivo-info">
                     {icoDoc}

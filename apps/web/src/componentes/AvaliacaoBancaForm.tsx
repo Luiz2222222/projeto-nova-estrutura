@@ -4,6 +4,7 @@
 // Fluxo (backend já suporta rascunho/reabertura): PENDENTE = editável, com "Salvar
 // rascunho" (finalizar=false) e "Enviar" (finalizar=true). ENVIADO = leitura + "Editar"
 // (POST .../reabrir → volta a PENDENTE). BLOQUEADO/CONCLUIDO = leitura sem reabrir.
+import type { MembroBanca } from '../tipos';
 import { useEffect, useMemo, useState } from 'react';
 import { apiPost, type ErroApi } from '../api';
 import { Modal } from './Modal';
@@ -48,7 +49,7 @@ function clampScore(raw: string, max: number, atual: string): string {
   }
   return limpo;
 }
-const numToStr = (v: any) => (v == null ? '' : String(v).replace('.', ','));
+const numToStr = (v: unknown) => (v == null ? '' : String(v).replace('.', ','));
 
 // Parecer estruturado: "=== Rótulo ===\ncomentário" por critério + "=== Parecer geral ===".
 const stripHeader = (t: string) => t.replace(/^===\s*.+?\s*===\s*/i, '').trim();
@@ -61,7 +62,7 @@ function extrairSecao(parecer: string, secao: string): string {
 interface Props {
   // Membro da banca do usuário (de /bancas/minhas): banca.fase, banca.tcc.faseAtual,
   // pesos, bloqueado, status, colunas de nota e parecer, bancaId.
-  membro: any;
+  membro: MembroBanca;
   // Chamado após salvar/reabrir para o pai recarregar e repassar o membro atualizado.
   aoAtualizar: () => void | Promise<void>;
 }
@@ -130,7 +131,7 @@ export function AvaliacaoBancaForm({ membro: m, aoAtualizar }: Props) {
   // oficiais). O rascunho fica na coluna `rascunho` (JSON), separado das colunas oficiais.
   useEffect(() => {
     if (!m) return;
-    let notasFonte: Record<string, any> = {};
+    let notasFonte: Record<string, unknown> = {};
     let parecerFonte: string = m.parecer ?? '';
     let temRascunho = false;
     if (m.rascunho) {

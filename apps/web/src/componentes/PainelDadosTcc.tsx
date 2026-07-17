@@ -1,15 +1,16 @@
 // Aba "Dados gerais" do modal único de edição do TCC (coordenador). PUT /tccs/:id.
+import type { Tcc, UsuarioResumo } from '../tipos';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut, type ErroApi } from '../api';
 import { FASES, ROTULO_FASE } from '@tcc/compartilhado';
 
-const rotuloUsuario = (u: any) =>
+const rotuloUsuario = (u: UsuarioResumo) =>
   `${u.tratamento ? u.tratamento + ' ' : ''}${u.nomeCompleto}${u.papel === 'AVALIADOR' ? ' (Externo)' : u.papel === 'COORDENADOR' ? ' (Coordenador)' : u.papel === 'PROFESSOR' ? ' (Professor)' : ''}`;
 
-export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void }) {
-  const [alunos, setAlunos] = useState<any[]>([]);
-  const [professores, setProfessores] = useState<any[]>([]);
-  const [coorientadores, setCoorientadores] = useState<any[]>([]);
+export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void }) {
+  const [alunos, setAlunos] = useState<UsuarioResumo[]>([]);
+  const [professores, setProfessores] = useState<UsuarioResumo[]>([]);
+  const [coorientadores, setCoorientadores] = useState<UsuarioResumo[]>([]);
 
   const [titulo, setTitulo] = useState(tcc.titulo ?? '');
   const [semestre, setSemestre] = useState(tcc.semestre ?? '');
@@ -35,9 +36,9 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: any; aoSalvo: () => void
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    apiGet('/usuarios/lista?papel=ALUNO').then((r: any) => setAlunos(r ?? [])).catch(() => setAlunos([]));
-    apiGet('/usuarios/lista?papel=PROFESSOR').then((r: any) => setProfessores(r ?? [])).catch(() => setProfessores([]));
-    apiGet('/usuarios/coorientadores').then((r: any) => setCoorientadores(r ?? [])).catch(() => setCoorientadores([]));
+    apiGet<UsuarioResumo[]>('/usuarios/lista?papel=ALUNO').then((r) => setAlunos(r ?? [])).catch(() => setAlunos([]));
+    apiGet<UsuarioResumo[]>('/usuarios/lista?papel=PROFESSOR').then((r) => setProfessores(r ?? [])).catch(() => setProfessores([]));
+    apiGet<UsuarioResumo[]>('/usuarios/coorientadores').then((r) => setCoorientadores(r ?? [])).catch(() => setCoorientadores([]));
   }, []);
 
   // Continuidade em 3 estados (derivada de faseAtual + continuidadeConfirmada). Mudar de

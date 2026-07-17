@@ -3,6 +3,7 @@
 // um membro (PUT /bancas/membros/:id/avaliacao) e troca os 2 avaliadores da Fase I
 // (PUT /tccs/:id/banca/avaliadores, que sincroniza a Fase II). Respeita os guards de
 // fase do backend (bloqueia depois de validada/concluída).
+import type { MembroBanca, PesosCalendario, Tcc, UsuarioResumo } from '../tipos';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut, type ErroApi } from '../api';
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
@@ -17,12 +18,12 @@ const STATUS_OPCOES = [
   { v: 'BLOQUEADO', r: 'Bloqueado' },
   { v: 'CONCLUIDO', r: 'Concluído' },
 ];
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
-const rotuloCandidato = (c: any) =>
+const nomeComTrat = (p?: UsuarioResumo | null) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const rotuloCandidato = (c: UsuarioResumo) =>
   `${c.tratamento ? c.tratamento + ' ' : ''}${c.nomeCompleto}${c.papel === 'AVALIADOR' ? ` (Externo${c.afiliacao ? ' · ' + c.afiliacao : ''})` : ' (Professor)'}`;
 
 // Formulário inline de edição da avaliação de um membro.
-function FormAvaliacao({ membro, fase, pesos, aoSalvo, aoFechar }: { membro: any; fase: string; pesos: any; aoSalvo: () => void; aoFechar: () => void }) {
+function FormAvaliacao({ membro, fase, pesos, aoSalvo, aoFechar }: { membro: MembroBanca; fase: string; pesos: PesosCalendario | null; aoSalvo: () => void; aoFechar: () => void }) {
   const ehF2 = fase === 'FASE_2';
   const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
   const [notas, setNotas] = useState<Record<string, string>>(() => {
@@ -118,15 +119,15 @@ function FormAvaliacao({ membro, fase, pesos, aoSalvo, aoFechar }: { membro: any
 }
 
 // Formulário inline para trocar os 2 avaliadores da Fase I.
-function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string; membrosFase1: any[]; aoSalvo: () => void; aoFechar: () => void }) {
-  const [candidatos, setCandidatos] = useState<any[]>([]);
+function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string; membrosFase1: MembroBanca[]; aoSalvo: () => void; aoFechar: () => void }) {
+  const [candidatos, setCandidatos] = useState<UsuarioResumo[]>([]);
   const [a1, setA1] = useState(membrosFase1?.[0]?.avaliadorId ?? '');
   const [a2, setA2] = useState(membrosFase1?.[1]?.avaliadorId ?? '');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    apiGet(`/tccs/${tccId}/banca/candidatos`).then((r: any) => setCandidatos(r ?? [])).catch(() => setCandidatos([]));
+    apiGet<UsuarioResumo[]>(`/tccs/${tccId}/banca/candidatos`).then((r) => setCandidatos(r ?? [])).catch(() => setCandidatos([]));
   }, [tccId]);
 
   async function salvar() {
@@ -168,7 +169,7 @@ function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string;
   );
 }
 
-export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; aoSalvo: () => void }) {
+export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: Tcc; pesos: PesosCalendario | null; aoSalvo: () => void }) {
   const [editandoMembro, setEditandoMembro] = useState<string | null>(null);
   const [trocando, setTrocando] = useState(false);
   const [colapsadas, setColapsadas] = useState<Set<string>>(new Set()); // Fase I/II abertas por padrão.
@@ -180,7 +181,7 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
       return n;
     });
   const fase = tcc.faseAtual as string;
-  const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+  const bancas = [...(tcc.bancas ?? [])].sort((a, b) => (a.fase < b.fase ? -1 : 1));
 
   // Edição administrativa do coordenador é SEMPRE permitida neste modal (endpoint só de
   // coordenador; o backend recalcula NF1/NF2/NF/resultado ao editar fases já validadas).
@@ -190,7 +191,7 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
 
   return (
     <>
-      {bancas.map((b: any) => {
+      {bancas.map((b) => {
         const ehF2 = b.fase === 'FASE_2';
         const criterios: Criterio[] = ehF2 ? CRITERIOS_FASE2 : CRITERIOS_FASE1;
         const membros = b.membros ?? [];
@@ -218,8 +219,8 @@ export function PainelBancaTcc({ tcc, pesos, aoSalvo }: { tcc: any; pesos: any; 
             {membros.length === 0 ? (
               <p className="nota-vazio">Sem membros nesta banca.</p>
             ) : (
-              membros.map((m: any) => {
-                const st = STATUS_AVAL[m.status] ?? { rotulo: m.status, classe: 'status-atencao' };
+              membros.map((m) => {
+                const st = STATUS_AVAL[m.status ?? ''] ?? { rotulo: m.status ?? '—', classe: 'status-atencao' };
                 const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
                 // Por padrão em leitura; "Editar" abre o formulário (que traz Cancelar/Salvar).
                 const editando = editandoMembro === m.id;

@@ -1,6 +1,7 @@
 // Helpers da avaliação de banca (reaproveitados na tela do avaliador e na edição
 // administrativa do coordenador): máscara/clamp de nota, parecer estruturado e pesos.
 import { colunaNota, colunaPeso, type Criterio } from '@tcc/compartilhado';
+import type { MembroBanca, PesosCalendario } from '../tipos';
 
 export const parseBR = (v: string): number | null => {
   if (!v.trim()) return null;
@@ -20,9 +21,9 @@ export function clampScore(raw: string, max: number, atual: string): string {
   return limpo;
 }
 
-export const numToStr = (v: any) => (v == null ? '' : String(v).replace('.', ','));
+export const numToStr = (v: unknown) => (v == null ? '' : String(v).replace('.', ','));
 export const fmtNum = (n: number) => String(n).replace('.', ',');
-export const fmtNota = (v: any) => (v == null ? '—' : String(Number(v)).replace('.', ','));
+export const fmtNota = (v: unknown) => (v == null ? '—' : String(Number(v)).replace('.', ','));
 
 const stripHeader = (t: string) => t.replace(/^===\s*.+?\s*===\s*/i, '').trim();
 
@@ -45,8 +46,8 @@ export function construirParecer(criterios: Criterio[], comentarios: Record<stri
   return partes.join('\n\n');
 }
 
-export const pesoDe = (criterio: Criterio, pesos: any) => Number(pesos?.[colunaPeso(criterio.chave)] ?? criterio.pesoPadrao);
-export const notaSalva = (membro: any, criterio: Criterio) => membro?.[colunaNota(criterio.chave)];
+export const pesoDe = (criterio: Criterio, pesos: PesosCalendario | null | undefined) => Number(pesos?.[colunaPeso(criterio.chave)] ?? criterio.pesoPadrao);
+export const notaSalva = (membro: MembroBanca | null | undefined, criterio: Criterio) => membro?.[colunaNota(criterio.chave)];
 
 export const STATUS_AVAL: Record<string, { rotulo: string; classe: string }> = {
   PENDENTE: { rotulo: 'Pendente', classe: 'status-atencao' },

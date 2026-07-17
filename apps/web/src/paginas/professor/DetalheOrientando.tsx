@@ -24,7 +24,7 @@ import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { CardDefesa } from '../../componentes/CardDefesa';
 import { partesDefesaFortaleza, montarInstanteDefesa } from '../../utils/defesa';
-import type { Tcc, MembroBanca } from '../../tipos';
+import type { Tcc, MembroBanca, UsuarioResumo } from '../../tipos';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -40,8 +40,8 @@ const icoBanca = ic('M12 2l9 4.5-9 4.5-9-4.5L12 2z|M3 12l9 4.5 9-4.5');
 const icoCheck = ic('M22 11.08V12a10 10 0 1 1-5.93-9.14|M22 4 12 14.01l-3-3');
 
 const cursoDe = (c?: string) => (c ? (ROTULO_CURSO as Record<string, string>)[c] ?? c : '—');
-const nomeComTrat = (p?: any) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
-const fmtNota = (v: any) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
+const nomeComTrat = (p?: UsuarioResumo | null) => (p ? `${p.tratamento ? p.tratamento + ' ' : ''}${p.nomeCompleto}` : '—');
+const fmtNota = (v: unknown) => (v != null ? Number(v).toFixed(2).replace('.', ',') : '—');
 const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
   const [a, m, d] = iso.split('T')[0].split('-');
@@ -79,8 +79,8 @@ export function DetalheOrientando() {
   const navigate = useNavigate();
   const { usuario } = useAuth();
 
-  const [tccs, setTccs] = useState<any[]>([]);
-  const [bancasMinhas, setBancasMinhas] = useState<any[]>([]);
+  const [tccs, setTccs] = useState<Tcc[]>([]);
+  const [bancasMinhas, setBancasMinhas] = useState<MembroBanca[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [recusa, setRecusa] = useState<{ tipo: 'monografia' | 'continuidade' | 'versaofinal' } | null>(null);
   const [confirmarAcao, setConfirmarAcao] = useState<null | 'continuidade' | 'monografia' | 'versaofinal'>(null);
@@ -247,8 +247,8 @@ export function DetalheOrientando() {
   const blkVf = !!tcc.bloqueios?.VERSAO_FINAL;
   // Fase II: o orientador também é membro da banca. A preparação das bancas e a avaliação
   // do orientador acontecem AQUI (não em "Participações em bancas").
-  const bancaF2 = (tcc.bancas ?? []).find((b: any) => b.fase === 'FASE_2');
-  const meuMembroF2 = bancaF2?.membros?.find((m: any) => m.avaliadorId === tcc.orientadorId) ?? null;
+  const bancaF2 = (tcc.bancas ?? []).find((b) => b.fase === 'FASE_2');
+  const meuMembroF2 = bancaF2?.membros?.find((m) => m.avaliadorId === tcc.orientadorId) ?? null;
   // Agendar na fase própria; depois disso o orientador pode ALTERAR o agendamento quando
   // quiser (reagendar nunca regride a fase nem bloqueia avaliações — regra do backend).
   const podeEditarDefesa = fase === 'AGENDAMENTO_DEFESA_FASE_2' || !!tcc.defesaAgendadaPara;
@@ -265,7 +265,7 @@ export function DetalheOrientando() {
   const ultimaMono = monografias[0] ?? null;
   const iniciais = [...docsDe(tcc.documentos, 'PLANO_DESENVOLVIMENTO'), ...docsDe(tcc.documentos, 'TERMO_ACEITE')];
   const versaoFinal = docsDe(tcc.documentos, 'VERSAO_FINAL')[0] ?? null;
-  const bancas = [...(tcc.bancas ?? [])].sort((a: any, b: any) => (a.fase < b.fase ? -1 : 1));
+  const bancas = [...(tcc.bancas ?? [])].sort((a, b) => (a.fase < b.fase ? -1 : 1));
   // Notas só ficam visíveis ao orientador DEPOIS da confirmação da nota final da Fase II
   // (tcc.nf é preenchido na validação da Fase II pela coordenação). Antes disso, nada de
   // NF1/NF2/NF, resultado ou nota por membro — mesma regra da timeline (notasTrilhaTcc).
@@ -302,7 +302,7 @@ export function DetalheOrientando() {
           <div className="info-lista">
             <div className="info-campo"><span className="info-rotulo">Aluno</span><span className="info-valor">{tcc.aluno?.nomeCompleto ?? '—'}</span></div>
             <div className="info-campo"><span className="info-rotulo">E-mail</span><span className="info-valor">{tcc.aluno?.email ?? '—'}</span></div>
-            <div className="info-campo"><span className="info-rotulo">Curso</span><span className="info-valor">{cursoDe(tcc.aluno?.curso)}</span></div>
+            <div className="info-campo"><span className="info-rotulo">Curso</span><span className="info-valor">{cursoDe(tcc.aluno?.curso ?? undefined)}</span></div>
             <div className="info-campo"><span className="info-rotulo">Criado em</span><span className="info-valor">{fmtData(tcc.criadoEm)}</span></div>
           </div>
         </section>

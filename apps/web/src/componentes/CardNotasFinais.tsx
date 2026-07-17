@@ -7,6 +7,7 @@
 //
 // Cálculo: nada novo — usa os pesos e a nota final do domínio (PESO_NF1/PESO_NF2, notaFinal,
 // mediaNotas). "Normal" da nota final = média simples; "Ponderada" = NF (0,6·NF1 + 0,4·NF2).
+import type { TccResumo } from '../tipos';
 import { ROTULO_FASE } from '../utils/fases';
 import { PESO_NF1, PESO_NF2, notaFinal, mediaNotas } from '@tcc/compartilhado';
 
@@ -18,16 +19,16 @@ const ic = (d: string) => (
 // Troféu/medalha, para casar com "Notas Finais".
 const icoNotas = ic('M8 21h8|M12 17v4|M7 4h10v5a5 5 0 0 1-10 0V4z|M17 5h3v2a3 3 0 0 1-3 3|M7 5H4v2a3 3 0 0 0 3 3');
 
-const num = (v: any): number | null => (v == null ? null : Number(v));
+const num = (v: unknown): number | null => (v == null ? null : Number(v));
 const fmt = (v: number | null): string => (v == null ? '—' : v.toFixed(2).replace('.', ','));
 
 // Média da banca de uma fase SÓ quando todos os membros já enviaram (nota != null). Usada
 // para estimar a nota que ficará antes da confirmação da coordenação (visão do coordenador).
-function mediaBancaCompleta(tcc: any, fase: string): number | null {
-  const banca = (tcc?.bancas ?? []).find((b: any) => b.fase === fase);
+function mediaBancaCompleta(tcc: TccResumo | null | undefined, fase: string): number | null {
+  const banca = (tcc?.bancas ?? []).find((b) => b.fase === fase);
   const membros = banca?.membros ?? [];
   if (membros.length === 0) return null;
-  const notas = membros.map((m: any) => m.nota).filter((n: any) => n != null).map(Number);
+  const notas = membros.map((m) => m.nota).filter((n) => n != null).map(Number);
   if (notas.length !== membros.length) return null; // ainda faltam avaliações enviadas
   return mediaNotas(notas);
 }
@@ -50,7 +51,7 @@ function BlocoNotas({ titulo, pendente, destaque, linhas }: { titulo: string; pe
   );
 }
 
-export function CardNotasFinais({ tcc, coordenador = false, pesoF1 = PESO_NF1, pesoF2 = PESO_NF2 }: { tcc: any; coordenador?: boolean; pesoF1?: number; pesoF2?: number }) {
+export function CardNotasFinais({ tcc, coordenador = false, pesoF1 = PESO_NF1, pesoF2 = PESO_NF2 }: { tcc: TccResumo | null | undefined; coordenador?: boolean; pesoF1?: number; pesoF2?: number }) {
   const nf1 = num(tcc?.nf1);
   const nf2 = num(tcc?.nf2);
   const nf = num(tcc?.nf);
@@ -98,7 +99,7 @@ export function CardNotasFinais({ tcc, coordenador = false, pesoF1 = PESO_NF1, p
         <div className="nota-bloco">
           <span className="nota-bloco-titulo">Status</span>
           <span className="selo" style={{ background: 'var(--azul-suave)', color: 'var(--azul-escuro)' }}>
-            {ROTULO_FASE[tcc?.faseAtual] ?? tcc?.faseAtual ?? '—'}
+            {ROTULO_FASE[tcc?.faseAtual ?? ''] ?? tcc?.faseAtual ?? '—'}
           </span>
           {resultado && (
             <span className="selo" style={{ background: bgResultado, color: corResultado }}>{resultado}</span>

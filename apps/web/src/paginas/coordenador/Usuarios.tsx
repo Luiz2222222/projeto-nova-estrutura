@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { apiGet, apiPut, apiDelete, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 import { ROTULO_CURSO, CURSOS, TRATAMENTOS, AFILIACOES } from '@tcc/compartilhado';
+import type { UsuarioResumo } from '../../tipos';
 
 const ABAS = [
   { id: 'PROFESSOR', rotulo: 'Professores' },
@@ -10,7 +11,7 @@ const ABAS = [
 ] as const;
 type Papel = (typeof ABAS)[number]['id'];
 
-const cursoDe = (u: any) => (ROTULO_CURSO as Record<string, string>)[u.curso] ?? u.curso ?? '—';
+const cursoDe = (u: UsuarioResumo) => (ROTULO_CURSO as Record<string, string>)[u.curso ?? ''] ?? u.curso ?? '—';
 
 // "Outros" igual ao cadastro (ModalCadastro): valor fora da lista vira "Outros" + campo livre.
 const naLista = (v: string | null | undefined, lista: readonly string[]) => !!v && lista.includes(v);
@@ -28,30 +29,30 @@ const icoLixeira = ic('M3 6h18|M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 
 
 export function Usuarios() {
   const [aba, setAba] = useState<Papel>('PROFESSOR');
-  const [usuarios, setUsuarios] = useState<any[]>([]);
+  const [usuarios, setUsuarios] = useState<UsuarioResumo[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState('');
 
   // edição
-  const [editando, setEditando] = useState<any | null>(null);
-  const [form, setForm] = useState<any>({});
+  const [editando, setEditando] = useState<UsuarioResumo | null>(null);
+  const [form, setForm] = useState<{ nomeCompleto?: string; email?: string | null; tratSel?: string; tratLivre?: string; afilSel?: string; afilLivre?: string; curso?: string; disponivelParaOrientar?: boolean }>({});
   const [erroEdit, setErroEdit] = useState('');
   const [salvando, setSalvando] = useState(false);
 
   // reset de senha
-  const [resetando, setResetando] = useState<any | null>(null);
+  const [resetando, setResetando] = useState<UsuarioResumo | null>(null);
   const [senha, setSenha] = useState('');
   const [confirmar, setConfirmar] = useState('');
   const [erroReset, setErroReset] = useState('');
 
   // exclusão
-  const [excluindo, setExcluindo] = useState<any | null>(null);
+  const [excluindo, setExcluindo] = useState<UsuarioResumo | null>(null);
   const [erroExcluir, setErroExcluir] = useState('');
 
   function carregar() {
     setCarregando(true);
-    apiGet(`/usuarios/lista?papel=${aba}`)
-      .then((r: any) => setUsuarios(r ?? []))
+    apiGet<UsuarioResumo[]>(`/usuarios/lista?papel=${aba}`)
+      .then((r) => setUsuarios(r ?? []))
       .catch(() => setUsuarios([]))
       .finally(() => setCarregando(false));
   }
@@ -60,10 +61,10 @@ export function Usuarios() {
   const filtrados = useMemo(() => {
     const t = busca.trim().toLowerCase();
     if (!t) return usuarios;
-    return usuarios.filter((u) => u.nomeCompleto.toLowerCase().includes(t) || u.email.toLowerCase().includes(t));
+    return usuarios.filter((u) => u.nomeCompleto.toLowerCase().includes(t) || (u.email ?? '').toLowerCase().includes(t));
   }, [usuarios, busca]);
 
-  function abrirEdicao(u: any) {
+  function abrirEdicao(u: UsuarioResumo) {
     setEditando(u);
     setForm({
       nomeCompleto: u.nomeCompleto,
@@ -79,15 +80,16 @@ export function Usuarios() {
     setErroEdit('');
   }
   async function salvarEdicao() {
+    if (!editando) return;
     setErroEdit('');
     if (!form.nomeCompleto?.trim()) return setErroEdit('Informe o nome.');
     if (!form.email?.trim()) return setErroEdit('Informe o e-mail.');
     setSalvando(true);
     try {
       // Se "Outros" estiver selecionado, envia o texto livre digitado (igual ao cadastro).
-      const tratamento = (form.tratSel === 'Outros' ? form.tratLivre : form.tratSel || '').trim();
-      const afiliacao = (form.afilSel === 'Outros' ? form.afilLivre : form.afilSel || '').trim();
-      const corpo: any = { nomeCompleto: form.nomeCompleto, email: form.email };
+      const tratamento = (form.tratSel === 'Outros' ? form.tratLivre ?? '' : form.tratSel || '').trim();
+      const afiliacao = (form.afilSel === 'Outros' ? form.afilLivre ?? '' : form.afilSel || '').trim();
+      const corpo: Record<string, unknown> = { nomeCompleto: form.nomeCompleto, email: form.email };
       if (aba === 'ALUNO') corpo.curso = form.curso || undefined;
       if (aba === 'PROFESSOR') { corpo.tratamento = tratamento || undefined; corpo.disponivelParaOrientar = form.disponivelParaOrientar; }
       if (aba === 'AVALIADOR') { corpo.tratamento = tratamento || undefined; corpo.afiliacao = afiliacao || undefined; }
@@ -101,13 +103,14 @@ export function Usuarios() {
     }
   }
 
-  function abrirReset(u: any) {
+  function abrirReset(u: UsuarioResumo) {
     setResetando(u);
     setSenha('');
     setConfirmar('');
     setErroReset('');
   }
   async function salvarReset() {
+    if (!resetando) return;
     setErroReset('');
     if (senha.length < 6) return setErroReset('A senha precisa ter ao menos 6 caracteres.');
     if (senha !== confirmar) return setErroReset('As senhas não coincidem.');
@@ -123,6 +126,7 @@ export function Usuarios() {
   }
 
   async function confirmarExcluir() {
+    if (!excluindo) return;
     setErroExcluir('');
     setSalvando(true);
     try {
@@ -176,7 +180,7 @@ export function Usuarios() {
                 {filtrados.map((u) => (
                   <tr key={u.id}>
                     <td title={u.nomeCompleto}>{u.tratamento ? `${u.tratamento} ` : ''}{u.nomeCompleto}</td>
-                    <td title={u.email}>{u.email}</td>
+                    <td title={u.email ?? ''}>{u.email}</td>
                     {aba === 'PROFESSOR' && (
                       <>
                         <td>{(u._count?.tccsComoOrientador ?? 0) + (u._count?.tccsComoCoorientador ?? 0)}</td>
@@ -209,7 +213,7 @@ export function Usuarios() {
         <Modal titulo="Editar usuário" subtitulo={editando.nomeCompleto} aoFechar={() => !salvando && setEditando(null)}>
           {erroEdit && <div className="erro-geral">{erroEdit}</div>}
           <label className="campo"><span>Nome completo</span><input value={form.nomeCompleto} onChange={(e) => setForm({ ...form, nomeCompleto: e.target.value })} /></label>
-          <label className="campo"><span>E-mail</span><input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
+          <label className="campo"><span>E-mail</span><input type="email" value={form.email ?? ''} onChange={(e) => setForm({ ...form, email: e.target.value })} /></label>
           {aba === 'ALUNO' && (
             <label className="campo"><span>Curso</span>
               <select value={form.curso} onChange={(e) => setForm({ ...form, curso: e.target.value })}>
