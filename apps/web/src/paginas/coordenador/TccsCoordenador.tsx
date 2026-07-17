@@ -28,16 +28,7 @@ const nomeCurto = (p?: any) => p?.nomeCompleto ?? '—';
 
 // Mesmas 5 etapas macro do Dashboard do coordenador (bucketEtapa) — usadas para
 // aplicar o filtro inicial vindo dos cards/barras do dashboard via ?grupo=.
-function bucketEtapa(f: string): number {
-  switch (f) {
-    case 'INICIALIZACAO': return 0;
-    case 'DESENVOLVIMENTO': case 'DESCONTINUADO': return 1;
-    case 'FORMACAO_BANCA_FASE_1': case 'AVALIACAO_FASE_1': case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1': case 'VALIDACAO_FASE_1': case 'REPROVADO_FASE_1': return 2;
-    case 'AGENDAMENTO_DEFESA_FASE_2': case 'AVALIACAO_FASE_2': case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2': case 'VALIDACAO_FASE_2': case 'REPROVADO_FASE_2': return 3;
-    case 'AGUARDANDO_AJUSTES_FINAIS': case 'VALIDACAO_VERSAO_FINAL': case 'CONCLUIDO': return 4;
-    default: return -1;
-  }
-}
+import { bucketEtapaFase as bucketEtapa } from '../../utils/fases';
 const REPROVADOS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2', 'DESCONTINUADO'];
 const ROTULO_GRUPO: Record<string, string> = {
   total: 'Todos os TCCs',

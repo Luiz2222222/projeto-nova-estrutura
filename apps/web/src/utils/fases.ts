@@ -6,6 +6,20 @@ export { ROTULO_FASE, INDICE_FASE } from '@tcc/compartilhado';
 
 export const faseParaIndice = indiceFase;
 
+// Agrupador de etapa dos DASHBOARDS (contagem/badges por lista). Parte do índice da
+// trilha do domínio (indiceFase) e, ao contrário dele, coloca os terminais "ruins" no
+// grupo da etapa em que o TCC parou: DESCONTINUADO→Desenvolvimento, REPROVADO_FASE_1→
+// Fase I, REPROVADO_FASE_2→Fase II. Fase desconhecida → -1 (fora de todos os grupos).
+// Era um switch idêntico copiado em 4 dashboards — regra única, coberta por teste.
+export function bucketEtapaFase(fase?: string | null): number {
+  switch (fase) {
+    case 'DESCONTINUADO': return 1;
+    case 'REPROVADO_FASE_1': return 2;
+    case 'REPROVADO_FASE_2': return 3;
+    default: return (fase ? indiceFase(fase) : null) ?? -1;
+  }
+}
+
 export const ROTULO_STATUS_SOLIC: Record<string, string> = {
   PENDENTE: 'Aguardando aprovação do coordenador',
   ACEITA: 'Abertura aprovada',

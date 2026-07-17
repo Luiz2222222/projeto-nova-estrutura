@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FASES } from '@tcc/compartilhado';
-import { chipsTrilha, formatarDefesa, mostrarVersaoFinal, notasTrilhaTcc, subfaseTcc } from './fases';
+import { bucketEtapaFase, chipsTrilha, formatarDefesa, mostrarVersaoFinal, notasTrilhaTcc, subfaseTcc } from './fases';
 
 describe('subfaseTcc — status visível de cada fase', () => {
   it('INICIALIZACAO varia conforme a solicitação', () => {
@@ -40,6 +40,33 @@ describe('subfaseTcc — status visível de cada fase', () => {
     for (const f of FASES) {
       expect(subfaseTcc({ faseAtual: f }), `fase sem status: ${f}`).not.toBe('');
     }
+  });
+});
+
+describe('bucketEtapaFase — agrupador de etapa dos dashboards (regra centralizada)', () => {
+  // Paridade EXAUSTIVA com o switch que existia copiado nos 4 dashboards.
+  const esperado: Record<string, number> = {
+    INICIALIZACAO: 0,
+    DESENVOLVIMENTO: 1, DESCONTINUADO: 1,
+    FORMACAO_BANCA_FASE_1: 2, AVALIACAO_FASE_1: 2, AGUARDANDO_ANALISE_COORDENACAO_FASE_1: 2, VALIDACAO_FASE_1: 2, REPROVADO_FASE_1: 2,
+    AGENDAMENTO_DEFESA_FASE_2: 3, AVALIACAO_FASE_2: 3, AGUARDANDO_ANALISE_COORDENACAO_FASE_2: 3, VALIDACAO_FASE_2: 3, REPROVADO_FASE_2: 3,
+    AGUARDANDO_AJUSTES_FINAIS: 4, VALIDACAO_VERSAO_FINAL: 4, CONCLUIDO: 4,
+  };
+
+  it('mapeia cada fase exatamente como o switch antigo', () => {
+    for (const [fase, indice] of Object.entries(esperado)) {
+      expect(bucketEtapaFase(fase), `fase ${fase}`).toBe(indice);
+    }
+  });
+
+  it('cobre todas as fases do domínio (nenhuma fase nova cai no -1 sem a gente saber)', () => {
+    for (const f of FASES) expect(bucketEtapaFase(f), `fase ${f}`).toBeGreaterThanOrEqual(0);
+  });
+
+  it('fase desconhecida/ausente → -1', () => {
+    expect(bucketEtapaFase('INVENTADA')).toBe(-1);
+    expect(bucketEtapaFase(null)).toBe(-1);
+    expect(bucketEtapaFase(undefined)).toBe(-1);
   });
 });
 
