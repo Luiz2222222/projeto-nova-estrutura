@@ -28,7 +28,7 @@ const nomeCurto = (p?: any) => p?.nomeCompleto ?? '—';
 
 // Mesmas 5 etapas macro do Dashboard do coordenador (bucketEtapa) — usadas para
 // aplicar o filtro inicial vindo dos cards/barras do dashboard via ?grupo=.
-import { bucketEtapaFase as bucketEtapa } from '../../utils/fases';
+import { bucketEtapaFase as bucketEtapa, indiceCanonicoFase } from '../../utils/fases';
 const REPROVADOS = ['REPROVADO_FASE_1', 'REPROVADO_FASE_2', 'DESCONTINUADO'];
 const ROTULO_GRUPO: Record<string, string> = {
   total: 'Todos os TCCs',
@@ -103,7 +103,9 @@ export function TccsCoordenador() {
   const distribuicao = useMemo(() => {
     const counts: Record<string, number> = {};
     tccs.forEach((t) => { counts[t.faseAtual] = (counts[t.faseAtual] || 0) + 1; });
-    return Object.keys(counts).map((f) => ({ fase: f, count: counts[f] }));
+    return Object.keys(counts)
+      .map((f) => ({ fase: f, count: counts[f] }))
+      .sort((a, b) => indiceCanonicoFase(a.fase) - indiceCanonicoFase(b.fase)); // ordem canonica do fluxo
   }, [tccs]);
   const fasesPresentes = useMemo(() => distribuicao.map((d) => d.fase), [distribuicao]);
 

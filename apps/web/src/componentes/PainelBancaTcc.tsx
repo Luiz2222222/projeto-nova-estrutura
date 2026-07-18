@@ -4,6 +4,7 @@
 // (PUT /tccs/:id/banca/avaliadores, que sincroniza a Fase II). Respeita os guards de
 // fase do backend (bloqueia depois de validada/concluída).
 import type { MembroBanca, PesosCalendario, Tcc, UsuarioResumo } from '../tipos';
+import { contemBusca } from '../utils/texto';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut, type ErroApi } from '../api';
 import { CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, type Criterio } from '@tcc/compartilhado';
@@ -123,8 +124,13 @@ function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string;
   const [candidatos, setCandidatos] = useState<UsuarioResumo[]>([]);
   const [a1, setA1] = useState(membrosFase1?.[0]?.avaliadorId ?? '');
   const [a2, setA2] = useState(membrosFase1?.[1]?.avaliadorId ?? '');
+  const [busca, setBusca] = useState('');
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
+  // Busca por nome (sem acento/caixa); os selecionados nunca somem da lista.
+  const lista = busca.trim()
+    ? candidatos.filter((c) => contemBusca(c.nomeCompleto, busca) || c.id === a1 || c.id === a2)
+    : candidatos;
 
   useEffect(() => {
     apiGet<UsuarioResumo[]>(`/tccs/${tccId}/banca/candidatos`).then((r) => setCandidatos(r ?? [])).catch(() => setCandidatos([]));
@@ -153,12 +159,16 @@ function FormTrocar({ tccId, membrosFase1, aoSalvo, aoFechar }: { tccId: string;
       <div className="alerta" style={{ background: 'rgba(245,158,11,.12)', color: '#b45309', marginBottom: 12 }}>
         ⚠ Trocar um avaliador <strong>descarta a avaliação dele</strong>; o novo entra pendente. A Fase II é sincronizada (orientador + estes 2).
       </div>
+      <label className="campo" style={{ marginBottom: 12 }}>
+        <span>Pesquisar avaliador</span>
+        <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Digite um nome…" />
+      </label>
       <div className="grade-2">
         <label className="campo"><span>Avaliador 1</span>
-          <select value={a1} onChange={(e) => setA1(e.target.value)}><option value="">Selecione…</option>{candidatos.filter((c) => c.id !== a2).map((c) => <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>)}</select>
+          <select value={a1} onChange={(e) => setA1(e.target.value)}><option value="">Selecione…</option>{lista.filter((c) => c.id !== a2).map((c) => <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>)}</select>
         </label>
         <label className="campo"><span>Avaliador 2</span>
-          <select value={a2} onChange={(e) => setA2(e.target.value)}><option value="">Selecione…</option>{candidatos.filter((c) => c.id !== a1).map((c) => <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>)}</select>
+          <select value={a2} onChange={(e) => setA2(e.target.value)}><option value="">Selecione…</option>{lista.filter((c) => c.id !== a1).map((c) => <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>)}</select>
         </label>
       </div>
       <div className="acoes" style={{ justifyContent: 'flex-end' }}>

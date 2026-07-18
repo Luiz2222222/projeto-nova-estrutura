@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, apiPut, type ErroApi } from '../../api';
+import { apiGet } from '../../api';
 import { useAuth } from '../../autenticacao/contexto';
-import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO, type UsuarioPublico } from '@tcc/compartilhado';
+import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO } from '@tcc/compartilhado';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="22" height="22" strokeLinecap="round" strokeLinejoin="round">
@@ -66,12 +66,11 @@ function ajustePendente(m: any): boolean {
 
 export function DashboardProfessor() {
   const navegar = useNavigate();
-  const { usuario, atualizarUsuario } = useAuth();
+  const { usuario } = useAuth();
   const [tccs, setTccs] = useState<any[]>([]);
   const [bancas, setBancas] = useState<any[]>([]);
   const [calendario, setCalendario] = useState<any | null>(null);
   const [carregando, setCarregando] = useState(true);
-  const [salvandoDisp, setSalvandoDisp] = useState(false);
   const [tooltip, setTooltip] = useState<{ vis: boolean; x: number; y: number; texto: string }>({ vis: false, x: 0, y: 0, texto: '' });
 
   const mostrarTooltip = (ev: { clientX: number; clientY: number }, texto: string) => setTooltip({ vis: true, x: ev.clientX, y: ev.clientY, texto });
@@ -86,7 +85,6 @@ export function DashboardProfessor() {
   }, []);
 
   const primeiroNome = usuario?.nomeCompleto.split(' ')[0] ?? '';
-  const disponivel = usuario?.disponivelParaOrientar ?? false;
 
   const stats = useMemo(() => {
     const total = tccs.length;
@@ -159,18 +157,6 @@ export function DashboardProfessor() {
     { rotulo: 'Em avaliação', sub: `${stats.emAvaliacao} em Fase I ou II`, valor: stats.emAvaliacao, icone: icoLivro, cor: 'roxo' },
     { rotulo: 'Em finalização', sub: `${stats.emFinalizacao} concluído(s) ou em ajustes`, valor: stats.emFinalizacao, icone: icoCheck, cor: 'verde' },
   ];
-
-  async function alternarDisponibilidade() {
-    setSalvandoDisp(true);
-    try {
-      const u = await apiPut<UsuarioPublico>('/autenticacao/disponibilidade', { disponivel: !disponivel });
-      atualizarUsuario(u);
-    } catch (e) {
-      window.alert((e as ErroApi).mensagem || 'Não foi possível alterar.');
-    } finally {
-      setSalvandoDisp(false);
-    }
-  }
 
   return (
     <>
@@ -264,25 +250,7 @@ export function DashboardProfessor() {
         </div>
       </section>
 
-      {/* Linha 4: Disponibilidade para orientar (específico do projeto novo) */}
-      <section className="cartao-secao bloco">
-        <h2>Disponibilidade para orientar</h2>
-        <div className="aviso-cabecalho">
-          <p className="nota-vazio" style={{ margin: 0 }}>
-            {disponivel
-              ? 'Você está disponível — aparece na lista de orientadores que o aluno escolhe.'
-              : 'Você está indisponível — não aparece para novos alunos abrirem TCC com você.'}
-          </p>
-          <span className={`selo ${disponivel ? 'selo-ok' : ''}`} style={disponivel ? {} : { background: 'var(--inset)', color: 'var(--tinta-3)' }}>
-            {disponivel ? 'Disponível' : 'Indisponível'}
-          </span>
-        </div>
-        <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-          <button className="botao botao-secundario" disabled={salvandoDisp} onClick={alternarDisponibilidade}>
-            {salvandoDisp ? 'Salvando…' : disponivel ? 'Ficar indisponível' : 'Ficar disponível'}
-          </button>
-        </div>
-      </section>
+      {/* Disponibilidade para orientar agora vive no fim de Configurações (CartaoDisponibilidade). */}
 
       {tooltip.vis && tooltip.texto && (
         <div className="dash-tooltip" style={{ top: tooltip.y, left: tooltip.x + 14 }}>{tooltip.texto}</div>

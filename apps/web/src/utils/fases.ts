@@ -1,10 +1,18 @@
 // Fases: rótulos e índice da trilha vêm do domínio compartilhado (fonte única, com testes).
-import { indiceFase } from '@tcc/compartilhado';
+import { FASES, indiceFase } from '@tcc/compartilhado';
 import type { DocumentoTcc, TccResumo } from '../tipos';
 
 export { ROTULO_FASE, INDICE_FASE } from '@tcc/compartilhado';
 
 export const faseParaIndice = indiceFase;
+
+// Ordem CANÔNICA das fases para listas/cards (ex.: distribuição por etapa): a ordem do
+// fluxo definida no domínio (FASES) — solicitação → desenvolvimento → Fase I → Fase II →
+// versão final → concluído, com terminais ruins ao fim. Fase desconhecida vai pro final.
+export function indiceCanonicoFase(fase?: string | null): number {
+  const i = (FASES as readonly string[]).indexOf(fase ?? '');
+  return i === -1 ? FASES.length : i;
+}
 
 // Agrupador de etapa dos DASHBOARDS (contagem/badges por lista). Parte do índice da
 // trilha do domínio (indiceFase) e, ao contrário dele, coloca os terminais "ruins" no

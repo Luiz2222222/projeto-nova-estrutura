@@ -39,7 +39,11 @@ export class BancasService {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
     const excluir = [tcc.alunoId, tcc.orientadorId, tcc.coorientadorId].filter((x): x is string => !!x);
     return this.prisma.usuario.findMany({
-      where: { papel: { in: ['PROFESSOR', 'AVALIADOR'] }, id: { notIn: excluir } },
+      // Professor indisponível não entra em NOVAS bancas; avaliador externo segue elegível.
+      where: {
+        id: { notIn: excluir },
+        OR: [{ papel: 'AVALIADOR' }, { papel: 'PROFESSOR', disponivelParaOrientar: true }],
+      },
       select: { id: true, nomeCompleto: true, tratamento: true, papel: true, afiliacao: true },
       orderBy: { nomeCompleto: 'asc' },
     });
@@ -91,6 +95,14 @@ export class BancasService {
       where: { id: { in: ids }, papel: { in: ['PROFESSOR', 'AVALIADOR'] } },
     });
     if (validos !== qtd) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
+    // Banca NOVA: professor interno indisponível não pode ser escolhido (externo pode) —
+    // regra no backend para não ser burlada por chamada direta à API.
+    const indisponiveis = await this.prisma.usuario.count({
+      where: { id: { in: ids }, papel: 'PROFESSOR', disponivelParaOrientar: false },
+    });
+    if (indisponiveis > 0) {
+      throw new BadRequestException({ mensagem: 'Um dos avaliadores escolhidos está indisponível para novas bancas. Escolha outro.' });
+    }
 
     // Grava o arquivo primeiro; se a transação falhar, remove o órfão.
     const meta = await this.gravarArquivo(arquivo);
@@ -288,7 +300,12 @@ export class BancasService {
         data.status = 'ENVIADO';
         data.avaliadoEm = new Date();
         data.rascunho = null;
-        if (emValidacao) data.ajusteMotivo = null; // reenvio após ajuste: limpa o motivo
+        if (emValidacao) {
+          data.ajusteMotivo = null; // reenvio após ajuste: limpa o motivo
+          // Marca o reenvio aguardando decisão da coordenação (ação pendente no dashboard).
+          // Limpo em aprovar / novo ajuste / validação da fase — nunca no rascunho.
+          data.ajusteReenviadoEm = new Date();
+        }
       } else {
         // RASCUNHO PRIVADO: guarda em coluna separada; NÃO toca nas colunas oficiais nem no
         // total/status de envio — assim o coordenador não vê o rascunho antes do envio final.
@@ -330,9 +347,12 @@ export class BancasService {
     if (res.completou) {
       await this.notificarAvaliacoesConcluidas(res.tccId, res.fase);
     } else if (res.reenvioAjuste) {
-      // Reenvio de um ajuste: só a coordenação é avisada.
+      // Reenvio de um ajuste: só a coordenação é avisada — com o NOME de quem reenviou
+      // (sem nota nenhuma na mensagem).
       const faseNome = this.faseNomePt(res.fase);
-      await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `Avaliação reenviada (${faseNome})`, `Um avaliador reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.`, `/coordenador/tccs/${res.tccId}#validacao`);
+      const quem = await this.prisma.usuario.findUnique({ where: { id: avaliadorId }, select: { nomeCompleto: true, tratamento: true } });
+      const nome = quem ? `${quem.tratamento ? quem.tratamento + ' ' : ''}${quem.nomeCompleto}` : 'Um avaliador';
+      await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `Avaliação reenviada (${faseNome})`, `${nome} reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.`, `/coordenador/tccs/${res.tccId}#validacao`);
     }
     // Devolve o status REAL salvo: ENVIADO (finalizar), AJUSTE_SOLICITADO (rascunho durante
     // ajuste) ou PENDENTE (rascunho normal).
@@ -594,6 +614,15 @@ export class BancasService {
       }
       const validos = await tx.usuario.count({ where: { id: { in: ids }, papel: { in: ['PROFESSOR', 'AVALIADOR'] } } });
       if (validos !== ids.length) throw new BadRequestException({ mensagem: 'Avaliador inválido.' });
+      // Disponibilidade só para quem ENTRA agora — membros mantidos não são revalidados
+      // (bancas existentes não são desfeitas por indisponibilidade posterior).
+      const novosIds = ids.filter((id) => !bancaF1.membros.some((m) => m.avaliadorId === id));
+      if (novosIds.length) {
+        const indisponiveis = await tx.usuario.count({ where: { id: { in: novosIds }, papel: 'PROFESSOR', disponivelParaOrientar: false } });
+        if (indisponiveis > 0) {
+          throw new BadRequestException({ mensagem: 'Um dos avaliadores escolhidos está indisponível para novas bancas. Escolha outro.' });
+        }
+      }
 
       // Fase I: remove quem saiu, adiciona quem entrou (PENDENTE), mantém quem ficou.
       const atuaisF1 = bancaF1.membros.map((m) => m.avaliadorId);
@@ -744,7 +773,8 @@ export class BancasService {
   async aprovarAvaliacaoMembro(membroId: string) {
     const { membro } = await this.carregarMembroEmValidacao(membroId);
     if (membro.nota == null) throw new BadRequestException({ mensagem: 'Não é possível aprovar uma avaliação sem nota.' });
-    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'APROVADO', ajusteMotivo: null } });
+    // Decisão tomada: além de aprovar, encerra a ação pendente de reenvio (se havia).
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'APROVADO', ajusteMotivo: null, ajusteReenviadoEm: null } });
     return { ok: true };
   }
 
@@ -769,7 +799,8 @@ export class BancasService {
     // Motivo é OPCIONAL: o coordenador pode solicitar ajuste sem escrever nada.
     const texto = (motivo ?? '').trim();
     const { membro, ehF1 } = await this.carregarMembroEmValidacao(membroId);
-    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto || null } });
+    // Novo ajuste também é uma decisão sobre o reenvio anterior: encerra a ação pendente.
+    await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto || null, ajusteReenviadoEm: null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
     const base = `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}".`;
     await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, texto ? `${base} Motivo: ${texto}` : base, this.linkDaAvaliacao(membro));
@@ -824,7 +855,8 @@ export class BancasService {
       }
       // Trava as avaliações desta banca (não podem mais ser editadas). Dentro da transação:
       // se qualquer passo abaixo falhar, o travamento é desfeito junto (nada fica preso).
-      await tx.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO' } });
+      // Validar a fase é a decisão final: também encerra qualquer ação pendente de reenvio.
+      await tx.membroBanca.updateMany({ where: { bancaId: banca.id }, data: { status: 'CONCLUIDO', ajusteReenviadoEm: null } });
       const media = mediaNotas(banca.membros.map((m) => m.nota ?? 0));
 
       const resumo: { fase: 'FASE_1' | 'FASE_2'; aprovado: boolean; nf1?: number; nf2?: number; nf?: number; tcc: typeof tcc } =

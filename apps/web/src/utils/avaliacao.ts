@@ -49,6 +49,24 @@ export function construirParecer(criterios: Criterio[], comentarios: Record<stri
 export const pesoDe = (criterio: Criterio, pesos: PesosCalendario | null | undefined) => Number(pesos?.[colunaPeso(criterio.chave)] ?? criterio.pesoPadrao);
 export const notaSalva = (membro: MembroBanca | null | undefined, criterio: Criterio) => membro?.[colunaNota(criterio.chave)];
 
+// Resumo da banca de uma fase para os cards: a média só é OFICIAL quando TODOS os
+// membros reais da banca enviaram (F1 = 2, F2 = 3 — vale o tamanho real no banco).
+// Antes disso a média das enviadas é apenas PARCIAL/informativa: nunca vira nota com
+// peso, NF nem resultado Aprovado/Reprovado.
+export interface ResumoBanca {
+  enviadas: number; // avaliações com nota (enviadas)
+  esperadas: number; // membros reais da banca
+  completa: boolean;
+  media: number | null; // média das enviadas (parcial quando !completa; null com 0 enviadas)
+}
+export function resumoBanca(membros: Array<{ nota?: number | null }>): ResumoBanca {
+  const notas = membros.map((m) => m.nota).filter((n): n is number => n != null).map(Number);
+  const esperadas = membros.length;
+  const completa = esperadas > 0 && notas.length === esperadas;
+  const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
+  return { enviadas: notas.length, esperadas, completa, media };
+}
+
 export const STATUS_AVAL: Record<string, { rotulo: string; classe: string }> = {
   PENDENTE: { rotulo: 'Pendente', classe: 'status-atencao' },
   ENVIADO: { rotulo: 'Enviado', classe: 'status-normal' },

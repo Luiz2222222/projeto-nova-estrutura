@@ -334,6 +334,11 @@ model MembroBanca {
   // não há ajuste pendente. Não vaza nota; é texto livre do coordenador.
   ajusteMotivo String?
 
+  // Quando o avaliador REENVIOU a avaliação após um ajuste solicitado e a coordenação ainda
+  // não decidiu (aprovar / novo ajuste / validar a fase). Alimenta a ação pendente do
+  // dashboard do coordenador; é limpo na decisão. Null = nada aguardando.
+  ajusteReenviadoEm DateTime?
+
   // Notas por critério (Fase I usa os 5 primeiros; Fase II usa os 5 últimos).
   notaResumo          Float?
   notaIntroducao      Float?

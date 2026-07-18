@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FASES } from '@tcc/compartilhado';
-import { bucketEtapaFase, chipsTrilha, formatarDefesa, mostrarVersaoFinal, notasTrilhaTcc, subfaseTcc } from './fases';
+import { bucketEtapaFase, chipsTrilha, formatarDefesa, indiceCanonicoFase, mostrarVersaoFinal, notasTrilhaTcc, subfaseTcc } from './fases';
 
 describe('subfaseTcc — status visível de cada fase', () => {
   it('INICIALIZACAO varia conforme a solicitação', () => {
@@ -67,6 +67,27 @@ describe('bucketEtapaFase — agrupador de etapa dos dashboards (regra centraliz
     expect(bucketEtapaFase('INVENTADA')).toBe(-1);
     expect(bucketEtapaFase(null)).toBe(-1);
     expect(bucketEtapaFase(undefined)).toBe(-1);
+  });
+});
+
+describe('indiceCanonicoFase — ordem canônica da distribuição por etapa', () => {
+  it('ordena um conjunto embaralhado na ordem do fluxo (regressão do card de distribuição)', () => {
+    const bagunca = ['FORMACAO_BANCA_FASE_1', 'CONCLUIDO', 'AVALIACAO_FASE_1', 'INICIALIZACAO'];
+    const ordenado = [...bagunca].sort((a, b) => indiceCanonicoFase(a) - indiceCanonicoFase(b));
+    expect(ordenado).toEqual(['INICIALIZACAO', 'FORMACAO_BANCA_FASE_1', 'AVALIACAO_FASE_1', 'CONCLUIDO']);
+  });
+
+  it('Concluído vem depois de TODAS as fases ativas; terminais ruins ficam ao fim', () => {
+    expect(indiceCanonicoFase('CONCLUIDO')).toBeGreaterThan(indiceCanonicoFase('VALIDACAO_VERSAO_FINAL'));
+    expect(indiceCanonicoFase('CONCLUIDO')).toBeGreaterThan(indiceCanonicoFase('AGENDAMENTO_DEFESA_FASE_2'));
+    for (const terminal of ['DESCONTINUADO', 'REPROVADO_FASE_1', 'REPROVADO_FASE_2']) {
+      expect(indiceCanonicoFase(terminal)).toBeGreaterThan(indiceCanonicoFase('CONCLUIDO'));
+    }
+  });
+
+  it('fase desconhecida vai para o fim (nunca antes das conhecidas)', () => {
+    expect(indiceCanonicoFase('INVENTADA')).toBeGreaterThan(indiceCanonicoFase('REPROVADO_FASE_2'));
+    expect(indiceCanonicoFase(null)).toBeGreaterThan(indiceCanonicoFase('CONCLUIDO'));
   });
 });
 

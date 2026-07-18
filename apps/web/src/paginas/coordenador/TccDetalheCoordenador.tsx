@@ -12,7 +12,8 @@ import { ROTULO_FASE, formatarDefesa } from '../../utils/fases';
 import { CardDefesa } from '../../componentes/CardDefesa';
 import type { PesosCalendario, Tcc, UsuarioResumo } from '../../tipos';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
-import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, STATUS_AVAL } from '../../utils/avaliacao';
+import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, resumoBanca, STATUS_AVAL } from '../../utils/avaliacao';
+import { contemBusca } from '../../utils/texto';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
@@ -91,6 +92,9 @@ export function TccDetalheCoordenador() {
   const [candidatos, setCandidatos] = useState<UsuarioResumo[]>([]);
   const [avaliador1, setAvaliador1] = useState('');
   const [avaliador2, setAvaliador2] = useState('');
+  // Busca por nome (sem acento/caixa) na escolha dos avaliadores. Quem já está
+  // selecionado NUNCA some da lista — pesquisar não perde a seleção.
+  const [buscaAval, setBuscaAval] = useState('');
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<{ fase?: string; aprovado?: boolean; nf1?: number | null; nf2?: number | null; nf?: number | null } | null>(null);
   const [erroAcao, setErroAcao] = useState('');
@@ -412,28 +416,40 @@ export function TccDetalheCoordenador() {
           <p className="legenda">Escolha <strong>2 avaliadores</strong> para a banca da Fase I. (A banca da Fase II será o orientador + estes 2 avaliadores.)</p>
           {candidatos.length === 0 ? (
             <p className="nota-vazio">Nenhum avaliador disponível (cadastre professores/avaliadores).</p>
-          ) : (
-            <div className="grade-2">
-              <label className="campo">
-                <span>Avaliador 1</span>
-                <select value={avaliador1} onChange={(e) => setAvaliador1(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {candidatos.filter((c) => c.id !== avaliador2).map((c) => (
-                    <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="campo">
-                <span>Avaliador 2</span>
-                <select value={avaliador2} onChange={(e) => setAvaliador2(e.target.value)}>
-                  <option value="">Selecione…</option>
-                  {candidatos.filter((c) => c.id !== avaliador1).map((c) => (
-                    <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
-                  ))}
-                </select>
-              </label>
-            </div>
-          )}
+          ) : (() => {
+            const t = buscaAval.trim();
+            const lista = t
+              ? candidatos.filter((c) => contemBusca(c.nomeCompleto, t) || c.id === avaliador1 || c.id === avaliador2)
+              : candidatos;
+            return (
+              <>
+                <label className="campo" style={{ marginBottom: 12 }}>
+                  <span>Pesquisar avaliador</span>
+                  <input value={buscaAval} onChange={(e) => setBuscaAval(e.target.value)} placeholder="Digite um nome…" />
+                </label>
+                <div className="grade-2">
+                  <label className="campo">
+                    <span>Avaliador 1</span>
+                    <select value={avaliador1} onChange={(e) => setAvaliador1(e.target.value)}>
+                      <option value="">Selecione…</option>
+                      {lista.filter((c) => c.id !== avaliador2).map((c) => (
+                        <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="campo">
+                    <span>Avaliador 2</span>
+                    <select value={avaliador2} onChange={(e) => setAvaliador2(e.target.value)}>
+                      <option value="">Selecione…</option>
+                      {lista.filter((c) => c.id !== avaliador1).map((c) => (
+                        <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+              </>
+            );
+          })()}
           <label className="campo" style={{ marginTop: 16 }}>
             <span>Documento para avaliação (PDF ou Word)</span>
             <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setArquivoBanca(e.target.files?.[0] ?? null)} />
@@ -470,9 +486,13 @@ export function TccDetalheCoordenador() {
           const emAguardando = fase === (ehF2 ? 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2' : 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1');
           const emValidacao = fase === (ehF2 ? 'VALIDACAO_FASE_2' : 'VALIDACAO_FASE_1');
           const stFase = statusFaseCard(b.fase);
-          // Resumo da fase (só coordenador — esta tela). Média simples, nota com peso e resultado.
-          const notas: number[] = membros.map((m) => m.nota).filter((n): n is number => n != null);
-          const media = notas.length ? notas.reduce((s: number, n: number) => s + n, 0) / notas.length : null;
+          // Resumo da fase (só coordenador — esta tela). A média/nota com peso/resultado SÓ
+          // valem com a banca COMPLETA (todas as avaliações enviadas). Com banca incompleta,
+          // a média das enviadas aparece apenas como "Média parcial (N de M)" informativa —
+          // nota com peso fica "—" e o resultado fica Pendente.
+          const resumo = resumoBanca(membros);
+          const media = resumo.completa ? resumo.media : null; // média OFICIAL (banca completa)
+          const mediaParcial = !resumo.completa ? resumo.media : null; // só informação
           const pesoFase = ehF2 ? pesoF2c : pesoF1c;
           const notaPeso = media != null ? media * pesoFase : null;
           const nfEstimada = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media, pesoF1c, pesoF2c) : null;
@@ -562,7 +582,11 @@ export function TccDetalheCoordenador() {
                       <span className="resumo-item-val">{fmtNotaAv(m.nota)}</span>
                     </div>
                   ))}
-                  <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'} <small>/ 10,00</small></span></div>
+                  {mediaParcial != null ? (
+                    <div className="resumo-item"><span className="resumo-item-rot">Média parcial ({resumo.enviadas} de {resumo.esperadas} avaliações enviadas)</span><span className="resumo-item-val">{mediaParcial.toFixed(2).replace('.', ',')} <small>/ 10,00</small></span></div>
+                  ) : (
+                    <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'} <small>/ 10,00</small></span></div>
+                  )}
                   <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({Math.round(pesoFase * 100)}%)</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'} <small>/ {(pesoFase * 10).toFixed(2).replace('.', ',')}</small></span></div>
                   <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>
                 </div>

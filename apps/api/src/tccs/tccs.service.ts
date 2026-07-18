@@ -34,9 +34,16 @@ export class TccsService {
     });
   }
 
+  // Professor indisponível sai da lista de NOVAS coorientações; avaliador externo e
+  // coordenador seguem elegíveis (a regra de disponibilidade é do professor interno).
   coorientadores() {
     return this.prisma.usuario.findMany({
-      where: { papel: { in: ['PROFESSOR', 'AVALIADOR', 'COORDENADOR'] } },
+      where: {
+        OR: [
+          { papel: { in: ['AVALIADOR', 'COORDENADOR'] } },
+          { papel: 'PROFESSOR', disponivelParaOrientar: true },
+        ],
+      },
       select: { id: true, nomeCompleto: true, tratamento: true, afiliacao: true, papel: true },
       orderBy: { nomeCompleto: 'asc' },
     });
@@ -310,8 +317,9 @@ export class TccsService {
       if (!co || !['PROFESSOR', 'AVALIADOR', 'COORDENADOR'].includes(co.papel)) {
         throw new BadRequestException({ mensagem: 'Coorientador inválido.' });
       }
-      // Mesma exigência de disponibilidade para o coorientador indicado pelo aluno (item 5).
-      if (!co.disponivelParaOrientar) {
+      // Disponibilidade vale para o PROFESSOR interno; avaliador externo/coordenador
+      // seguem elegíveis como coorientadores independentemente do toggle.
+      if (co.papel === 'PROFESSOR' && !co.disponivelParaOrientar) {
         throw new BadRequestException({ mensagem: 'Este coorientador não está disponível para novas orientações. Escolha outro.' });
       }
     }

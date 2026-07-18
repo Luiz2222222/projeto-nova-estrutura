@@ -75,9 +75,6 @@ export function ListaDoPeriodo() {
           <h1>Lista do período</h1>
           <p className="legenda">Alunos do semestre e situação do envio inicial do TCC.</p>
         </div>
-        <div className="acoes" style={{ margin: 0 }}>
-          <button className="botao botao-secundario" onClick={carregar}>Atualizar</button>
-        </div>
       </div>
 
       <section className="cartao-secao bloco">

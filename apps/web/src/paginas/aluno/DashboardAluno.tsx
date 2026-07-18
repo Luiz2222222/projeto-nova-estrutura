@@ -334,7 +334,10 @@ export function DashboardAluno() {
                 {icoCalendario}
               </div>
               <div className="card-status-corpo">
-                {prazo ? (
+                {tcc?.faseAtual === 'CONCLUIDO' ? (
+                  /* TCC concluído: nada de datas/calendário futuro — só a confirmação. */
+                  <span className="grande">TCC Concluído.</span>
+                ) : prazo ? (
                   <>
                     <span className="grande">{ROTULO_MARCO[prazo.marco]}</span>
                     <span className="num">{fmtData(prazo.iso)}</span>
