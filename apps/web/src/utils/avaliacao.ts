@@ -49,18 +49,26 @@ export function construirParecer(criterios: Criterio[], comentarios: Record<stri
 export const pesoDe = (criterio: Criterio, pesos: PesosCalendario | null | undefined) => Number(pesos?.[colunaPeso(criterio.chave)] ?? criterio.pesoPadrao);
 export const notaSalva = (membro: MembroBanca | null | undefined, criterio: Criterio) => membro?.[colunaNota(criterio.chave)];
 
+// Status em que a avaliação está efetivamente ENTREGUE/analisável. PENDENTE e
+// AJUSTE_SOLICITADO nunca contam como enviada — mesmo que carreguem nota antiga
+// (o ajuste solicitado preserva a nota anterior) ou nota lançada administrativamente.
+export const STATUS_ENTREGUES = ['ENVIADO', 'EM_ANALISE', 'APROVADO', 'BLOQUEADO', 'CONCLUIDO'] as const;
+export function avaliacaoEntregue(m: { nota?: number | null; status?: string }): boolean {
+  return m.nota != null && (STATUS_ENTREGUES as readonly string[]).includes(m.status ?? '');
+}
+
 // Resumo da banca de uma fase para os cards: a média só é OFICIAL quando TODOS os
-// membros reais da banca enviaram (F1 = 2, F2 = 3 — vale o tamanho real no banco).
-// Antes disso a média das enviadas é apenas PARCIAL/informativa: nunca vira nota com
+// membros reais da banca ENTREGARAM (F1 = 2, F2 = 3 — vale o tamanho real no banco).
+// Antes disso a média das entregues é apenas PARCIAL/informativa: nunca vira nota com
 // peso, NF nem resultado Aprovado/Reprovado.
 export interface ResumoBanca {
-  enviadas: number; // avaliações com nota (enviadas)
+  enviadas: number; // avaliações efetivamente entregues (nota + status entregue)
   esperadas: number; // membros reais da banca
   completa: boolean;
-  media: number | null; // média das enviadas (parcial quando !completa; null com 0 enviadas)
+  media: number | null; // média das entregues (parcial quando !completa; null com 0 entregues)
 }
-export function resumoBanca(membros: Array<{ nota?: number | null }>): ResumoBanca {
-  const notas = membros.map((m) => m.nota).filter((n): n is number => n != null).map(Number);
+export function resumoBanca(membros: Array<{ nota?: number | null; status?: string }>): ResumoBanca {
+  const notas = membros.filter(avaliacaoEntregue).map((m) => Number(m.nota));
   const esperadas = membros.length;
   const completa = esperadas > 0 && notas.length === esperadas;
   const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;

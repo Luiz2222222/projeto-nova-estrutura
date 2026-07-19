@@ -1,19 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { resumoBanca } from './avaliacao';
+import { avaliacaoEntregue, resumoBanca } from './avaliacao';
 import { contemBusca, normalizarBusca } from './texto';
 
 // Item "médias parciais": a média só é OFICIAL com a banca completa (F1 = 2 membros,
-// F2 = 3). Antes disso ela é apenas parcial/informativa — nunca vira NF nem resultado.
+// F2 = 3) e apenas com avaliações efetivamente ENTREGUES — nota + status entregue.
+// PENDENTE/AJUSTE_SOLICITADO nunca contam, mesmo carregando nota antiga.
 describe('resumoBanca — banca incompleta nunca vira nota oficial', () => {
-  const m = (nota: number | null) => ({ nota });
+  const enviado = (nota: number) => ({ nota, status: 'ENVIADO' });
+  const pendente = (nota: number | null = null) => ({ nota, status: 'PENDENTE' });
 
   it('Fase I 0/2: sem média, incompleta', () => {
-    const r = resumoBanca([m(null), m(null)]);
+    const r = resumoBanca([pendente(), pendente()]);
     expect(r).toEqual({ enviadas: 0, esperadas: 2, completa: false, media: null });
   });
 
   it('Fase I 1/2: média PARCIAL das enviadas, ainda incompleta', () => {
-    const r = resumoBanca([m(8), m(null)]);
+    const r = resumoBanca([enviado(8), pendente()]);
     expect(r.enviadas).toBe(1);
     expect(r.esperadas).toBe(2);
     expect(r.completa).toBe(false);
@@ -21,21 +23,61 @@ describe('resumoBanca — banca incompleta nunca vira nota oficial', () => {
   });
 
   it('Fase I 2/2: completa, média oficial', () => {
-    const r = resumoBanca([m(8), m(9)]);
+    const r = resumoBanca([enviado(8), enviado(9)]);
     expect(r.completa).toBe(true);
     expect(r.media).toBe(8.5);
   });
 
   it('Fase II 0/3, 1/3 e 2/3: incompleta; 3/3: completa', () => {
-    expect(resumoBanca([m(null), m(null), m(null)]).completa).toBe(false);
-    expect(resumoBanca([m(7), m(null), m(null)])).toMatchObject({ enviadas: 1, esperadas: 3, completa: false, media: 7 });
-    expect(resumoBanca([m(7), m(9), m(null)])).toMatchObject({ enviadas: 2, esperadas: 3, completa: false, media: 8 });
-    expect(resumoBanca([m(7), m(9), m(8)])).toMatchObject({ enviadas: 3, esperadas: 3, completa: true, media: 8 });
+    expect(resumoBanca([pendente(), pendente(), pendente()]).completa).toBe(false);
+    expect(resumoBanca([enviado(7), pendente(), pendente()])).toMatchObject({ enviadas: 1, esperadas: 3, completa: false, media: 7 });
+    expect(resumoBanca([enviado(7), enviado(9), pendente()])).toMatchObject({ enviadas: 2, esperadas: 3, completa: false, media: 8 });
+    expect(resumoBanca([enviado(7), enviado(9), enviado(8)])).toMatchObject({ enviadas: 3, esperadas: 3, completa: true, media: 8 });
   });
 
   it('banca vazia não é "completa"', () => {
     expect(resumoBanca([]).completa).toBe(false);
     expect(resumoBanca([]).media).toBeNull();
+  });
+});
+
+describe('resumoBanca — status conta tanto quanto a nota (bug do ajuste solicitado)', () => {
+  it('AJUSTE_SOLICITADO com nota ANTIGA não conta: Fase I volta a parcial (1 de 2)', () => {
+    // Coordenação pediu ajuste ao segundo membro; a nota anterior (9) segue salva.
+    const r = resumoBanca([{ nota: 8, status: 'ENVIADO' }, { nota: 9, status: 'AJUSTE_SOLICITADO' }]);
+    expect(r.enviadas).toBe(1);
+    expect(r.completa).toBe(false); // nada de média oficial/resultado com reenvio pendente
+    expect(r.media).toBe(8); // parcial usa SÓ a avaliação válida
+  });
+
+  it('PENDENTE com nota lançada administrativamente não conta', () => {
+    const r = resumoBanca([{ nota: 8, status: 'ENVIADO' }, { nota: 7, status: 'PENDENTE' }]);
+    expect(r.enviadas).toBe(1);
+    expect(r.completa).toBe(false);
+    expect(r.media).toBe(8);
+  });
+
+  it('após o reenvio (status ENVIADO), o membro volta a contar e a banca completa', () => {
+    const r = resumoBanca([{ nota: 8, status: 'ENVIADO' }, { nota: 9.5, status: 'ENVIADO' }]);
+    expect(r).toMatchObject({ enviadas: 2, esperadas: 2, completa: true, media: 8.75 });
+  });
+
+  it('Fase II: ajuste solicitado num membro de 3 derruba a completude do mesmo jeito', () => {
+    const r = resumoBanca([
+      { nota: 7, status: 'APROVADO' },
+      { nota: 9, status: 'EM_ANALISE' },
+      { nota: 8, status: 'AJUSTE_SOLICITADO' }, // nota antiga preservada — não conta
+    ]);
+    expect(r).toMatchObject({ enviadas: 2, esperadas: 3, completa: false, media: 8 });
+  });
+
+  it('avaliacaoEntregue: todos os status entregues contam; pendentes/ajuste nunca', () => {
+    for (const status of ['ENVIADO', 'EM_ANALISE', 'APROVADO', 'BLOQUEADO', 'CONCLUIDO']) {
+      expect(avaliacaoEntregue({ nota: 5, status }), status).toBe(true);
+    }
+    expect(avaliacaoEntregue({ nota: 5, status: 'PENDENTE' })).toBe(false);
+    expect(avaliacaoEntregue({ nota: 5, status: 'AJUSTE_SOLICITADO' })).toBe(false);
+    expect(avaliacaoEntregue({ nota: null, status: 'ENVIADO' })).toBe(false); // sem nota nunca conta
   });
 });
 

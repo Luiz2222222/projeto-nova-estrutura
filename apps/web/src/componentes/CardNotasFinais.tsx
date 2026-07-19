@@ -10,6 +10,7 @@
 import type { TccResumo } from '../tipos';
 import { ROTULO_FASE } from '../utils/fases';
 import { PESO_NF1, PESO_NF2, notaFinal, mediaNotas } from '@tcc/compartilhado';
+import { avaliacaoEntregue } from '../utils/avaliacao';
 
 const ic = (d: string) => (
   <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -22,14 +23,15 @@ const icoNotas = ic('M8 21h8|M12 17v4|M7 4h10v5a5 5 0 0 1-10 0V4z|M17 5h3v2a3 3 
 const num = (v: unknown): number | null => (v == null ? null : Number(v));
 const fmt = (v: number | null): string => (v == null ? '—' : v.toFixed(2).replace('.', ','));
 
-// Média da banca de uma fase SÓ quando todos os membros já enviaram (nota != null). Usada
-// para estimar a nota que ficará antes da confirmação da coordenação (visão do coordenador).
+// Média da banca de uma fase SÓ quando todos os membros efetivamente ENTREGARAM
+// (nota + status entregue — membro em ajuste solicitado com nota antiga NÃO conta).
+// Usada para estimar a nota antes da confirmação da coordenação (visão do coordenador).
 function mediaBancaCompleta(tcc: TccResumo | null | undefined, fase: string): number | null {
   const banca = (tcc?.bancas ?? []).find((b) => b.fase === fase);
   const membros = banca?.membros ?? [];
   if (membros.length === 0) return null;
-  const notas = membros.map((m) => m.nota).filter((n) => n != null).map(Number);
-  if (notas.length !== membros.length) return null; // ainda faltam avaliações enviadas
+  const notas = membros.filter(avaliacaoEntregue).map((m) => Number(m.nota));
+  if (notas.length !== membros.length) return null; // ainda faltam avaliações entregues
   return mediaNotas(notas);
 }
 
