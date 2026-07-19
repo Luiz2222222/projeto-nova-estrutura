@@ -71,7 +71,10 @@ export function resumoBanca(membros: Array<{ nota?: number | null; status?: stri
   const notas = membros.filter(avaliacaoEntregue).map((m) => Number(m.nota));
   const esperadas = membros.length;
   const completa = esperadas > 0 && notas.length === esperadas;
-  const media = notas.length ? notas.reduce((s, n) => s + n, 0) / notas.length : null;
+  // PREVISÃO do coordenador: a soma é dividida pelo TOTAL esperado da banca (quem ainda
+  // não entregou entra como zero). Com a banca completa isso É a média normal. Nunca é
+  // gravado como NF1/NF2/NF nem decide aprovação — só projeção visual.
+  const media = esperadas > 0 && notas.length > 0 ? notas.reduce((s, n) => s + n, 0) / esperadas : null;
   return { enviadas: notas.length, esperadas, completa, media };
 }
 

@@ -40,9 +40,16 @@ export function AbrirTcc() {
   const [enviando, setEnviando] = useState(false);
 
   useEffect(() => {
-    apiGet<UsuarioResumo[]>('/usuarios/professores-disponiveis').then(setProfessores).catch(() => {});
-    apiGet<UsuarioResumo[]>('/usuarios/coorientadores').then(setCoorientadores).catch(() => {});
+    // Recarrega as listas quando a janela recupera o foco: professor que ficou
+    // indisponível nesse meio-tempo não pode continuar aparecendo na tela aberta.
+    const listas = () => {
+      apiGet<UsuarioResumo[]>('/usuarios/professores-disponiveis').then(setProfessores).catch(() => {});
+      apiGet<UsuarioResumo[]>('/usuarios/coorientadores').then(setCoorientadores).catch(() => {});
+    };
+    listas();
+    window.addEventListener('focus', listas);
     apiGet<{ prazo: string | null; vencido: boolean; liberado: boolean; bloqueado: boolean }>('/tccs/abertura-prazo').then(setAbertura).catch(() => setAbertura(null)).finally(() => setCarregandoAbertura(false));
+    return () => window.removeEventListener('focus', listas);
   }, []);
 
   // Estado do prazo de abertura: considera a liberação individual deste aluno+semestre

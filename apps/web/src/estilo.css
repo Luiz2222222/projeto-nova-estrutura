@@ -1403,6 +1403,19 @@ html[data-familia="mono"] .area h3 { font-family: var(--mono); }
 /* Valor somente leitura (ex.: notas finais calculadas) com aparência de campo desabilitado */
 .campo-leitura { padding: 9px 12px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); color: var(--tinta-2); font-weight: 600; min-height: 20px; }
 
+/* Combobox de avaliador (formar/trocar banca): input que filtra + lista suspensa */
+.combo-avaliador { position: relative; }
+.combo-lista {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 30; margin: 4px 0 0; padding: 4px;
+  list-style: none; max-height: 240px; overflow-y: auto;
+  background: var(--papel-1); border: 1px solid var(--borda); border-radius: var(--raio-1);
+  box-shadow: var(--sombra-1);
+}
+.combo-opcao { padding: 8px 10px; border-radius: 8px; cursor: pointer; font-size: 14px; color: var(--tinta-1); }
+.combo-opcao:hover, .combo-opcao.ativa { background: var(--azul-suave); }
+.combo-opcao.sel { font-weight: 600; color: var(--azul-forte); }
+.combo-vazio { padding: 8px 10px; font-size: 13px; color: var(--tinta-3); }
+
 /* Card com as informações da defesa agendada (Fase II): "Rótulo: valor" na mesma linha
    (data/local) e comentário com o rótulo em cima. */
 .defesa-info { display: flex; flex-direction: column; gap: 8px; padding: 14px 16px; border: 1px solid var(--borda); border-radius: var(--raio-1); background: var(--papel-2); }

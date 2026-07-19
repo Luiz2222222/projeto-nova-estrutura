@@ -9,29 +9,29 @@ describe('resumoBanca — banca incompleta nunca vira nota oficial', () => {
   const enviado = (nota: number) => ({ nota, status: 'ENVIADO' });
   const pendente = (nota: number | null = null) => ({ nota, status: 'PENDENTE' });
 
-  it('Fase I 0/2: sem média, incompleta', () => {
+  it('Fase I 0/2: sem média ("—"), incompleta e resultado Pendente', () => {
     const r = resumoBanca([pendente(), pendente()]);
     expect(r).toEqual({ enviadas: 0, esperadas: 2, completa: false, media: null });
   });
 
-  it('Fase I 1/2: média PARCIAL das enviadas, ainda incompleta', () => {
-    const r = resumoBanca([enviado(8), pendente()]);
+  it('Fase I 1/2: PREVISÃO divide pelo TOTAL esperado (8,7 → 4,35 / 10)', () => {
+    const r = resumoBanca([enviado(8.7), pendente()]);
     expect(r.enviadas).toBe(1);
     expect(r.esperadas).toBe(2);
     expect(r.completa).toBe(false);
-    expect(r.media).toBe(8); // informativa — o card NÃO usa como oficial
+    expect(r.media).toBeCloseTo(4.35, 10); // 8,7 ÷ 2 — quem não enviou entra como zero
   });
 
-  it('Fase I 2/2: completa, média oficial', () => {
+  it('Fase I 2/2: completa, média oficial normal', () => {
     const r = resumoBanca([enviado(8), enviado(9)]);
     expect(r.completa).toBe(true);
-    expect(r.media).toBe(8.5);
+    expect(r.media).toBe(8.5); // (8+9) ÷ 2 — com banca completa é a média de verdade
   });
 
-  it('Fase II 0/3, 1/3 e 2/3: incompleta; 3/3: completa', () => {
-    expect(resumoBanca([pendente(), pendente(), pendente()]).completa).toBe(false);
-    expect(resumoBanca([enviado(7), pendente(), pendente()])).toMatchObject({ enviadas: 1, esperadas: 3, completa: false, media: 7 });
-    expect(resumoBanca([enviado(7), enviado(9), pendente()])).toMatchObject({ enviadas: 2, esperadas: 3, completa: false, media: 8 });
+  it('Fase II 1/3 e 2/3 dividem por 3; 3/3 vira média oficial', () => {
+    expect(resumoBanca([pendente(), pendente(), pendente()]).media).toBeNull();
+    expect(resumoBanca([enviado(7), pendente(), pendente()]).media).toBeCloseTo(7 / 3, 10);
+    expect(resumoBanca([enviado(7), enviado(9), pendente()]).media).toBeCloseTo(16 / 3, 10);
     expect(resumoBanca([enviado(7), enviado(9), enviado(8)])).toMatchObject({ enviadas: 3, esperadas: 3, completa: true, media: 8 });
   });
 
@@ -47,14 +47,14 @@ describe('resumoBanca — status conta tanto quanto a nota (bug do ajuste solici
     const r = resumoBanca([{ nota: 8, status: 'ENVIADO' }, { nota: 9, status: 'AJUSTE_SOLICITADO' }]);
     expect(r.enviadas).toBe(1);
     expect(r.completa).toBe(false); // nada de média oficial/resultado com reenvio pendente
-    expect(r.media).toBe(8); // parcial usa SÓ a avaliação válida
+    expect(r.media).toBe(4); // previsão: 8 ÷ 2 (a nota antiga NÃO entra na soma)
   });
 
   it('PENDENTE com nota lançada administrativamente não conta', () => {
     const r = resumoBanca([{ nota: 8, status: 'ENVIADO' }, { nota: 7, status: 'PENDENTE' }]);
     expect(r.enviadas).toBe(1);
     expect(r.completa).toBe(false);
-    expect(r.media).toBe(8);
+    expect(r.media).toBe(4); // 8 ÷ 2
   });
 
   it('após o reenvio (status ENVIADO), o membro volta a contar e a banca completa', () => {
@@ -68,7 +68,9 @@ describe('resumoBanca — status conta tanto quanto a nota (bug do ajuste solici
       { nota: 9, status: 'EM_ANALISE' },
       { nota: 8, status: 'AJUSTE_SOLICITADO' }, // nota antiga preservada — não conta
     ]);
-    expect(r).toMatchObject({ enviadas: 2, esperadas: 3, completa: false, media: 8 });
+    expect(r.enviadas).toBe(2);
+    expect(r.completa).toBe(false);
+    expect(r.media).toBeCloseTo(16 / 3, 10); // (7+9) ÷ 3
   });
 
   it('avaliacaoEntregue: todos os status entregues contam; pendentes/ajuste nunca', () => {

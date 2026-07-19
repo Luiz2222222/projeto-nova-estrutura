@@ -73,9 +73,9 @@ const NAV: Record<Papel, ItemNav[]> = {
     { to: '/coordenador/relatorios', rotulo: 'Relatórios', icone: icoRelatorio },
     { to: '/coordenador/solicitacoes', rotulo: 'Solicitações', icone: icoLista },
     { to: '/coordenador/usuarios', rotulo: 'Usuários', icone: icoUsuarios },
-    { to: '/coordenador/lista-do-periodo', rotulo: 'Lista do período', icone: icoListaPeriodo },
     { to: '/coordenador/avisos', rotulo: 'Mural de avisos', icone: icoMegafone },
     { to: '/coordenador/planejamento', rotulo: 'Planejamento', icone: icoCalendario },
+    { to: '/coordenador/lista-do-periodo', rotulo: 'Lista do período', icone: icoListaPeriodo },
     itemConfig,
   ],
   PROFESSOR: [

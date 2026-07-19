@@ -47,6 +47,7 @@ export interface MembroBanca {
   rascunho?: string | null;
   avaliadoEm?: string | null;
   ajusteMotivo?: string | null;
+  ajusteReenviadoEm?: string | null;
   avaliador?: UsuarioResumo;
   banca?: Banca;
   pesos?: PesosCalendario | null;

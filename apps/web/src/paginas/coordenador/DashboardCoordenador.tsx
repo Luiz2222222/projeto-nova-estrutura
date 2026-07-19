@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiGet, ehNaoAutorizado } from '../../api';
+import { acoesValidacaoReenvio } from '../../utils/acoes-coordenador';
 import { useAuth } from '../../autenticacao/contexto';
 import { EstadoErro } from '../../componentes/EstadoErro';
 import { MARCOS_CALENDARIO, ROTULO_MARCO, DESC_MARCO } from '@tcc/compartilhado';
@@ -107,22 +108,10 @@ export function DashboardCoordenador() {
     pendentes.forEach((t) => items.push({ id: 's' + t.id, cor: 'amarelo', titulo: 'Análise de documentos iniciais', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/solicitacoes?tccId=${t.id}` }));
     tccs.filter((t) => t.faseAtual === 'FORMACAO_BANCA_FASE_1').forEach((t) => items.push({ id: 'b' + t.id, cor: 'roxo', titulo: 'Formar banca — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#banca` }));
     tccs.filter((t) => t.faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1').forEach((t) => items.push({ id: 'a1' + t.id, cor: 'amarelo', titulo: 'Iniciar análise — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
-    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_1').forEach((t) => items.push({ id: 'v1' + t.id, cor: 'azul', titulo: 'Validar avaliações — Fase I', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
     tccs.filter((t) => t.faseAtual === 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2').forEach((t) => items.push({ id: 'a2' + t.id, cor: 'amarelo', titulo: 'Iniciar análise — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
-    tccs.filter((t) => t.faseAtual === 'VALIDACAO_FASE_2').forEach((t) => items.push({ id: 'v2' + t.id, cor: 'verde', titulo: 'Validar avaliações — Fase II', sub: `${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` }));
-    // Reenvio pós-ajuste aguardando decisão: um item POR MEMBRO reenviado. Persistente —
-    // vem de ajusteReenviadoEm no banco e some quando a coordenação decide (aprovar /
-    // novo ajuste / validar a fase). Informa QUEM reenviou e a fase.
-    tccs.forEach((t) => {
-      (t.bancas ?? []).forEach((b: any) => {
-        (b.membros ?? []).forEach((m: any) => {
-          if (!m.ajusteReenviadoEm) return;
-          const quem = m.avaliador ? `${m.avaliador.tratamento ? m.avaliador.tratamento + ' ' : ''}${m.avaliador.nomeCompleto}` : 'Avaliador';
-          const faseNome = b.fase === 'FASE_1' ? 'Fase I' : 'Fase II';
-          items.push({ id: 'reenv' + m.id, cor: 'amarelo', titulo: `Avaliação reenviada — ${faseNome}`, sub: `${quem} · ${nome(t)} · ${t.titulo}`, link: `/coordenador/tccs/${t.id}#validacao` });
-        });
-      });
-    });
+    // Validação + reenvios pós-ajuste SEM duplicar: um card consolidado de reenvio por
+    // TCC/fase esconde o "Validar avaliações" genérico até a coordenação decidir.
+    items.push(...acoesValidacaoReenvio(tccs));
     return items;
   }, [tccs, pendentes]);
 

@@ -13,7 +13,7 @@ import { CardDefesa } from '../../componentes/CardDefesa';
 import type { PesosCalendario, Tcc, UsuarioResumo } from '../../tipos';
 import { ROTULO_CURSO, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota, notaFinal, type Criterio } from '@tcc/compartilhado';
 import { extrairSecao, fmtNota as fmtNotaAv, fmtNum, pesoDe, resumoBanca, STATUS_AVAL } from '../../utils/avaliacao';
-import { contemBusca } from '../../utils/texto';
+import { ComboAvaliador } from '../../componentes/ComboAvaliador';
 import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
@@ -92,9 +92,6 @@ export function TccDetalheCoordenador() {
   const [candidatos, setCandidatos] = useState<UsuarioResumo[]>([]);
   const [avaliador1, setAvaliador1] = useState('');
   const [avaliador2, setAvaliador2] = useState('');
-  // Busca por nome (sem acento/caixa) na escolha dos avaliadores. Quem já está
-  // selecionado NUNCA some da lista — pesquisar não perde a seleção.
-  const [buscaAval, setBuscaAval] = useState('');
   const [arquivoBanca, setArquivoBanca] = useState<File | null>(null);
   const [resultado, setResultado] = useState<{ fase?: string; aprovado?: boolean; nf1?: number | null; nf2?: number | null; nf?: number | null } | null>(null);
   const [erroAcao, setErroAcao] = useState('');
@@ -121,11 +118,16 @@ export function TccDetalheCoordenador() {
   const tccId: string | undefined = tcc?.id;
   const tccFase: string | undefined = tcc?.faseAtual;
 
-  // Carrega candidatos quando o TCC está na formação da banca da Fase I.
+  // Carrega candidatos quando o TCC está na formação da banca da Fase I. Recarrega
+  // também quando a janela recupera o foco: se um professor ficou indisponível nesse
+  // meio-tempo, a lista aberta não pode seguir oferecendo o nome de forma enganosa
+  // (o backend recusaria de qualquer jeito, mas a tela deve refletir a verdade).
   useEffect(() => {
-    if (tccId && tccFase === 'FORMACAO_BANCA_FASE_1') {
-      apiGet<UsuarioResumo[]>(`/tccs/${tccId}/banca/candidatos`).then(setCandidatos).catch(() => setCandidatos([]));
-    }
+    if (!tccId || tccFase !== 'FORMACAO_BANCA_FASE_1') return;
+    const buscar = () => apiGet<UsuarioResumo[]>(`/tccs/${tccId}/banca/candidatos`).then(setCandidatos).catch(() => setCandidatos([]));
+    buscar();
+    window.addEventListener('focus', buscar);
+    return () => window.removeEventListener('focus', buscar);
   }, [tccId, tccFase]);
 
   // Pesos do calendário do semestre do TCC (para a área de banca/notas).
@@ -416,40 +418,12 @@ export function TccDetalheCoordenador() {
           <p className="legenda">Escolha <strong>2 avaliadores</strong> para a banca da Fase I. (A banca da Fase II será o orientador + estes 2 avaliadores.)</p>
           {candidatos.length === 0 ? (
             <p className="nota-vazio">Nenhum avaliador disponível (cadastre professores/avaliadores).</p>
-          ) : (() => {
-            const t = buscaAval.trim();
-            const lista = t
-              ? candidatos.filter((c) => contemBusca(c.nomeCompleto, t) || c.id === avaliador1 || c.id === avaliador2)
-              : candidatos;
-            return (
-              <>
-                <label className="campo" style={{ marginBottom: 12 }}>
-                  <span>Pesquisar avaliador</span>
-                  <input value={buscaAval} onChange={(e) => setBuscaAval(e.target.value)} placeholder="Digite um nome…" />
-                </label>
-                <div className="grade-2">
-                  <label className="campo">
-                    <span>Avaliador 1</span>
-                    <select value={avaliador1} onChange={(e) => setAvaliador1(e.target.value)}>
-                      <option value="">Selecione…</option>
-                      {lista.filter((c) => c.id !== avaliador2).map((c) => (
-                        <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="campo">
-                    <span>Avaliador 2</span>
-                    <select value={avaliador2} onChange={(e) => setAvaliador2(e.target.value)}>
-                      <option value="">Selecione…</option>
-                      {lista.filter((c) => c.id !== avaliador1).map((c) => (
-                        <option key={c.id} value={c.id}>{rotuloCandidato(c)}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-              </>
-            );
-          })()}
+          ) : (
+            <div className="grade-2">
+              <ComboAvaliador rotulo="Avaliador 1" valor={avaliador1} candidatos={candidatos} rotuloDe={rotuloCandidato} excluirId={avaliador2 || undefined} aoEscolher={setAvaliador1} />
+              <ComboAvaliador rotulo="Avaliador 2" valor={avaliador2} candidatos={candidatos} rotuloDe={rotuloCandidato} excluirId={avaliador1 || undefined} aoEscolher={setAvaliador2} />
+            </div>
+          )}
           <label className="campo" style={{ marginTop: 16 }}>
             <span>Documento para avaliação (PDF ou Word)</span>
             <input type="file" accept=".pdf,.doc,.docx" onChange={(e) => setArquivoBanca(e.target.files?.[0] ?? null)} />
@@ -492,9 +466,11 @@ export function TccDetalheCoordenador() {
           // nota com peso fica "—" e o resultado fica Pendente.
           const resumo = resumoBanca(membros);
           const media = resumo.completa ? resumo.media : null; // média OFICIAL (banca completa)
-          const mediaParcial = !resumo.completa ? resumo.media : null; // só informação
+          // Previsão parcial: soma das entregues ÷ TOTAL esperado da banca (só visual).
+          const mediaParcial = !resumo.completa ? resumo.media : null;
           const pesoFase = ehF2 ? pesoF2c : pesoF1c;
           const notaPeso = media != null ? media * pesoFase : null;
+          const notaPesoParcial = mediaParcial != null ? mediaParcial * pesoFase : null;
           const nfEstimada = ehF2 && media != null && tcc.nf1 != null ? notaFinal(Number(tcc.nf1), media, pesoF1c, pesoF2c) : null;
           const resFase = media == null
             ? { txt: 'Pendente', cls: 'pend' }
@@ -525,7 +501,11 @@ export function TccDetalheCoordenador() {
                 <p className="nota-vazio">Sem membros nesta banca.</p>
               ) : (
                 membros.map((m) => {
-                  const st = STATUS_AVAL[m.status ?? ''] ?? { rotulo: m.status ?? '—', classe: 'status-atencao' };
+                  // Reenvio pós-ajuste ainda sem decisão: rótulo visual "Reenviado"
+                  // (o status persistido continua ENVIADO — nada muda no banco).
+                  const st = m.status === 'ENVIADO' && m.ajusteReenviadoEm
+                    ? { rotulo: 'Reenviado', classe: 'status-normal' }
+                    : STATUS_AVAL[m.status ?? ''] ?? { rotulo: m.status ?? '—', classe: 'status-atencao' };
                   const parecerGeral = extrairSecao(m.parecer ?? '', 'Parecer geral');
                   return (
                     <div key={m.id} className="aval-card">
@@ -583,11 +563,11 @@ export function TccDetalheCoordenador() {
                     </div>
                   ))}
                   {mediaParcial != null ? (
-                    <div className="resumo-item"><span className="resumo-item-rot">Média parcial ({resumo.enviadas} de {resumo.esperadas} avaliações enviadas)</span><span className="resumo-item-val">{mediaParcial.toFixed(2).replace('.', ',')} <small>/ 10,00</small></span></div>
+                    <div className="resumo-item"><span className="resumo-item-rot">Média (Parcial)</span><span className="resumo-item-val">{mediaParcial.toFixed(2).replace('.', ',')} <small>/ 10,00</small></span></div>
                   ) : (
                     <div className="resumo-item"><span className="resumo-item-rot">Média</span><span className="resumo-item-val">{media != null ? media.toFixed(2).replace('.', ',') : '—'} <small>/ 10,00</small></span></div>
                   )}
-                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso ({Math.round(pesoFase * 100)}%)</span><span className="resumo-item-val">{notaPeso != null ? notaPeso.toFixed(2).replace('.', ',') : '—'} <small>/ {(pesoFase * 10).toFixed(2).replace('.', ',')}</small></span></div>
+                  <div className="resumo-item destaque"><span className="resumo-item-rot">Nota com peso{mediaParcial != null ? ' (Parcial)' : ''} ({Math.round(pesoFase * 100)}%)</span><span className="resumo-item-val">{(mediaParcial != null ? notaPesoParcial : notaPeso) != null ? (mediaParcial != null ? notaPesoParcial : notaPeso)!.toFixed(2).replace('.', ',') : '—'} <small>/ {(pesoFase * 10).toFixed(2).replace('.', ',')}</small></span></div>
                   <div className={`resumo-item ${resFase.cls}`}><span className="resumo-item-rot">{ehF2 ? 'Fase II' : 'Fase I'}</span><span className="resumo-item-val">{resFase.txt}</span></div>
                 </div>
               )}
