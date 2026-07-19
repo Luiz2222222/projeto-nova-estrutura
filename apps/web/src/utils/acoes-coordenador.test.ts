@@ -71,4 +71,17 @@ describe('acoesValidacaoReenvio — cards do dashboard do coordenador', () => {
     t.faseAtual = 'AVALIACAO_FASE_1';
     expect(acoesValidacaoReenvio([t])).toHaveLength(0);
   });
+
+  it('marca ANTIGA de reenvio com o TCC movido de fase (edição administrativa) → nenhuma ação', () => {
+    // ajusteReenviadoEm ficou para trás, mas o TCC não está mais em validação.
+    const t = tccEmValidacao('FASE_1', [{ nome: 'Maria Silva', quando: '2026-07-18T10:00:00Z' }]);
+    for (const fase of ['AVALIACAO_FASE_1', 'AGENDAMENTO_DEFESA_FASE_2', 'CONCLUIDO', 'DESENVOLVIMENTO']) {
+      t.faseAtual = fase;
+      expect(acoesValidacaoReenvio([t]), `fase ${fase}`).toHaveLength(0);
+    }
+    // Voltando à validação correspondente, o card consolidado reaparece.
+    t.faseAtual = 'VALIDACAO_FASE_1';
+    expect(acoesValidacaoReenvio([t])).toHaveLength(1);
+    expect(acoesValidacaoReenvio([t])[0].titulo).toBe('Avaliação reenviada — Fase I');
+  });
 });

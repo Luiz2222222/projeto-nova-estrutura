@@ -3,9 +3,11 @@ import { contemBusca } from '../utils/texto';
 import type { UsuarioResumo } from '../tipos';
 
 // Combobox de avaliador SEM dependência nova: digitar no próprio campo FILTRA os
-// candidatos (sem diferenciar caixa/acentos); digitar NUNCA seleciona sozinho — só
-// confirmar uma opção (clique ou Enter) escolhe o avaliador. Acessível: papel
-// combobox/listbox, navegação por setas, Enter confirma, Esc fecha.
+// candidatos (sem diferenciar caixa/acentos); digitar NUNCA seleciona nem desfaz uma
+// seleção — só confirmar uma opção (clique ou Enter) troca o avaliador; cancelar
+// (Esc/clicar fora) restaura o nome de quem já estava selecionado. Funciona também
+// quando a seleção existe ANTES de os candidatos chegarem da API (troca de banca).
+// Acessível: combobox/listbox, setas, Enter confirma, Esc fecha.
 export function ComboAvaliador({
   rotulo,
   valor,
@@ -23,20 +25,27 @@ export function ComboAvaliador({
 }) {
   const idLista = useId();
   const selecionado = candidatos.find((c) => c.id === valor) ?? null;
-  const [texto, setTexto] = useState(selecionado ? rotuloDe(selecionado) : '');
+  const rotuloSel = selecionado ? rotuloDe(selecionado) : '';
+  const [texto, setTexto] = useState(rotuloSel);
   const [aberto, setAberto] = useState(false);
   const [ativo, setAtivo] = useState(-1); // índice destacado pelo teclado
   const raiz = useRef<HTMLDivElement>(null);
 
-  // Se a seleção mudar por fora (ex.: limpeza pelo outro campo), sincroniza o texto.
+  // Mantém o campo fiel à seleção enquanto NÃO está em edição — cobre a seleção que
+  // muda por fora E os candidatos que chegam DEPOIS de já existir um id selecionado
+  // (troca de banca: sem isso o campo ficava vazio até o usuário mexer nele).
   useEffect(() => {
-    setTexto(selecionado ? rotuloDe(selecionado) : '');
+    if (!aberto) setTexto(rotuloSel);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valor]);
+  }, [valor, candidatos, aberto]);
 
+  // Abrir o campo com alguém selecionado mostra a LISTA COMPLETA de elegíveis (o texto
+  // igual ao rótulo do selecionado não é filtro digitado — é só o estado de descanso).
+  const filtro = texto.trim();
+  const semFiltro = !filtro || (selecionado != null && filtro === rotuloSel);
   const opcoes = candidatos
     .filter((c) => c.id !== excluirId)
-    .filter((c) => !texto.trim() || c.id === valor || contemBusca(rotuloDe(c), texto));
+    .filter((c) => semFiltro || contemBusca(rotuloDe(c), filtro));
 
   function escolher(c: UsuarioResumo) {
     aoEscolher(c.id);
@@ -45,11 +54,11 @@ export function ComboAvaliador({
     setAtivo(-1);
   }
 
-  function aoDigitar(v: string) {
-    setTexto(v);
-    setAberto(true);
+  // Fecha SEM confirmar: restaura o nome da seleção vigente (nunca fica texto solto).
+  function cancelar() {
+    setAberto(false);
     setAtivo(-1);
-    if (valor) aoEscolher(''); // digitar não seleciona: desfaz até confirmar numa opção
+    setTexto(rotuloSel);
   }
 
   function aoTeclar(e: React.KeyboardEvent) {
@@ -66,19 +75,20 @@ export function ComboAvaliador({
         escolher(opcoes[ativo]);
       }
     } else if (e.key === 'Escape') {
-      setAberto(false);
-      setAtivo(-1);
+      cancelar();
     }
   }
 
-  // Fecha ao clicar fora (sem perder a seleção confirmada).
+  // Clique fora = cancelar a edição em andamento (a seleção anterior permanece).
   useEffect(() => {
+    if (!aberto) return;
     const f = (ev: MouseEvent) => {
-      if (raiz.current && !raiz.current.contains(ev.target as Node)) setAberto(false);
+      if (raiz.current && !raiz.current.contains(ev.target as Node)) cancelar();
     };
     document.addEventListener('mousedown', f);
     return () => document.removeEventListener('mousedown', f);
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [aberto, rotuloSel]);
 
   return (
     <div className="campo combo-avaliador" ref={raiz}>
@@ -91,7 +101,12 @@ export function ComboAvaliador({
         aria-label={rotulo}
         value={texto}
         placeholder="Digite para filtrar…"
-        onChange={(e) => aoDigitar(e.target.value)}
+        onChange={(e) => {
+          // Digitar só edita o filtro — NÃO seleciona nem desfaz a seleção atual.
+          setTexto(e.target.value);
+          setAberto(true);
+          setAtivo(-1);
+        }}
         onFocus={() => setAberto(true)}
         onKeyDown={aoTeclar}
       />

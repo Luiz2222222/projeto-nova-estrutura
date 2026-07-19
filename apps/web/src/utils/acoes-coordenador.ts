@@ -24,6 +24,9 @@ export function acoesValidacaoReenvio(tccs: TccResumo[]): AcaoPendente[] {
       const ehF1 = fase === 'FASE_1';
       const faseNome = ehF1 ? 'Fase I' : 'Fase II';
       const emValidacao = t.faseAtual === (ehF1 ? 'VALIDACAO_FASE_1' : 'VALIDACAO_FASE_2');
+      // A ação de reenvio SÓ existe com o TCC na validação correspondente: marca antiga
+      // de ajusteReenviadoEm num TCC movido de fase (edição administrativa) não gera card.
+      if (!emValidacao) continue;
       const banca = (t.bancas ?? []).find((b) => b.fase === fase);
       const reenviados = (banca?.membros ?? []).filter((m) => m.ajusteReenviadoEm);
       if (reenviados.length > 0) {

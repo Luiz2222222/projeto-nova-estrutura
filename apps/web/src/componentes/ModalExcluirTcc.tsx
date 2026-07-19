@@ -25,7 +25,6 @@ export function ModalExcluirTcc({
       {erro && <div className="erro-geral">{erro}</div>}
       <div className="alerta alerta-erro" style={{ marginBottom: 14 }}>
         <strong>Atenção:</strong> este TCC será excluído logicamente e sairá das listas e dos fluxos ativos. Documentos, banca e avaliações permanecerão preservados no histórico administrativo.
-        Os documentos, a banca e as avaliações <strong>não</strong> são apagados.
       </div>
       <label className="campo">
         <span>Motivo (opcional)</span>
