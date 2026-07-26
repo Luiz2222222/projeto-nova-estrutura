@@ -188,7 +188,8 @@ export const esquemaAbrirTcc = z
 export type DadosAbrirTcc = z.infer<typeof esquemaAbrirTcc>;
 
 export const esquemaRecusarAbertura = z.object({
-  parecer: z.string().min(3, 'Escreva um parecer para o aluno'),
+  // Parecer é opcional: a coordenação pode recusar sem escrever justificativa.
+  parecer: z.string().trim().optional().default(''),
 });
 export type DadosRecusarAbertura = z.infer<typeof esquemaRecusarAbertura>;
 

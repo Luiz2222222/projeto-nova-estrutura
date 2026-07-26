@@ -175,7 +175,7 @@ export function PainelCoordenador() {
         <Modal titulo="Recusar abertura" subtitulo={`TCC: ${recusando.titulo}`} aoFechar={() => setRecusando(null)}>
           {erroRecusa && <div className="erro-geral">{erroRecusa}</div>}
           <label className="campo">
-            <span>Parecer (o aluno verá)</span>
+            <span>Parecer (opcional — o aluno verá)</span>
             <textarea
               rows={4}
               value={parecer}
