@@ -13,8 +13,9 @@ const ic = (d: string) => (
   </svg>
 );
 const icoOlho = ic('M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z|M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0');
-const icoCheck = ic('M20 6 9 17l-5-5');
-const icoX = ic('M18 6 6 18|M6 6l12 12');
+// Aceitar/Rejeitar usam o ícone dentro de um círculo (o traço fechado reforça a decisão).
+const icoCheck = ic('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20|M8.5 12.2l2.4 2.4 4.6-4.8');
+const icoX = ic('M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20|M15 9l-6 6|M9 9l6 6');
 
 const fmtData = (iso?: string | null) => {
   if (!iso) return '—';
@@ -130,8 +131,8 @@ export function PainelCoordenador() {
                     )}
                   </div>
                   <div className="solic-acoes">
-                    <button className="botao" onClick={() => { setAprovando(t); setErroAprovar(''); }}>{icoCheck} Aceitar</button>
-                    <button className="botao botao-perigo" onClick={() => { setRecusando(t); setParecer(''); setErroRecusa(''); }}>{icoX} Rejeitar</button>
+                    <button className="botao botao-aceitar" onClick={() => { setAprovando(t); setErroAprovar(''); }}>{icoCheck} Aceitar</button>
+                    <button className="botao botao-rejeitar" onClick={() => { setRecusando(t); setParecer(''); setErroRecusa(''); }}>{icoX} Rejeitar</button>
                   </div>
                 </div>
 
