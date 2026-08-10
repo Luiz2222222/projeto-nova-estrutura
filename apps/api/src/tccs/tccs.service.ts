@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { promises as fs } from 'fs';
@@ -70,10 +71,36 @@ export class TccsService {
           mensagem: `O semestre ${dados.semestre} ainda não tem Calendário configurado no Planejamento — configure-o antes de mover o TCC.`,
         });
       }
+      // Notas apuradas e avaliações de banca foram dadas com a régua (pesos por critério e
+      // por fase) do calendário do período ATUAL do TCC. Mover para outro período com essas
+      // notas gravadas deixaria números e régua divergentes — bloqueia; o caminho é reabrir
+      // a fase pela Correção de fluxo (que invalida as avaliações às claras) e então trocar.
+      const temNotaApurada = tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null;
+      const avaliacaoRegistrada = temNotaApurada
+        ? true
+        : !!(await this.prisma.membroBanca.findFirst({ where: { banca: { tccId }, nota: { not: null } }, select: { id: true } }));
+      if (avaliacaoRegistrada) {
+        throw new BadRequestException({
+          mensagem: 'Este TCC já tem avaliações/notas registradas com os pesos do período atual — trocar o semestre mudaria a régua das notas. ' +
+            'Se a troca for mesmo necessária, reabra a fase pela Correção de fluxo (as avaliações são invalidadas explicitamente) e depois troque.',
+        });
+      }
       data.semestre = dados.semestre;
     }
-    if (dados.monografiaAprovada !== undefined) data.monografiaAprovada = dados.monografiaAprovada;
-    if (dados.continuidadeConfirmada !== undefined) data.continuidadeConfirmada = dados.continuidadeConfirmada;
+    // As trilhas do desenvolvimento (monografia aprovada / continuidade) só podem MUDAR com
+    // o TCC em DESENVOLVIMENTO — é quando elas decidem a junção que forma a banca. Fora daí
+    // (ex.: desmarcar continuidade com o TCC na Fase II) criariam fase e flags contraditórias;
+    // o caminho é a Correção de fluxo (voltar para o desenvolvimento) primeiro. Reenviar o
+    // valor atual segue permitido (o formulário sempre manda os dois campos).
+    const mudouMonografia = dados.monografiaAprovada !== undefined && dados.monografiaAprovada !== tcc.monografiaAprovada;
+    const mudouContinuidade = dados.continuidadeConfirmada !== undefined && dados.continuidadeConfirmada !== tcc.continuidadeConfirmada;
+    if ((mudouMonografia || mudouContinuidade) && tcc.faseAtual !== 'DESENVOLVIMENTO') {
+      throw new BadRequestException({
+        mensagem: 'Monografia aprovada e continuidade só mudam com o TCC em desenvolvimento — use a Correção de fluxo para voltar a fase antes.',
+      });
+    }
+    if (mudouMonografia) data.monografiaAprovada = dados.monografiaAprovada;
+    if (mudouContinuidade) data.continuidadeConfirmada = dados.continuidadeConfirmada;
     if (dados.parecerContinuidade !== undefined) data.parecerContinuidade = dados.parecerContinuidade || null;
 
     if (dados.alunoId !== undefined) {
@@ -334,6 +361,14 @@ export class TccsService {
       case 'VALIDACAO_FASE_2': {
         exigir(tcc.nf1 != null && f2 && f2.membros.length > 0, 'A Fase I ainda não foi validada (sem NF1 ou sem banca da Fase II) — valide a Fase I primeiro.');
         exigir(tcc.defesaAgendadaPara, 'Não há defesa registrada — a avaliação da Fase II pressupõe a defesa. Use "Agendamento da defesa (Fase II)".');
+        // A avaliação NUNCA abre antes da defesa acontecer — nem por correção administrativa.
+        // Com defesa futura, o destino coerente é o agendamento (a liberação continua 100%
+        // automática na data/hora marcada).
+        exigir(
+          tcc.defesaAgendadaPara && tcc.defesaAgendadaPara <= new Date(),
+          'A defesa está marcada para o futuro — a avaliação da Fase II só abre na data/hora da defesa. ' +
+            'Use "Agendamento da defesa (Fase II)": a liberação é automática na hora marcada.',
+        );
         if (fase !== 'AVALIACAO_FASE_2') {
           exigir(!f2!.membros.some((m) => m.nota == null), 'Nem todos os avaliadores da Fase II têm avaliação registrada — o destino coerente é "Avaliação — Fase II".');
         }
@@ -360,6 +395,10 @@ export class TccsService {
       }
       case 'CONCLUIDO': {
         exigir(tcc.nf != null && aprovadoFinal(tcc.nf), 'Concluir exige nota final aprovada (NF ≥ 7) já apurada — valide a Fase II primeiro.');
+        // Sem versão final enviada não existe TCC concluído — o superpoder administrativo
+        // pula só a VALIDAÇÃO do orientador (com aviso), nunca a existência do documento.
+        const versaoFinalConcluir = await this.prisma.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
+        exigir(versaoFinalConcluir, 'Não há versão final enviada — sem ela o destino coerente é "Ajustes finais — versão final".');
         data.resultado = 'APROVADO';
         data.concluidoEm = tcc.concluidoEm ?? new Date();
         data.versaoFinalValidadaEm = tcc.versaoFinalValidadaEm ?? new Date();
@@ -684,7 +723,23 @@ export class TccsService {
       this.prisma.historicoTccOculto.deleteMany({ where: { tccId } }),
       this.prisma.tcc.delete({ where: { id: tccId } }),
     ]);
-    for (const d of docs) await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
+    // Falha ao remover um arquivo (ex.: lock do Windows) não desfaz a exclusão do banco,
+    // mas também não é engolida: fica no log e vai na resposta, para o órfão ser removível
+    // manualmente depois.
+    const arquivosNaoRemovidos: string[] = [];
+    for (const d of docs) {
+      try {
+        await fs.rm(join(process.cwd(), d.caminho), { force: true });
+      } catch {
+        arquivosNaoRemovidos.push(d.caminho);
+      }
+    }
+    if (arquivosNaoRemovidos.length > 0) {
+      new Logger(TccsService.name).warn(
+        `Exclusão do TCC ${tccId}: ${arquivosNaoRemovidos.length} arquivo(s) não removido(s) do disco: ${arquivosNaoRemovidos.join(', ')}`,
+      );
+      return { ok: true, arquivosNaoRemovidos };
+    }
     return { ok: true };
   }
 

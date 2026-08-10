@@ -39,6 +39,7 @@ function fakePrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     membroBanca: {
+      findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
       create: vi.fn().mockResolvedValue({}),
@@ -108,6 +109,19 @@ describe('Exclusão permanente do TCC (coordenador/orientador)', () => {
     const { servico } = criarTccsService(p);
     await expect(servico.excluir({ sub: 'outro', papel: 'PROFESSOR' }, 't1')).rejects.toMatchObject({ status: 403 });
     expect(p.tcc.delete).not.toHaveBeenCalled();
+  });
+
+  it('arquivo travado no disco não é engolido: exclusão conclui e devolve os órfãos', async () => {
+    vi.spyOn(fs, 'rm')
+      .mockResolvedValueOnce(undefined as any)
+      .mockRejectedValueOnce(new Error('EBUSY: locked'));
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tcc);
+    p.documentoTcc.findMany.mockResolvedValue([{ caminho: 'uploads/ok.pdf' }, { caminho: 'uploads/travado.pdf' }]);
+    const { servico } = criarTccsService(p);
+    const r: any = await servico.excluir({ sub: 'coord', papel: 'COORDENADOR' }, 't1');
+    expect(r.ok).toBe(true);
+    expect(r.arquivosNaoRemovidos).toEqual(['uploads/travado.pdf']);
   });
 });
 
@@ -227,6 +241,31 @@ describe('Correção de fluxo (corrigirFase)', () => {
     p.banca.findMany.mockResolvedValue([bancas[0]]); // sem banca F2
     const { servico } = criarTccsService(p);
     await expect(servico.corrigirFase('t1', 'AGENDAMENTO_DEFESA_FASE_2', true)).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.update).not.toHaveBeenCalled();
+  });
+
+  it('NÃO abre a avaliação da Fase II com defesa marcada para o FUTURO (liberação segue automática)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({
+      ...tccNaFase2,
+      faseAtual: 'AGENDAMENTO_DEFESA_FASE_2',
+      defesaAgendadaPara: new Date(Date.now() + 24 * 60 * 60 * 1000), // amanhã
+      defesaLiberadaEm: null,
+      nf2: null, nf: null,
+    });
+    p.banca.findMany.mockResolvedValue(bancas);
+    const { servico } = criarTccsService(p);
+    await expect(servico.corrigirFase('t1', 'AVALIACAO_FASE_2', true)).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.update).not.toHaveBeenCalled();
+  });
+
+  it('CONCLUIDO exige versão final enviada (mesmo com NF aprovada)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ ...tccNaFase2, faseAtual: 'VALIDACAO_VERSAO_FINAL', nf: 8.2 });
+    p.banca.findMany.mockResolvedValue(bancas);
+    p.documentoTcc.findFirst.mockResolvedValue(null); // sem VERSAO_FINAL
+    const { servico } = criarTccsService(p);
+    await expect(servico.corrigirFase('t1', 'CONCLUIDO', true)).rejects.toMatchObject({ status: 400 });
     expect(p.tcc.update).not.toHaveBeenCalled();
   });
 });
@@ -362,13 +401,60 @@ describe('Semestre do TCC exige Calendário configurado', () => {
     expect(p.tcc.update).not.toHaveBeenCalled();
   });
 
-  it('semestre com calendário → grava', async () => {
+  it('semestre com calendário e SEM avaliações → grava', async () => {
     const p = fakePrisma();
     p.tcc.findUnique.mockResolvedValue(tccBase);
     p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { semestre: '2027.1' } as any);
     expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ semestre: '2027.1' }) }));
+  });
+
+  it('TCC com NF apurada não troca de semestre (régua de pesos divergiria)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ ...tccBase, nf1: 7.5 });
+    p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
+    const { servico } = criarTccsService(p);
+    await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.update).not.toHaveBeenCalled();
+  });
+
+  it('TCC com avaliação de banca registrada (mesmo sem NF) não troca de semestre', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccBase);
+    p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
+    p.membroBanca.findFirst.mockResolvedValue({ id: 'm1' }); // alguém já enviou nota
+    const { servico } = criarTccsService(p);
+    await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.update).not.toHaveBeenCalled();
+  });
+});
+
+// ---------- 9. Trilhas do desenvolvimento fora da fase própria ----------
+
+describe('Monografia aprovada / continuidade só mudam em DESENVOLVIMENTO', () => {
+  it('desmarcar continuidade com o TCC na Fase II → 400', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'AVALIACAO_FASE_2', monografiaAprovada: true, continuidadeConfirmada: true });
+    const { servico } = criarTccsService(p);
+    await expect(servico.editarTcc('t1', { continuidadeConfirmada: false } as any)).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.update).not.toHaveBeenCalled();
+  });
+
+  it('reenviar o MESMO valor fora do desenvolvimento não é bloqueado (salvar dados gerais segue ok)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'AVALIACAO_FASE_2', monografiaAprovada: true, continuidadeConfirmada: true });
+    const { servico } = criarTccsService(p);
+    await servico.editarTcc('t1', { titulo: 'X', monografiaAprovada: true, continuidadeConfirmada: true } as any);
+    expect(p.tcc.update).toHaveBeenCalled();
+  });
+
+  it('em DESENVOLVIMENTO a mudança é aceita', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: false, continuidadeConfirmada: false });
+    const { servico } = criarTccsService(p);
+    await servico.editarTcc('t1', { monografiaAprovada: true } as any);
+    expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ monografiaAprovada: true }) }));
   });
 });
 

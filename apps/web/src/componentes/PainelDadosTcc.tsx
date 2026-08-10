@@ -41,6 +41,9 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
   }, []);
 
   const descontinuado = tcc.faseAtual === 'DESCONTINUADO';
+  // As trilhas do desenvolvimento só mudam com o TCC em DESENVOLVIMENTO (o backend também
+  // barra) — fora daí os controles ficam travados e a legenda aponta a Correção de fluxo.
+  const emDesenvolvimento = tcc.faseAtual === 'DESENVOLVIMENTO';
 
   // Coorientador interno e externo são mutuamente exclusivos (o backend também garante):
   // escolher um lado limpa o outro na hora, para o formulário nunca mandar os dois.
@@ -123,17 +126,22 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
       </div>
 
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Desenvolvimento / continuidade</h3>
+      {!emDesenvolvimento && !descontinuado && (
+        <p className="legenda" style={{ marginTop: 4 }}>
+          Estas trilhas só mudam com o TCC em desenvolvimento — para reabri-las, use a “Correção de fluxo”.
+        </p>
+      )}
       <div className="pref-lista">
         <div className="pref-item">
           <div className="pref-texto"><span className="pref-rotulo">Monografia aprovada</span><span className="pref-desc">Trilha da monografia concluída pelo orientador.</span></div>
-          <button type="button" role="switch" aria-checked={monografiaAprovada} className={`pref-switch${monografiaAprovada ? ' on' : ''}`} onClick={() => setMonografiaAprovada((v) => !v)}><span className="pref-switch-bolinha" aria-hidden="true" /></button>
+          <button type="button" role="switch" aria-checked={monografiaAprovada} disabled={!emDesenvolvimento} className={`pref-switch${monografiaAprovada ? ' on' : ''}`} onClick={() => setMonografiaAprovada((v) => !v)}><span className="pref-switch-bolinha" aria-hidden="true" /></button>
         </div>
       </div>
       <label className="campo" style={{ marginTop: 12 }}>
         <span>Continuidade</span>
         <select
           value={descontinuado ? 'descontinuado' : continuidadeConfirmada ? 'confirmada' : 'pendente'}
-          disabled={descontinuado}
+          disabled={descontinuado || !emDesenvolvimento}
           onChange={(e) => setContinuidadeConfirmada(e.target.value === 'confirmada')}
         >
           <option value="pendente">Não respondido / pendente</option>
