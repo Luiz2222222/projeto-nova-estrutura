@@ -1,7 +1,7 @@
-// Modal de confirmação para EXCLUIR (soft delete) um TCC. Exige digitar exatamente "EXCLUIR"
-// e permite um motivo opcional. Usado pelo coordenador e pelo orientador. A exclusão é lógica:
-// nada é apagado fisicamente (documentos, banca, avaliações e arquivos permanecem no banco).
-// (Não há restauração implementada — por isso o texto não promete reversão.)
+// Modal de confirmação para EXCLUIR PERMANENTEMENTE um TCC. Exige digitar exatamente
+// "EXCLUIR". Usado pelo coordenador e pelo orientador. A exclusão apaga de verdade:
+// registro, solicitações, documentos, bancas, avaliações e os arquivos enviados — e NÃO
+// pode ser desfeita (não existe restauração).
 import { useState } from 'react';
 import { Modal } from './Modal';
 
@@ -12,32 +12,29 @@ export function ModalExcluirTcc({
   erro,
 }: {
   aoFechar: () => void;
-  aoConfirmar: (motivo: string) => void;
+  aoConfirmar: () => void;
   processando?: boolean;
   erro?: string;
 }) {
-  const [motivo, setMotivo] = useState('');
   const [confirmacao, setConfirmacao] = useState('');
   const habilitado = confirmacao.trim() === 'EXCLUIR' && !processando;
 
   return (
-    <Modal titulo="Excluir TCC" aoFechar={() => !processando && aoFechar()}>
+    <Modal titulo="Excluir TCC permanentemente" aoFechar={() => !processando && aoFechar()}>
       {erro && <div className="erro-geral">{erro}</div>}
       <div className="alerta alerta-erro" style={{ marginBottom: 14 }}>
-        <strong>Atenção:</strong> este TCC será excluído logicamente e sairá das listas e dos fluxos ativos. Documentos, banca e avaliações permanecerão preservados no histórico administrativo.
+        <strong>Esta exclusão é permanente e não pode ser desfeita.</strong> O TCC, as
+        solicitações, os documentos, as bancas, as avaliações e os arquivos enviados serão
+        apagados de vez — nada fica em histórico e não existe restauração.
       </div>
-      <label className="campo">
-        <span>Motivo (opcional)</span>
-        <textarea rows={3} value={motivo} disabled={processando} onChange={(e) => setMotivo(e.target.value)} placeholder="Por que este TCC está sendo excluído?" />
-      </label>
       <label className="campo" style={{ marginTop: 12 }}>
         <span>Para confirmar, digite <strong>EXCLUIR</strong></span>
         <input value={confirmacao} disabled={processando} onChange={(e) => setConfirmacao(e.target.value)} placeholder="EXCLUIR" autoComplete="off" />
       </label>
       <div className="acoes">
         <button className="botao botao-secundario" disabled={processando} onClick={aoFechar}>Cancelar</button>
-        <button className="botao botao-perigo" disabled={!habilitado} onClick={() => aoConfirmar(motivo)}>
-          {processando ? 'Excluindo…' : 'Excluir TCC'}
+        <button className="botao botao-perigo" disabled={!habilitado} onClick={() => aoConfirmar()}>
+          {processando ? 'Excluindo…' : 'Excluir permanentemente'}
         </button>
       </div>
     </Modal>

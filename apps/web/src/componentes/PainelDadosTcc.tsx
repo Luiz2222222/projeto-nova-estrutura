@@ -1,8 +1,12 @@
 // Aba "Dados gerais" do modal único de edição do TCC (coordenador). PUT /tccs/:id.
+// SÓ dados gerais: a fase (e tudo que deriva dela — notas, banca, defesa) muda apenas pela
+// Correção de fluxo (PainelCorrigirFase), nunca por aqui — salvar título/pessoas/semestre
+// não altera fase, notas nem resultados.
 import type { Tcc, UsuarioResumo } from '../tipos';
 import { useEffect, useState } from 'react';
 import { apiGet, apiPut, type ErroApi } from '../api';
-import { FASES, ROTULO_FASE } from '@tcc/compartilhado';
+import { ROTULO_FASE } from '@tcc/compartilhado';
+import { ModalConfirmacao } from './ModalConfirmacao';
 
 const rotuloUsuario = (u: UsuarioResumo) =>
   `${u.tratamento ? u.tratamento + ' ' : ''}${u.nomeCompleto}${u.papel === 'AVALIADOR' ? ' (Externo)' : u.papel === 'COORDENADOR' ? ' (Coordenador)' : u.papel === 'PROFESSOR' ? ' (Professor)' : ''}`;
@@ -14,12 +18,6 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
 
   const [titulo, setTitulo] = useState(tcc.titulo ?? '');
   const [semestre, setSemestre] = useState(tcc.semestre ?? '');
-  const [faseAtual, setFaseAtual] = useState(tcc.faseAtual ?? '');
-  // Fase preservada para restaurar ao sair de "Descontinuado". Vem do banco
-  // (faseAnteriorDescontinuacao) ou, se o TCC não está descontinuado, é a fase atual.
-  const [faseAntes, setFaseAntes] = useState<string>(
-    tcc.faseAnteriorDescontinuacao || (tcc.faseAtual && tcc.faseAtual !== 'DESCONTINUADO' ? tcc.faseAtual : 'DESENVOLVIMENTO'),
-  );
   const [monografiaAprovada, setMonografiaAprovada] = useState(!!tcc.monografiaAprovada);
   const [continuidadeConfirmada, setContinuidadeConfirmada] = useState(!!tcc.continuidadeConfirmada);
   const [parecerContinuidade, setParecerContinuidade] = useState(tcc.parecerContinuidade ?? '');
@@ -34,6 +32,7 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const [confirmandoSemestre, setConfirmandoSemestre] = useState(false);
 
   useEffect(() => {
     apiGet<UsuarioResumo[]>('/usuarios/lista?papel=ALUNO').then((r) => setAlunos(r ?? [])).catch(() => setAlunos([]));
@@ -41,36 +40,31 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
     apiGet<UsuarioResumo[]>('/usuarios/coorientadores').then((r) => setCoorientadores(r ?? [])).catch(() => setCoorientadores([]));
   }, []);
 
-  // Continuidade em 3 estados (derivada de faseAtual + continuidadeConfirmada). Mudar de
-  // estado só ajusta esses dois campos — NÃO apaga notas/documentos/banca/histórico (o backend
-  // apenas atualiza os campos do TCC). Voltar o status mantém tudo o que já existia.
-  const continuidadeEstado = faseAtual === 'DESCONTINUADO' ? 'descontinuado' : continuidadeConfirmada ? 'confirmada' : 'pendente';
-  function mudarContinuidade(v: string) {
-    if (v === 'descontinuado') {
-      if (faseAtual !== 'DESCONTINUADO') setFaseAntes(faseAtual); // preserva a fase atual
-      setContinuidadeConfirmada(false);
-      setFaseAtual('DESCONTINUADO');
-    } else {
-      setContinuidadeConfirmada(v === 'confirmada');
-      // Ao sair de "Descontinuado", restaura a FASE ANTERIOR preservada (não sempre
-      // DESENVOLVIMENTO). Se o TCC não estava descontinuado, a fase atual é mantida.
-      if (faseAtual === 'DESCONTINUADO') setFaseAtual(faseAntes || 'DESENVOLVIMENTO');
+  const descontinuado = tcc.faseAtual === 'DESCONTINUADO';
+
+  // Coorientador interno e externo são mutuamente exclusivos (o backend também garante):
+  // escolher um lado limpa o outro na hora, para o formulário nunca mandar os dois.
+  function escolherInterno(id: string) {
+    setCoorientadorId(id);
+    if (id) {
+      setCoorientadorNome('');
+      setCoorientadorTitulacao('');
+      setCoorientadorAfiliacao('');
+      setCoorientadorLattes('');
     }
   }
+  function aoDigitarExterno() {
+    if (coorientadorId) setCoorientadorId('');
+  }
 
-  async function salvar() {
-    setErro('');
-    setMsg('');
-    if (!titulo.trim()) return setErro('Informe o título.');
-    if (!semestre.trim()) return setErro('Informe o semestre.');
-    if (!alunoId) return setErro('Selecione o aluno.');
+  async function executarSalvar() {
     setSalvando(true);
     try {
-      // NF1/NF2/NF e Resultado são calculados pelo fluxo (validação das fases) — não enviados aqui.
+      // Fase, NF1/NF2/NF e resultado NÃO são enviados: são derivados do fluxo (a fase muda
+      // só pela Correção de fluxo). Este PUT nunca mexe em banca/notas/defesa.
       await apiPut(`/tccs/${tcc.id}`, {
         titulo: titulo.trim(),
         semestre: semestre.trim(),
-        faseAtual,
         monografiaAprovada,
         continuidadeConfirmada,
         parecerContinuidade: parecerContinuidade.trim() || null,
@@ -89,7 +83,23 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
       setErro(er.erros?.[0]?.mensagem || er.mensagem || 'Não foi possível salvar.');
     } finally {
       setSalvando(false);
+      setConfirmandoSemestre(false);
     }
+  }
+
+  async function salvar() {
+    setErro('');
+    setMsg('');
+    if (!titulo.trim()) return setErro('Informe o título.');
+    if (!semestre.trim()) return setErro('Informe o semestre.');
+    if (!alunoId) return setErro('Selecione o aluno.');
+    // Trocar o SEMESTRE muda a régua inteira do TCC (prazos e pesos do calendário do novo
+    // período) — pede confirmação explícita antes de aplicar.
+    if (semestre.trim() !== (tcc.semestre ?? '')) {
+      setConfirmandoSemestre(true);
+      return;
+    }
+    await executarSalvar();
   }
 
   return (
@@ -100,12 +110,15 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
       <h3 className="titulo-bloco">Dados gerais</h3>
       <label className="campo"><span>Título</span><input value={titulo} onChange={(e) => setTitulo(e.target.value)} /></label>
       <div className="grade-2">
-        <label className="campo"><span>Semestre</span><input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2026.1" /></label>
+        <label className="campo">
+          <span>Semestre</span>
+          <input value={semestre} onChange={(e) => setSemestre(e.target.value)} placeholder="2026.1" />
+          <small className="legenda">Só semestres com Calendário configurado no Planejamento. Trocar pede confirmação (muda prazos e pesos).</small>
+        </label>
         <label className="campo">
           <span>Fase atual</span>
-          <select value={faseAtual} onChange={(e) => setFaseAtual(e.target.value)}>
-            {FASES.map((f) => <option key={f} value={f}>{ROTULO_FASE[f] ?? f}</option>)}
-          </select>
+          <input value={ROTULO_FASE[tcc.faseAtual ?? ''] ?? tcc.faseAtual ?? '—'} disabled />
+          <small className="legenda">A fase só muda pela “Correção de fluxo” (na página do TCC), que mostra o impacto antes de aplicar.</small>
         </label>
       </div>
 
@@ -118,12 +131,20 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
       </div>
       <label className="campo" style={{ marginTop: 12 }}>
         <span>Continuidade</span>
-        <select value={continuidadeEstado} onChange={(e) => mudarContinuidade(e.target.value)}>
+        <select
+          value={descontinuado ? 'descontinuado' : continuidadeConfirmada ? 'confirmada' : 'pendente'}
+          disabled={descontinuado}
+          onChange={(e) => setContinuidadeConfirmada(e.target.value === 'confirmada')}
+        >
           <option value="pendente">Não respondido / pendente</option>
           <option value="confirmada">Continuidade confirmada</option>
-          <option value="descontinuado">Descontinuado</option>
+          {descontinuado && <option value="descontinuado">Descontinuado</option>}
         </select>
-        <small className="legenda">Pode marcar “Descontinuado” mesmo com o TCC em fase avançada. Isso não apaga notas, documentos, banca ou histórico — os dados ficam salvos e voltam se você mudar o status.</small>
+        <small className="legenda">
+          {descontinuado
+            ? 'TCC descontinuado — para retomá-lo (ou mudar a fase), use a “Correção de fluxo”.'
+            : 'Para descontinuar o TCC, use a “Correção de fluxo” — nada é apagado e a fase fica registrada para retomada.'}
+        </small>
       </label>
       <label className="campo" style={{ marginTop: 12 }}><span>Parecer de continuidade</span><textarea rows={2} value={parecerContinuidade} onChange={(e) => setParecerContinuidade(e.target.value)} placeholder="Motivo (quando descontinuado)…" /></label>
 
@@ -145,7 +166,7 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
         </label>
         <label className="campo">
           <span>Coorientador (interno)</span>
-          <select value={coorientadorId} onChange={(e) => setCoorientadorId(e.target.value)}>
+          <select value={coorientadorId} onChange={(e) => escolherInterno(e.target.value)}>
             <option value="">— nenhum / externo —</option>
             {coorientadores.map((c) => <option key={c.id} value={c.id}>{rotuloUsuario(c)}</option>)}
           </select>
@@ -153,16 +174,30 @@ export function PainelDadosTcc({ tcc, aoSalvo }: { tcc: Tcc; aoSalvo: () => void
       </div>
 
       <h3 className="titulo-bloco" style={{ marginTop: 16 }}>Coorientador externo (se não for interno)</h3>
+      {coorientadorId && <p className="legenda" style={{ marginTop: 4 }}>Há um coorientador interno selecionado — preencher um externo remove a seleção interna (são exclusivos).</p>}
       <div className="grade-2">
-        <label className="campo"><span>Nome</span><input value={coorientadorNome} onChange={(e) => setCoorientadorNome(e.target.value)} /></label>
-        <label className="campo"><span>Titulação</span><input value={coorientadorTitulacao} onChange={(e) => setCoorientadorTitulacao(e.target.value)} placeholder="Mestre / Doutor…" /></label>
-        <label className="campo"><span>Afiliação</span><input value={coorientadorAfiliacao} onChange={(e) => setCoorientadorAfiliacao(e.target.value)} /></label>
-        <label className="campo"><span>Lattes</span><input value={coorientadorLattes} onChange={(e) => setCoorientadorLattes(e.target.value)} placeholder="http://lattes.cnpq.br/…" /></label>
+        <label className="campo"><span>Nome</span><input value={coorientadorNome} onChange={(e) => { aoDigitarExterno(); setCoorientadorNome(e.target.value); }} /></label>
+        <label className="campo"><span>Titulação</span><input value={coorientadorTitulacao} onChange={(e) => { aoDigitarExterno(); setCoorientadorTitulacao(e.target.value); }} placeholder="Mestre / Doutor…" /></label>
+        <label className="campo"><span>Afiliação</span><input value={coorientadorAfiliacao} onChange={(e) => { aoDigitarExterno(); setCoorientadorAfiliacao(e.target.value); }} /></label>
+        <label className="campo"><span>Lattes</span><input value={coorientadorLattes} onChange={(e) => { aoDigitarExterno(); setCoorientadorLattes(e.target.value); }} placeholder="http://lattes.cnpq.br/…" /></label>
       </div>
 
       <div className="acoes" style={{ justifyContent: 'flex-end' }}>
         <button className="botao" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar dados gerais'}</button>
       </div>
+
+      {confirmandoSemestre && (
+        <ModalConfirmacao
+          titulo="Trocar o semestre do TCC?"
+          mensagem={<>O TCC sai de <strong>{tcc.semestre}</strong> para <strong>{semestre.trim()}</strong>. Prazos e pesos passam a ser os do calendário do novo período, e o TCC passa a aparecer nas listagens daquele semestre. O novo semestre precisa ter Calendário configurado.</>}
+          textoConfirmar="Trocar semestre"
+          textoProcessando="Salvando…"
+          processando={salvando}
+          erro=""
+          aoConfirmar={executarSalvar}
+          aoCancelar={() => setConfirmandoSemestre(false)}
+        />
+      )}
     </>
   );
 }

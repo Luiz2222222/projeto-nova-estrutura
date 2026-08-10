@@ -93,6 +93,11 @@ export function DetalheHistoricoCoordenador() {
               <span className="status-pill status-normal">Período {tcc.semestre}</span>
             </div>
           </div>
+          {/* Correção administrativa de um TCC histórico: abre o detalhe interno completo
+              (edição, correção de fluxo, banca) SEM mudar o semestre ativo do sistema. */}
+          <button className="botao botao-secundario" style={{ flexShrink: 0 }} onClick={() => navigate(`/coordenador/tccs/${tcc.id}`)}>
+            Correção administrativa
+          </button>
         </div>
       </div>
 

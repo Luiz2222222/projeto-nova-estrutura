@@ -1,9 +1,10 @@
 // Histórico administrativo do coordenador: TCCs de períodos anteriores (semestre != atual).
 // Consulta somente leitura; cada card abre o detalhe administrativo (/coordenador/historico/:id).
-// A ação "Ocultar do meu histórico" (preferência do coordenador) é adicionada à parte.
+// A ação "Ocultar do meu histórico" (preferência do coordenador) é adicionada à parte, e a
+// seção "Ocultados" lista o que foi escondido, com reexibição — ocultar nunca é beco sem saída.
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { apiGet, apiPost, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiDelete, type ErroApi } from '../../api';
 import { ROTULO_FASE } from '../../utils/fases';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 
@@ -52,13 +53,18 @@ export function HistoricoCoordenador() {
   const [ocultarAlvo, setOcultarAlvo] = useState<any | null>(null); // TCC a ocultar (abre modal)
   const [ocultando, setOcultando] = useState(false);
   const [erroOcultar, setErroOcultar] = useState('');
+  const [ocultos, setOcultos] = useState<any[]>([]); // TCCs que EU ocultei (para reexibir)
+  const [mostrarOcultos, setMostrarOcultos] = useState(false);
+  const [reexibindoId, setReexibindoId] = useState('');
 
-  useEffect(() => {
+  function carregarListas() {
     setCarregando(true);
     apiGet('/tccs/historico-coordenador').then((r: any) => setTccs(r ?? [])).catch(() => setTccs([])).finally(() => setCarregando(false));
-  }, []);
+    apiGet('/tccs/historico-ocultos').then((r: any) => setOcultos(r ?? [])).catch(() => setOcultos([]));
+  }
+  useEffect(carregarListas, []);
 
-  // Oculta o TCC APENAS do histórico da coordenação (não apaga nada; não mexe em excluidoEm).
+  // Oculta o TCC APENAS do histórico da coordenação (não apaga nada; não mexe no TCC).
   async function confirmarOcultar() {
     if (!ocultarAlvo) return;
     setErroOcultar('');
@@ -66,11 +72,25 @@ export function HistoricoCoordenador() {
     try {
       await apiPost(`/tccs/${ocultarAlvo.id}/historico/ocultar`, {});
       setTccs((prev) => prev.filter((t) => t.id !== ocultarAlvo.id));
+      setOcultos((prev) => [ocultarAlvo, ...prev]);
       setOcultarAlvo(null);
     } catch (e) {
       setErroOcultar((e as ErroApi).mensagem || 'Não foi possível ocultar.');
     } finally {
       setOcultando(false);
+    }
+  }
+
+  // Reexibe um TCC ocultado (desfaz a preferência) e recarrega as duas listas.
+  async function reexibir(tccId: string) {
+    setReexibindoId(tccId);
+    try {
+      await apiDelete(`/tccs/${tccId}/historico/ocultar`);
+      carregarListas();
+    } catch {
+      // silencioso: a recarga das listas reflete o estado real
+    } finally {
+      setReexibindoId('');
     }
   }
 
@@ -159,10 +179,38 @@ export function HistoricoCoordenador() {
         </>
       )}
 
+      {/* Ocultados do meu histórico: sempre visível quando existir algum, mesmo com o
+          histórico "vazio" — ocultar não pode virar um sumiço sem volta. */}
+      {ocultos.length > 0 && (
+        <section className="cartao-secao bloco">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <h2 style={{ marginBottom: 0 }}>{icoOcultar} Ocultados do meu histórico ({ocultos.length})</h2>
+            <button className="botao botao-secundario" onClick={() => setMostrarOcultos((v) => !v)}>
+              {mostrarOcultos ? 'Recolher' : 'Mostrar'}
+            </button>
+          </div>
+          {mostrarOcultos && (
+            <div className="lista" style={{ marginTop: 14 }}>
+              {ocultos.map((t) => (
+                <div key={t.id} className="pref-item">
+                  <div className="pref-texto">
+                    <span className="pref-rotulo">{t.titulo}</span>
+                    <span className="pref-desc">{t.aluno?.nomeCompleto ?? '—'} · {t.semestre} · {ROTULO_FASE[t.faseAtual] ?? t.faseAtual}</span>
+                  </div>
+                  <button className="botao botao-secundario" disabled={reexibindoId === t.id} onClick={() => reexibir(t.id)}>
+                    {reexibindoId === t.id ? 'Reexibindo…' : 'Reexibir'}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
       {ocultarAlvo && (
         <ModalConfirmacao
           titulo="Ocultar do histórico"
-          mensagem="Este TCC sairá apenas do histórico da coordenação. Ele não será apagado do sistema."
+          mensagem="Este TCC sairá apenas do histórico da coordenação. Ele não será apagado do sistema — dá para reexibir na seção “Ocultados do meu histórico”."
           textoConfirmar="Ocultar"
           textoProcessando="Ocultando…"
           processando={ocultando}

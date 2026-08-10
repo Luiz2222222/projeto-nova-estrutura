@@ -108,14 +108,14 @@ export function DetalheOrientando() {
   }
   useEffect(carregar, []);
 
-  // Exclusão LÓGICA do TCC pelo ORIENTADOR (o backend valida que o usuário é o orientador
-  // deste TCC; senão 403). Após excluir, volta para "Meus orientandos".
-  async function excluirTcc(motivo: string) {
+  // Exclusão PERMANENTE do TCC pelo ORIENTADOR (o backend valida que o usuário é o
+  // orientador deste TCC; senão 403). Sem restauração. Após excluir, volta para a lista.
+  async function excluirTcc() {
     if (!tcc) return;
     setErroExcluir('');
     setExcluindoProc(true);
     try {
-      await apiDelete(`/tccs/${tcc.id}`, { motivo });
+      await apiDelete(`/tccs/${tcc.id}`);
       navigate('/professor/orientandos');
     } catch (e) {
       setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');

@@ -18,6 +18,8 @@ import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { TimelineVerticalDetalhada } from '../../componentes/TimelineVerticalDetalhada';
 import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
+import { ModalCorrigirFase } from '../../componentes/ModalCorrigirFase';
+import { ModalAgendarDefesa } from '../../componentes/ModalAgendarDefesa';
 import { Modal } from '../../componentes/Modal';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { LiberacoesPrazo } from '../../componentes/LiberacoesPrazo';
@@ -106,13 +108,29 @@ export function TccDetalheCoordenador() {
   const [pesos, setPesos] = useState<PesosCalendario | null>(null);
   const [excluindo, setExcluindo] = useState(false); // modal "Excluir TCC" aberto
   const [excluindoProc, setExcluindoProc] = useState(false);
+  const [corrigindoFase, setCorrigindoFase] = useState(false); // modal "Correção de fluxo"
+  const [agendandoDefesa, setAgendandoDefesa] = useState(false); // modal de defesa (coordenação)
   const [erroExcluir, setErroExcluir] = useState('');
 
   function carregar() {
     setCarregando(true);
-    apiGet<Tcc[]>('/tccs').then(setTccs).catch(() => setTccs([])).finally(() => setCarregando(false));
+    // Lista do período atual e, se o TCC não estiver nela (é de um período anterior aberto
+    // pelo histórico para correção administrativa), completa com o histórico — assim o
+    // coordenador corrige um TCC antigo SEM mudar o semestre ativo global do sistema.
+    apiGet<Tcc[]>('/tccs')
+      .then(async (atuais) => {
+        const lista = atuais ?? [];
+        if (id && !lista.some((t) => t.id === id)) {
+          const antigos = await apiGet<Tcc[]>('/tccs/historico-coordenador').catch(() => [] as Tcc[]);
+          const antigo = (antigos ?? []).find((t) => t.id === id);
+          if (antigo) lista.push(antigo);
+        }
+        setTccs(lista);
+      })
+      .catch(() => setTccs([]))
+      .finally(() => setCarregando(false));
   }
-  useEffect(carregar, []);
+  useEffect(carregar, [id]);
 
   const tcc = useMemo(() => tccs.find((t) => t.id === id), [tccs, id]);
   const tccId: string | undefined = tcc?.id;
@@ -295,13 +313,13 @@ export function TccDetalheCoordenador() {
     }
   }
 
-  // Exclusão LÓGICA do TCC (coordenador). Após excluir, volta para a lista de TCCs.
-  async function excluirTcc(motivo: string) {
+  // Exclusão PERMANENTE do TCC (coordenador) — sem restauração. Volta para a lista.
+  async function excluirTcc() {
     if (!tcc) return;
     setErroExcluir('');
     setExcluindoProc(true);
     try {
-      await apiDelete(`/tccs/${tcc.id}`, { motivo });
+      await apiDelete(`/tccs/${tcc.id}`);
       navigate('/coordenador/tccs');
     } catch (e) {
       setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');
@@ -359,6 +377,7 @@ export function TccDetalheCoordenador() {
             <button className="botao" style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }} onClick={() => setEditando(true)}>
               {icoLapis} Editar informações
             </button>
+            <button className="botao botao-secundario" onClick={() => setCorrigindoFase(true)}>Correção de fluxo</button>
             <button className="botao-perigo-sutil" onClick={() => { setErroExcluir(''); setExcluindo(true); }}>Excluir TCC</button>
           </div>
         </div>
@@ -367,11 +386,21 @@ export function TccDetalheCoordenador() {
       {/* Notas Finais (topo) — coordenador vê as notas (incl. estimativa antes da confirmação). */}
       <CardNotasFinais tcc={tcc} coordenador pesoF1={pesoF1c} pesoF2={pesoF2c} />
 
-      {/* Defesa agendada (Fase II) — informações visíveis à coordenação. */}
-      {tcc.defesaAgendadaPara && (
+      {/* Defesa (Fase II) — a coordenação também agenda/edita, com as mesmas regras do
+          orientador (a liberação da avaliação continua automática na data marcada). */}
+      {(tcc.defesaAgendadaPara || fase === 'AGENDAMENTO_DEFESA_FASE_2') && (
         <section className="cartao-secao bloco">
-          <h2>Defesa (Fase II)</h2>
-          <CardDefesa tcc={tcc} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+            <h2 style={{ marginBottom: 0 }}>Defesa (Fase II)</h2>
+            <button className="botao botao-secundario" onClick={() => setAgendandoDefesa(true)}>
+              {tcc.defesaAgendadaPara ? 'Editar agendamento' : 'Agendar defesa'}
+            </button>
+          </div>
+          {tcc.defesaAgendadaPara ? (
+            <CardDefesa tcc={tcc} />
+          ) : (
+            <p className="nota-vazio">Aguardando agendamento — o orientador (ou a coordenação, por aqui) marca data, hora e local.</p>
+          )}
         </section>
       )}
 
@@ -722,6 +751,14 @@ export function TccDetalheCoordenador() {
             <button className="botao" onClick={fecharAvisoRecarregar}>Ok</button>
           </div>
         </Modal>
+      )}
+
+      {corrigindoFase && (
+        <ModalCorrigirFase tcc={tcc} aoFechar={() => setCorrigindoFase(false)} aoSalvo={carregar} />
+      )}
+
+      {agendandoDefesa && (
+        <ModalAgendarDefesa tcc={tcc} aoFechar={() => setAgendandoDefesa(false)} aoSalvo={carregar} />
       )}
 
       {excluindo && (

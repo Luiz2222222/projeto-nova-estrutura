@@ -7,7 +7,9 @@ import { apiPut, apiUpload, URL_API, type ErroApi } from '../api';
 import { formatoDoTipoDoc, arquivoPermitidoParaTipo } from '@tcc/compartilhado';
 import { ModalConfirmacao } from './ModalConfirmacao';
 
-const TIPOS = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
+// AVALIACAO_BANCA fica FORA do upload avulso: esse tipo só nasce pelo fluxo da banca
+// (formar banca / substituir o arquivo do documento vinculado) — o backend também rejeita.
+const TIPOS = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL'];
 const ROTULO_TIPO: Record<string, string> = {
   PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento',
   TERMO_ACEITE: 'Termo de aceite',
