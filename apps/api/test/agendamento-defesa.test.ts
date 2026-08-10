@@ -116,7 +116,7 @@ const dados = (dataHora: string, extra: Partial<{ local: string; comentario: str
 describe('1 — Agendamento futuro pelo orientador', () => {
   it('salva data/local/comentário e NÃO libera a avaliação antes da hora', async () => {
     const { tcc, orientador } = await cenario();
-    const r = await defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia(), { comentario: 'Levar projetor' }));
+    const r = await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia(), { comentario: 'Levar projetor' }));
     expect(r.liberada).toBe(false);
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AGENDAMENTO_DEFESA_FASE_2');
@@ -138,7 +138,7 @@ describe('2 — Permissão', () => {
   it('quem não é o orientador do TCC recebe 403', async () => {
     const { tcc } = await cenario();
     const intruso = await usuario('PROFESSOR');
-    await expect(defesas.agendarDefesa(intruso.id, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy(
+    await expect(defesas.agendarDefesa({ sub: intruso.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy(
       (e: any) => e?.getStatus?.() === 403,
     );
   });
@@ -147,7 +147,7 @@ describe('2 — Permissão', () => {
 describe('3 — Data passada libera imediatamente', () => {
   it('agendar para o passado muda para AVALIACAO_FASE_2 na hora e notifica a banca', async () => {
     const { tcc, orientador, av1, av2 } = await cenario();
-    const r = await defesas.agendarDefesa(orientador.id, tcc.id, dados(umaHoraAtras()));
+    const r = await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(umaHoraAtras()));
     expect(r.liberada).toBe(true);
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AVALIACAO_FASE_2');
@@ -194,9 +194,9 @@ describe('5 — Liberação idempotente sob concorrência', () => {
 describe('6 — Reagendamento antes da hora', () => {
   it('atualiza data/local/comentário e continua sem liberar', async () => {
     const { tcc, orientador } = await cenario();
-    await defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia()));
+    await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia()));
     const novaData = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString();
-    const r = await defesas.agendarDefesa(orientador.id, tcc.id, dados(novaData, { local: 'https://meet.google.com/abc', comentario: 'Mudou o link' }));
+    const r = await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(novaData, { local: 'https://meet.google.com/abc', comentario: 'Mudou o link' }));
     expect(r.liberada).toBe(false);
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AGENDAMENTO_DEFESA_FASE_2');
@@ -209,11 +209,11 @@ describe('6 — Reagendamento antes da hora', () => {
 describe('7 — Reagendamento após a liberação nunca regride', () => {
   it('em AVALIACAO_FASE_2 atualiza os dados e mantém a fase e a liberação', async () => {
     const { tcc, orientador } = await cenario();
-    await defesas.agendarDefesa(orientador.id, tcc.id, dados(umaHoraAtras()));
+    await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(umaHoraAtras()));
     const antes = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(antes?.faseAtual).toBe('AVALIACAO_FASE_2');
     // Reagenda para o FUTURO depois de liberada: não pode voltar a bloquear nada.
-    const r = await defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia(), { local: 'Sala nova' }));
+    const r = await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia(), { local: 'Sala nova' }));
     expect(r.liberada).toBe(true);
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AVALIACAO_FASE_2'); // não regrediu
@@ -230,7 +230,7 @@ describe('7 — Reagendamento após a liberação nunca regride', () => {
       where: { id: tcc.id },
       data: { defesaAgendadaPara: new Date(Date.now() - 3 * 60 * 60 * 1000), defesaAgendadaEm: new Date(), defesaLiberadaEm: new Date(), defesaLocal: 'Sala antiga' },
     });
-    await defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia(), { local: 'Sala corrigida' }));
+    await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia(), { local: 'Sala corrigida' }));
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });
     expect(dep?.faseAtual).toBe('AGUARDANDO_ANALISE_COORDENACAO_FASE_2'); // não regride nem avança
     expect(dep?.defesaLocal).toBe('Sala corrigida');
@@ -238,7 +238,7 @@ describe('7 — Reagendamento após a liberação nunca regride', () => {
 
   it('fase posterior SEM defesa marcada recusa o "primeiro agendamento" por API direta', async () => {
     const { tcc, orientador } = await cenario(true, 'CONCLUIDO');
-    await expect(defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy((e: any) =>
+    await expect(defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia()))).rejects.toSatisfy((e: any) =>
       /não está aguardando agendamento/.test(e?.getResponse?.()?.mensagem ?? ''),
     );
     // Nenhum aviso indevido disparado.
@@ -249,7 +249,7 @@ describe('7 — Reagendamento após a liberação nunca regride', () => {
 describe('8 — Notificações do agendamento', () => {
   it('avisa aluno, coorientador, banca (incl. orientador) UMA vez cada e os coordenadores', async () => {
     const { tcc, aluno, orientador, coorientador, av1, av2 } = await cenario();
-    await defesas.agendarDefesa(orientador.id, tcc.id, dados(daquiUmDia()));
+    await defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(daquiUmDia()));
     const avisos = chamadas.filter((c) => c.evento === 'defesa_agendada');
     const paraUsuarios = avisos.filter((c) => !c.coordenadores).map((c) => c.usuarioId);
     // Sem duplicados e exatamente os esperados.
@@ -262,7 +262,7 @@ describe('8 — Notificações do agendamento', () => {
 describe('9 — Sem banca da Fase II', () => {
   it('agendar sem banca formada falha com mensagem clara e nada é liberado', async () => {
     const { tcc, orientador } = await cenario(false);
-    await expect(defesas.agendarDefesa(orientador.id, tcc.id, dados(umaHoraAtras()))).rejects.toSatisfy((e: any) =>
+    await expect(defesas.agendarDefesa({ sub: orientador.id, papel: 'PROFESSOR' }, tcc.id, dados(umaHoraAtras()))).rejects.toSatisfy((e: any) =>
       /banca da Fase II não está formada/.test(e?.getResponse?.()?.mensagem ?? ''),
     );
     const dep = await prisma.tcc.findUnique({ where: { id: tcc.id } });

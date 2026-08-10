@@ -22,15 +22,17 @@ export class DefesasService {
     private readonly eventos: EventosTccService,
   ) {}
 
-  // Orientador agenda (ou reagenda) a defesa: data/hora + local + comentário. Pode marcar
+  // ORIENTADOR (do próprio TCC) ou COORDENADOR agenda (ou reagenda) a defesa: data/hora +
+  // local + comentário — mesmas validações e mesmos avisos para os dois papéis. Pode marcar
   // QUALQUER data, inclusive passada — o calendário não bloqueia o agendamento (ele segue
   // valendo só como prazo final do envio das avaliações da Fase II). Data já vencida →
   // avaliação liberada imediatamente; data futura → o agendador libera na hora marcada.
+  // Não existe rota que "libere" manualmente: a liberação continua automática na data.
   // Reagendar após a liberação só atualiza os dados e avisa todo mundo — NUNCA regride a
   // fase nem volta a bloquear avaliações.
-  async agendarDefesa(profId: string, tccId: string, dados: DadosAgendarDefesa) {
+  async agendarDefesa(usuario: { sub: string; papel: string }, tccId: string, dados: DadosAgendarDefesa) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
-    if (tcc.orientadorId !== profId) throw new ForbiddenException();
+    if (usuario.papel !== 'COORDENADOR' && tcc.orientadorId !== usuario.sub) throw new ForbiddenException();
     // PRIMEIRO agendamento: só na fase própria (AGENDAMENTO_DEFESA_FASE_2). Depois disso o
     // orientador pode ALTERAR quando quiser (inclusive em análise/validação da coordenação),
     // mas SOMENTE se já existe defesa marcada — barra chamada direta à API "inventando"

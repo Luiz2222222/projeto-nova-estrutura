@@ -531,14 +531,30 @@ export class BancasService {
       if (membros.length === 0 || membros.some((m) => m.nota == null)) return null;
       return mediaNotas(membros.map((m) => m.nota ?? 0));
     };
+    // Fase já apurada não convive com banca incompleta: se a edição deixou um membro sem
+    // nota (ex.: status PENDENTE) numa fase cuja NF já foi calculada, manter a NF antiga
+    // fingiria uma banca completa. A alteração é rejeitada — o caminho é a Correção de
+    // fluxo (voltar a fase), que limpa a NF junto com a reabertura.
     const data: Record<string, number | string | null> = {};
     if (tcc.nf1 != null) {
       const m = await mediaDaBanca('FASE_1');
-      if (m != null) data.nf1 = m;
+      if (m == null) {
+        throw new BadRequestException({
+          mensagem: 'A NF1 já foi apurada e esta alteração deixaria a banca da Fase I incompleta. ' +
+            'Use a Correção de fluxo (voltar a fase para a Fase I) para reabrir a avaliação — a NF1 é limpa junto.',
+        });
+      }
+      data.nf1 = m;
     }
     if (tcc.nf2 != null) {
       const m = await mediaDaBanca('FASE_2');
-      if (m != null) data.nf2 = m;
+      if (m == null) {
+        throw new BadRequestException({
+          mensagem: 'A NF2 já foi apurada e esta alteração deixaria a banca da Fase II incompleta. ' +
+            'Use a Correção de fluxo (voltar a fase para a Fase II) para reabrir a avaliação — NF2/NF são limpas junto.',
+        });
+      }
+      data.nf2 = m;
     }
     const nf1n = (data.nf1 as number | undefined) ?? tcc.nf1;
     const nf2n = (data.nf2 as number | undefined) ?? tcc.nf2;
@@ -558,25 +574,25 @@ export class BancasService {
     if (tcc.faseAtual === 'REPROVADO_FASE_1' && nf1n != null && aprovadoFase1(nf1n)) {
       throw new BadRequestException({
         mensagem: `Com essa alteração a NF1 ficaria ${nf1n.toFixed(2)} (≥ 6), contradizendo a reprovação na Fase I. ` +
-          'Para reverter o desfecho: na edição do TCC, volte a fase para "Validação (Fase I)", faça a edição das notas e valide a fase novamente.',
+          'Para reverter o desfecho: use a Correção de fluxo para voltar a fase para "Validação — Fase I", edite as notas e valide a fase novamente.',
       });
     }
     if (FASES_POS_FASE_1.includes(tcc.faseAtual) && nf1n != null && !aprovadoFase1(nf1n)) {
       throw new BadRequestException({
         mensagem: `Com essa alteração a NF1 ficaria ${nf1n.toFixed(2)} (< 6), mas o TCC já avançou da Fase I. ` +
-          'Para refazer o desfecho da Fase I: volte a fase para "Validação (Fase I)" e valide novamente após a edição.',
+          'Para refazer o desfecho da Fase I: use a Correção de fluxo para voltar a fase para "Validação — Fase I" e valide novamente após a edição.',
       });
     }
     if (tcc.faseAtual === 'REPROVADO_FASE_2' && nfNova != null && aprovadoFinal(nfNova)) {
       throw new BadRequestException({
         mensagem: `Com essa alteração a nota final ficaria ${nfNova.toFixed(2)} (≥ 7), contradizendo a reprovação na Fase II. ` +
-          'Para reverter o desfecho: volte a fase para "Validação (Fase II)" e valide a fase novamente após a edição.',
+          'Para reverter o desfecho: use a Correção de fluxo para voltar a fase para "Validação — Fase II" e valide a fase novamente após a edição.',
       });
     }
     if (FASES_APROVADO_FINAL.includes(tcc.faseAtual) && nfNova != null && !aprovadoFinal(nfNova)) {
       throw new BadRequestException({
         mensagem: `Com essa alteração a nota final ficaria ${nfNova.toFixed(2)} (< 7), mas o TCC já foi aprovado na defesa. ` +
-          'Para refazer o desfecho da Fase II: volte a fase para "Validação (Fase II)" e valide novamente após a edição.',
+          'Para refazer o desfecho da Fase II: use a Correção de fluxo para voltar a fase para "Validação — Fase II" e valide novamente após a edição.',
       });
     }
 
@@ -636,9 +652,20 @@ export class BancasService {
       if (bancaF2) {
         const desejadosF2 = [tcc.orientadorId, ...ids].filter((x): x is string => !!x);
         const atuaisF2 = bancaF2.membros.map((m) => m.avaliadorId);
-        const removerF2 = bancaF2.membros.filter((m) => !desejadosF2.includes(m.avaliadorId)).map((m) => m.id);
+        const removerF2 = bancaF2.membros.filter((m) => !desejadosF2.includes(m.avaliadorId));
+        // Nunca apaga em silêncio uma avaliação da Fase II: se o membro que sairia já tem
+        // nota ou saiu de PENDENTE, a troca é bloqueada — o caminho é a Correção de fluxo
+        // (reabrir a fase), que mostra o que será invalidado antes de aplicar.
+        const comAvaliacaoF2 = removerF2.filter((m) => m.nota != null || m.status !== 'PENDENTE');
+        if (comAvaliacaoF2.length > 0) {
+          throw new BadRequestException({
+            mensagem: 'Um dos avaliadores que sairia já registrou avaliação na banca da Fase II. ' +
+              'Use a Correção de fluxo (voltar a fase) para invalidar essas avaliações de forma explícita antes de trocar os avaliadores.',
+          });
+        }
+        const idsRemoverF2 = removerF2.map((m) => m.id);
         const adicionarF2 = desejadosF2.filter((id) => !atuaisF2.includes(id));
-        if (removerF2.length) await tx.membroBanca.deleteMany({ where: { id: { in: removerF2 } } });
+        if (idsRemoverF2.length) await tx.membroBanca.deleteMany({ where: { id: { in: idsRemoverF2 } } });
         for (const id of adicionarF2) await tx.membroBanca.create({ data: { bancaId: bancaF2.id, avaliadorId: id } });
       }
 

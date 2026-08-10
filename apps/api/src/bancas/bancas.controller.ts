@@ -147,18 +147,19 @@ export class BancasController {
     return this.bancas.validar(id);
   }
 
-  // Orientador agenda/edita a defesa (Fase II). Idempotente: repetir o PUT só regrava os
-  // dados. A avaliação é liberada automaticamente quando a data/hora chega — não existe
-  // mais rota que libere a Fase II sem agendamento.
+  // Orientador OU coordenador agenda/edita a defesa (Fase II) — mesmas validações e avisos
+  // para os dois papéis (a checagem fina de dono/papel fica no service). Idempotente:
+  // repetir o PUT só regrava os dados. A avaliação é liberada automaticamente quando a
+  // data/hora chega — não existe rota que libere a Fase II sem agendamento.
   @Put('tccs/:id/defesa')
   @UseGuards(GuardaJwt, GuardaPapeis)
-  @Papeis('PROFESSOR')
+  @Papeis('PROFESSOR', 'COORDENADOR')
   agendarDefesa(
     @Req() req: Req,
     @Param('id') id: string,
     @Body(new ZodValidacaoPipe(esquemaAgendarDefesa)) dados: DadosAgendarDefesa,
   ) {
-    return this.defesas.agendarDefesa(req.usuario.sub, id, dados);
+    return this.defesas.agendarDefesa(req.usuario, id, dados);
   }
 
   // ----- Edição administrativa da banca (só coordenador) -----
