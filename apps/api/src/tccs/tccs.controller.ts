@@ -31,6 +31,7 @@ import {
   esquemaContinuidade,
   esquemaAnaliseFinal,
   esquemaEditarTcc,
+  esquemaCorrigirFase,
   esquemaEditarDocumento,
   type DadosAbrirTcc,
   type DadosRecusarAbertura,
@@ -38,6 +39,7 @@ import {
   type DadosContinuidade,
   type DadosAnaliseFinal,
   type DadosEditarTcc,
+  type DadosCorrigirFase,
   type DadosEditarDocumento,
 } from '@tcc/compartilhado';
 
@@ -99,14 +101,14 @@ export class TccsController {
   }
 
   // DELETE /tccs/:id: ALUNO cancela a PRÓPRIA abertura pendente (só em INICIALIZACAO).
-  // COORDENADOR (qualquer TCC) ou PROFESSOR ORIENTADOR (só o dele) fazem EXCLUSÃO LÓGICA
-  // (soft delete). Motivo opcional. A permissão fina é validada no service.
+  // COORDENADOR (qualquer TCC) ou PROFESSOR ORIENTADOR (só o dele) fazem EXCLUSÃO
+  // PERMANENTE (banco + arquivos; sem restauração). A permissão fina é validada no service.
   @Delete('tccs/:id')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('ALUNO', 'PROFESSOR', 'COORDENADOR')
-  excluirOuCancelar(@Req() req: Req, @Param('id') id: string, @Body('motivo') motivo?: string) {
+  excluirOuCancelar(@Req() req: Req, @Param('id') id: string) {
     if (req.usuario.papel === 'ALUNO') return this.tccs.cancelar(req.usuario.sub, id);
-    return this.tccs.excluir(req.usuario, id, motivo);
+    return this.tccs.excluir(req.usuario, id);
   }
 
   // Documentos iniciais (Plano/Termo): só PDF.
@@ -254,6 +256,14 @@ export class TccsController {
     return this.historico.historicoCoordenador(req.usuario.sub);
   }
 
+  // TCCs que o PRÓPRIO usuário ocultou do histórico (para listar e reexibir).
+  @Get('tccs/historico-ocultos')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('PROFESSOR', 'COORDENADOR')
+  historicoOcultos(@Req() req: Req) {
+    return this.historico.listarOcultosDoHistorico(req.usuario);
+  }
+
   @Get('tccs/pendentes')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
@@ -278,12 +288,22 @@ export class TccsController {
     return this.tccs.recusar(id, dados.parecer);
   }
 
-  // Edição administrativa do TCC (só coordenador).
+  // Edição administrativa dos DADOS GERAIS do TCC (só coordenador). Fase/notas/resultado
+  // não passam por aqui — ver a rota de correção de fluxo abaixo.
   @Put('tccs/:id')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
   editar(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaEditarTcc)) dados: DadosEditarTcc) {
     return this.tccs.editarTcc(id, dados);
+  }
+
+  // Correção administrativa de FLUXO (só coordenador): muda a fase de forma controlada.
+  // confirmar=false → devolve os impactos sem gravar; confirmar=true → aplica.
+  @Post('tccs/:id/corrigir-fase')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  corrigirFase(@Param('id') id: string, @Body(new ZodValidacaoPipe(esquemaCorrigirFase)) dados: DadosCorrigirFase) {
+    return this.tccs.corrigirFase(id, dados.fase, dados.confirmar);
   }
 
   // Edição de metadados de um documento do TCC (só coordenador).

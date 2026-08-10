@@ -302,19 +302,15 @@ export const esquemaContinuidade = z
 export type DadosContinuidade = z.infer<typeof esquemaContinuidade>;
 
 // ---------- Edição administrativa do TCC (coordenador) ----------
-// Tudo opcional (atualização parcial). faseAtual/resultado são validados no backend
-// contra as listas válidas. Números aceitam null (campo vazio limpa a nota).
+// Tudo opcional (atualização parcial). SÓ dados gerais: fase, NF1/NF2/NF e resultado NÃO
+// entram aqui — são calculados pelo fluxo (validação da coordenação); a fase só muda pela
+// Correção administrativa de fluxo (esquemaCorrigirFase), que limpa os dados derivados.
 export const esquemaEditarTcc = z.object({
   titulo: z.string().trim().min(1, 'Informe o título').optional(),
   semestre: z.string().trim().min(1, 'Informe o semestre').optional(),
-  faseAtual: z.string().trim().min(1).optional(),
   monografiaAprovada: z.boolean().optional(),
   continuidadeConfirmada: z.boolean().optional(),
   parecerContinuidade: z.string().trim().nullable().optional(),
-  nf1: z.coerce.number().min(0).max(10).nullable().optional(),
-  nf2: z.coerce.number().min(0).max(10).nullable().optional(),
-  nf: z.coerce.number().min(0).max(10).nullable().optional(),
-  resultado: z.string().trim().nullable().optional(),
   alunoId: z.string().min(1).optional(),
   orientadorId: z.string().min(1).nullable().optional(),
   coorientadorId: z.string().min(1).nullable().optional(),
@@ -325,12 +321,20 @@ export const esquemaEditarTcc = z.object({
 });
 export type DadosEditarTcc = z.infer<typeof esquemaEditarTcc>;
 
-// Edição de metadados de um documento do TCC (não troca o arquivo em si).
+// Correção administrativa de FLUXO (coordenador): muda a fase por uma ação controlada.
+// confirmar=false → só devolve a lista de impactos (nada é gravado); confirmar=true →
+// aplica a correção limpando/reinicializando os dados derivados descritos nos impactos.
+export const esquemaCorrigirFase = z.object({
+  fase: z.string().trim().min(1, 'Escolha a fase de destino'),
+  confirmar: z.boolean().optional().default(false),
+});
+export type DadosCorrigirFase = z.infer<typeof esquemaCorrigirFase>;
+
+// Edição de metadados de um documento do TCC (não troca o arquivo em si). Tipo é IMUTÁVEL
+// e a versão é sempre automática — nenhum dos dois pode ser alterado manualmente.
 export const esquemaEditarDocumento = z.object({
-  tipo: z.string().trim().min(1).optional(),
   status: z.string().trim().min(1).optional(),
   parecer: z.string().trim().nullable().optional(),
-  versao: z.coerce.number().int().min(1).optional(),
   nomeArquivo: z.string().trim().min(1).optional(),
 });
 export type DadosEditarDocumento = z.infer<typeof esquemaEditarDocumento>;

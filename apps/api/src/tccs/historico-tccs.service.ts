@@ -121,6 +121,23 @@ export class HistoricoTccsService {
     return { ok: true };
   }
 
+  // TCCs que o PRÓPRIO usuário ocultou do histórico, para a tela listar e permitir reexibir
+  // (sem isso a ocultação seria um beco sem saída visível). Só dados de identificação — as
+  // notas/detalhes continuam vindo das rotas normais de histórico depois de reexibir.
+  async listarOcultosDoHistorico(usuario: { sub: string }) {
+    const ocultos = await this.prisma.historicoTccOculto.findMany({
+      where: { usuarioId: usuario.sub },
+      orderBy: { criadoEm: 'desc' },
+    });
+    if (ocultos.length === 0) return [];
+    const tccs = await this.prisma.tcc.findMany({
+      where: { id: { in: ocultos.map((o) => o.tccId) } },
+      select: { id: true, titulo: true, semestre: true, faseAtual: true, aluno: { select: { nomeCompleto: true } } },
+      orderBy: [{ semestre: 'desc' }, { criadoEm: 'desc' }],
+    });
+    return tccs;
+  }
+
   // Histórico do COORDENADOR: TCCs de períodos ANTERIORES (semestre != atual). Visão
   // administrativa — o coordenador vê TUDO (não sanitiza notas), só nunca o rascunho privado
   // do avaliador. Exclui soft delete (excluidoEm) e os TCCs que ESTE coordenador ocultou do

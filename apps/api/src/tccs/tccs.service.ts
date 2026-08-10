@@ -12,10 +12,10 @@ import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho, FASES_NOTAS_LIBERADAS } from '../comum/sanitizar-notas';
-import { resolverSemestreAtivo } from '../comum/semestre';
+import { resolverSemestreAtivo, FORMATO_SEMESTRE } from '../comum/semestre';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import { conteudoCompativel } from '../comum/assinatura-arquivo';
-import { FASES, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
+import { FASES, ROTULO_FASE, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2, aprovadoFase1, aprovadoFinal, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
 
 @Injectable()
@@ -49,41 +49,32 @@ export class TccsService {
     });
   }
 
-  // Edição administrativa do TCC pelo coordenador (atualização parcial). Valida papéis
-  // dos usuários e a unique (alunoId, semestre). NÃO mexe em bancas, documentos,
-  // solicitações ou avaliações; salva a fase escolhida sem criar/apagar banca.
+  // Edição administrativa dos DADOS GERAIS do TCC pelo coordenador (atualização parcial).
+  // Valida papéis dos usuários e a unique (alunoId, semestre). Fase, NF1/NF2/NF e resultado
+  // NÃO passam por aqui: são derivados do fluxo e só mudam pela correção administrativa de
+  // fluxo (corrigirFase), que limpa os dados dependentes de forma coerente.
   async editarTcc(tccId: string, dados: DadosEditarTcc) {
     const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
 
     const data: Record<string, unknown> = {};
     if (dados.titulo !== undefined) data.titulo = dados.titulo;
-    if (dados.semestre !== undefined) data.semestre = dados.semestre;
-    if (dados.faseAtual !== undefined) {
-      if (!(FASES as readonly string[]).includes(dados.faseAtual)) {
-        throw new BadRequestException({ mensagem: 'Fase inválida.' });
+    if (dados.semestre !== undefined && dados.semestre !== tcc.semestre) {
+      // Semestre não é texto livre: precisa do formato AAAA.S e de um Calendário já
+      // configurado (prazos e pesos vêm dele — sem calendário o TCC ficaria sem régua).
+      if (!FORMATO_SEMESTRE.test(dados.semestre)) {
+        throw new BadRequestException({ mensagem: 'Semestre inválido — use o formato AAAA.1 ou AAAA.2 (ex.: 2026.1).' });
       }
-      data.faseAtual = dados.faseAtual;
-      // Ao DESCONTINUAR, guarda a fase em que o TCC estava (para restaurar depois); ao sair de
-      // DESCONTINUADO, limpa a fase preservada.
-      if (dados.faseAtual === 'DESCONTINUADO') {
-        if (tcc.faseAtual !== 'DESCONTINUADO') data.faseAnteriorDescontinuacao = tcc.faseAtual;
-      } else {
-        data.faseAnteriorDescontinuacao = null;
+      const cal = await this.prisma.calendario.findUnique({ where: { semestre: dados.semestre } });
+      if (!cal) {
+        throw new BadRequestException({
+          mensagem: `O semestre ${dados.semestre} ainda não tem Calendário configurado no Planejamento — configure-o antes de mover o TCC.`,
+        });
       }
+      data.semestre = dados.semestre;
     }
     if (dados.monografiaAprovada !== undefined) data.monografiaAprovada = dados.monografiaAprovada;
     if (dados.continuidadeConfirmada !== undefined) data.continuidadeConfirmada = dados.continuidadeConfirmada;
     if (dados.parecerContinuidade !== undefined) data.parecerContinuidade = dados.parecerContinuidade || null;
-    if (dados.nf1 !== undefined) data.nf1 = dados.nf1;
-    if (dados.nf2 !== undefined) data.nf2 = dados.nf2;
-    if (dados.nf !== undefined) data.nf = dados.nf;
-    if (dados.resultado !== undefined) {
-      const r = dados.resultado || null;
-      if (r && !['APROVADO', 'REPROVADO'].includes(r)) {
-        throw new BadRequestException({ mensagem: 'Resultado inválido.' });
-      }
-      data.resultado = r;
-    }
 
     if (dados.alunoId !== undefined) {
       const aluno = await this.prisma.usuario.findUnique({ where: { id: dados.alunoId } });
@@ -116,6 +107,26 @@ export class TccsService {
     }
     for (const k of ['coorientadorNome', 'coorientadorTitulacao', 'coorientadorAfiliacao', 'coorientadorLattes'] as const) {
       if (dados[k] !== undefined) data[k] = dados[k] || null;
+    }
+
+    // Coorientador interno e externo são MUTUAMENTE EXCLUSIVOS. Quem está sendo definido
+    // agora vence e o outro lado é LIMPO NO BANCO (não só ignorado): assim, remover o
+    // interno depois não ressuscita dados antigos de um externo (e vice-versa).
+    const CAMPOS_EXTERNO = ['coorientadorNome', 'coorientadorTitulacao', 'coorientadorAfiliacao', 'coorientadorLattes'] as const;
+    const definiuInterno = data.coorientadorId != null;
+    const definiuExterno = CAMPOS_EXTERNO.some((k) => data[k] != null);
+    if (definiuInterno && definiuExterno) {
+      throw new BadRequestException({ mensagem: 'Escolha um coorientador interno OU informe um externo — não os dois.' });
+    }
+    if (definiuInterno) {
+      for (const k of CAMPOS_EXTERNO) data[k] = null;
+    }
+    if (definiuExterno) {
+      data.coorientadorId = null;
+    }
+    // Removeu o interno sem definir externo → não deixa restos de um externo antigo no banco.
+    if (dados.coorientadorId === null && !definiuExterno) {
+      for (const k of CAMPOS_EXTERNO) data[k] = null;
     }
 
     // Orientador e coorientador interno não podem ser a mesma pessoa.
@@ -179,24 +190,222 @@ export class TccsService {
     });
   }
 
+  // ---------- Correção administrativa de FLUXO (coordenador) ----------
+  // Muda a fase por uma ação CONTROLADA que nunca deixa notas, banca, defesa ou datas
+  // contraditórias: cada destino tem pré-requisitos (o que precisa existir para a fase ser
+  // possível) e limpezas (o que deixa de valer). confirmar=false devolve só a lista de
+  // impactos, sem gravar nada; confirmar=true aplica tudo numa única transação. Nenhuma
+  // avaliação registrada é descartada em silêncio — toda invalidação aparece nos impactos
+  // que o coordenador confirmou. Datas de defesa limpas incluem defesaLiberadaEm, para a
+  // liberação automática funcionar de novo num próximo agendamento.
+  async corrigirFase(tccId: string, fase: string, confirmar: boolean) {
+    if (!(FASES as readonly string[]).includes(fase)) {
+      throw new BadRequestException({ mensagem: 'Fase inválida.' });
+    }
+    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
+    if (fase === tcc.faseAtual) {
+      return { aplicado: false, faseAtual: tcc.faseAtual, impactos: ['O TCC já está nesta fase — nada a alterar.'] };
+    }
+
+    const bancas = await this.prisma.banca.findMany({ where: { tccId }, include: { membros: true } });
+    const f1 = bancas.find((b) => b.fase === 'FASE_1');
+    const f2 = bancas.find((b) => b.fase === 'FASE_2');
+    const comNota = (b?: { membros: { nota: number | null }[] }) => (b?.membros ?? []).filter((m) => m.nota != null).length;
+    const zerarCriterios = Object.fromEntries([...CRITERIOS_FASE1, ...CRITERIOS_FASE2].map((c) => [colunaNota(c.chave), null]));
+
+    const impactos: string[] = [`Fase: "${ROTULO_FASE[tcc.faseAtual] ?? tcc.faseAtual}" → "${ROTULO_FASE[fase] ?? fase}".`];
+    const data: Record<string, unknown> = { faseAtual: fase };
+    const acoes: Array<(tx: any) => Promise<void>> = [];
+
+    // Descontinuar guarda a fase atual para retomada; qualquer outro destino limpa a marca.
+    if (fase === 'DESCONTINUADO') {
+      data.faseAnteriorDescontinuacao = tcc.faseAtual;
+      impactos.push('Nada é apagado: a fase atual fica registrada e o TCC pode ser retomado depois.');
+    } else {
+      data.faseAnteriorDescontinuacao = null;
+    }
+
+    // Limpa o agendamento INTEIRO da defesa (incluindo defesaLiberadaEm — um valor antigo
+    // impediria a próxima liberação automática, já que a liberação é idempotente por ele).
+    const limparDefesa = () => {
+      if (tcc.defesaAgendadaPara) impactos.push('A defesa agendada será removida — um novo agendamento (com nova liberação automática) fica disponível.');
+      data.defesaAgendadaPara = null;
+      data.defesaLocal = null;
+      data.defesaComentario = null;
+      data.defesaAgendadaEm = null;
+      data.defesaLiberadaEm = null;
+    };
+    const limparNf2Nf = () => {
+      if (tcc.nf2 != null || tcc.nf != null || tcc.resultado) impactos.push('NF2, nota final (NF) e resultado apurados serão limpos — deixam de aparecer como válidos.');
+      data.nf2 = null;
+      data.nf = null;
+      data.resultado = null;
+      data.fase2ValidadaEm = null;
+      data.versaoFinalValidadaEm = null;
+      data.concluidoEm = null;
+    };
+    const limparNf1 = () => {
+      if (tcc.nf1 != null) impactos.push('A NF1 apurada será limpa (é reapurada na próxima validação da Fase I).');
+      data.nf1 = null;
+      data.fase1ValidadaEm = null;
+    };
+    // Invalida as avaliações de uma banca (ficam PENDENTE, sem notas) — sempre com impacto.
+    const invalidarAvaliacoes = (banca: typeof f1, rotulo: string) => {
+      if (!banca || banca.membros.length === 0) return;
+      const n = comNota(banca);
+      if (n > 0) impactos.push(`${n} avaliação(ões) registrada(s) da ${rotulo} será(ão) invalidada(s) — os avaliadores precisarão avaliar novamente.`);
+      acoes.push(async (tx) => {
+        await tx.membroBanca.updateMany({
+          where: { bancaId: banca.id },
+          data: { status: 'PENDENTE', nota: null, parecer: null, avaliadoEm: null, rascunho: null, ajusteMotivo: null, ajusteReenviadoEm: null, ...zerarCriterios },
+        });
+      });
+    };
+    // Preserva as avaliações (notas continuam valendo) e normaliza o status para o ponto do
+    // fluxo: quem tem nota vira `statusComNota`; quem não tem, PENDENTE.
+    const normalizarStatus = (banca: NonNullable<typeof f1>, statusComNota: string) => {
+      acoes.push(async (tx) => {
+        await tx.membroBanca.updateMany({ where: { bancaId: banca.id, nota: { not: null } }, data: { status: statusComNota, ajusteMotivo: null, ajusteReenviadoEm: null } });
+        await tx.membroBanca.updateMany({ where: { bancaId: banca.id, nota: null }, data: { status: 'PENDENTE', ajusteMotivo: null, ajusteReenviadoEm: null } });
+      });
+    };
+    const exigir = (cond: unknown, mensagem: string) => {
+      if (!cond) throw new BadRequestException({ mensagem });
+    };
+
+    switch (fase) {
+      case 'INICIALIZACAO':
+      case 'DESENVOLVIMENTO': {
+        if (f1 || f2) {
+          const total = comNota(f1) + comNota(f2);
+          impactos.push(total > 0
+            ? `As bancas serão desfeitas e ${total} avaliação(ões) registrada(s) serão descartadas.`
+            : 'As bancas formadas serão desfeitas.');
+          acoes.push(async (tx) => { await tx.banca.deleteMany({ where: { tccId } }); });
+        }
+        limparNf1();
+        limparNf2Nf();
+        limparDefesa();
+        if (fase === 'INICIALIZACAO') {
+          data.monografiaAprovada = false;
+          data.continuidadeConfirmada = false;
+          impactos.push('Aprovação da monografia e confirmação de continuidade serão desmarcadas.');
+        }
+        break;
+      }
+      case 'FORMACAO_BANCA_FASE_1': {
+        if (f2) {
+          const n = comNota(f2);
+          impactos.push(n > 0 ? `A banca da Fase II será desfeita e ${n} avaliação(ões) descartada(s).` : 'A banca da Fase II será desfeita (é recriada na validação da Fase I).');
+          acoes.push(async (tx) => { await tx.banca.deleteMany({ where: { tccId, fase: 'FASE_2' } }); });
+        }
+        invalidarAvaliacoes(f1, 'Fase I');
+        limparNf1();
+        limparNf2Nf();
+        limparDefesa();
+        break;
+      }
+      case 'AVALIACAO_FASE_1':
+      case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_1':
+      case 'VALIDACAO_FASE_1': {
+        exigir(f1 && f1.membros.length > 0, 'A banca da Fase I não está formada — este destino ficaria sem avaliadores. Use "Formação da banca (Fase I)".');
+        if (fase !== 'AVALIACAO_FASE_1') {
+          exigir(!f1!.membros.some((m) => m.nota == null), 'Nem todos os avaliadores da Fase I têm avaliação registrada — o destino coerente é "Avaliação — Fase I".');
+        }
+        normalizarStatus(f1!, fase === 'VALIDACAO_FASE_1' ? 'EM_ANALISE' : 'ENVIADO');
+        impactos.push(fase === 'VALIDACAO_FASE_1'
+          ? 'As avaliações da Fase I são preservadas e voltam para a análise da coordenação (aprove cada uma e valide a fase novamente).'
+          : 'As avaliações da Fase I já registradas são preservadas e voltam a ser editáveis pelos avaliadores.');
+        invalidarAvaliacoes(f2, 'Fase II');
+        limparNf1();
+        limparNf2Nf();
+        limparDefesa();
+        break;
+      }
+      case 'AGENDAMENTO_DEFESA_FASE_2': {
+        exigir(tcc.nf1 != null && f2 && f2.membros.length > 0, 'A Fase I ainda não foi validada (sem NF1 ou sem banca da Fase II) — valide a Fase I para o TCC chegar ao agendamento.');
+        invalidarAvaliacoes(f2, 'Fase II');
+        limparNf2Nf();
+        limparDefesa();
+        break;
+      }
+      case 'AVALIACAO_FASE_2':
+      case 'AGUARDANDO_ANALISE_COORDENACAO_FASE_2':
+      case 'VALIDACAO_FASE_2': {
+        exigir(tcc.nf1 != null && f2 && f2.membros.length > 0, 'A Fase I ainda não foi validada (sem NF1 ou sem banca da Fase II) — valide a Fase I primeiro.');
+        exigir(tcc.defesaAgendadaPara, 'Não há defesa registrada — a avaliação da Fase II pressupõe a defesa. Use "Agendamento da defesa (Fase II)".');
+        if (fase !== 'AVALIACAO_FASE_2') {
+          exigir(!f2!.membros.some((m) => m.nota == null), 'Nem todos os avaliadores da Fase II têm avaliação registrada — o destino coerente é "Avaliação — Fase II".');
+        }
+        normalizarStatus(f2!, fase === 'VALIDACAO_FASE_2' ? 'EM_ANALISE' : 'ENVIADO');
+        impactos.push(fase === 'VALIDACAO_FASE_2'
+          ? 'As avaliações da Fase II são preservadas e voltam para a análise da coordenação (aprove cada uma e valide a fase novamente).'
+          : 'As avaliações da Fase II já registradas são preservadas e voltam a ser editáveis pelos avaliadores.');
+        if (!tcc.defesaLiberadaEm) data.defesaLiberadaEm = new Date(); // avaliação aberta ⇒ liberação registrada
+        limparNf2Nf();
+        break;
+      }
+      case 'AGUARDANDO_AJUSTES_FINAIS':
+      case 'VALIDACAO_VERSAO_FINAL': {
+        exigir(tcc.nf != null && aprovadoFinal(tcc.nf), 'Este destino exige nota final aprovada (NF ≥ 7) já apurada — valide a Fase II primeiro.');
+        if (fase === 'VALIDACAO_VERSAO_FINAL') {
+          const versaoFinal = await this.prisma.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
+          exigir(versaoFinal, 'Não há versão final enviada — o destino coerente é "Ajustes finais — versão final".');
+        }
+        if (tcc.resultado || tcc.concluidoEm) impactos.push('O resultado/conclusão registrados serão desfeitos até a nova validação da versão final.');
+        data.resultado = null;
+        data.concluidoEm = null;
+        data.versaoFinalValidadaEm = null;
+        break;
+      }
+      case 'CONCLUIDO': {
+        exigir(tcc.nf != null && aprovadoFinal(tcc.nf), 'Concluir exige nota final aprovada (NF ≥ 7) já apurada — valide a Fase II primeiro.');
+        data.resultado = 'APROVADO';
+        data.concluidoEm = tcc.concluidoEm ?? new Date();
+        data.versaoFinalValidadaEm = tcc.versaoFinalValidadaEm ?? new Date();
+        impactos.push('O TCC será marcado como concluído (resultado APROVADO) sem passar pela validação da versão final pelo orientador.');
+        break;
+      }
+      case 'DESCONTINUADO':
+        break; // só a marca de retomada (acima); nada é limpo
+      case 'REPROVADO_FASE_1': {
+        exigir(tcc.nf1 != null && !aprovadoFase1(tcc.nf1), 'Reprovação na Fase I exige NF1 apurada abaixo de 6 — o desfecho sai da validação da fase, não desta correção.');
+        invalidarAvaliacoes(f2, 'Fase II');
+        limparNf2Nf();
+        limparDefesa();
+        data.resultado = 'REPROVADO';
+        break;
+      }
+      case 'REPROVADO_FASE_2': {
+        exigir(tcc.nf != null && !aprovadoFinal(tcc.nf), 'Reprovação na Fase II exige nota final apurada abaixo de 7 — o desfecho sai da validação da fase, não desta correção.');
+        data.resultado = 'REPROVADO';
+        data.concluidoEm = null;
+        data.versaoFinalValidadaEm = null;
+        break;
+      }
+    }
+
+    if (!confirmar) return { aplicado: false, faseAtual: tcc.faseAtual, impactos };
+    await this.prisma.$transaction(async (tx) => {
+      for (const acao of acoes) await acao(tx);
+      await tx.tcc.update({ where: { id: tccId }, data });
+    });
+    return { aplicado: true, faseAtual: fase, impactos };
+  }
+
   // Edita metadados de um documento do TCC (não substitui o arquivo). Coordenador.
+  // Tipo é IMUTÁVEL (mudar o tipo depois do upload quebraria formato e vínculos de banca) e
+  // a versão é sempre automática — nenhum dos dois é editável, nem por aqui nem pela API.
   async editarDocumento(docId: string, dados: DadosEditarDocumento) {
     const doc = await this.prisma.documentoTcc.findUnique({ where: { id: docId } });
     if (!doc) throw new NotFoundException();
     await buscarTccAtivoOuFalhar(this.prisma, doc.tccId); // bloqueia edição em TCC excluído
-    const TIPOS_DOC = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
-    const STATUS_DOC = ['PENDENTE', 'EM_ANALISE', 'APROVADO', 'REJEITADO', 'SUBSTITUIDA'];
-    if (dados.tipo !== undefined && !TIPOS_DOC.includes(dados.tipo)) {
-      throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
-    }
-    if (dados.status !== undefined && !STATUS_DOC.includes(dados.status)) {
+    if (dados.status !== undefined && !TccsService.STATUS_DOC.includes(dados.status)) {
       throw new BadRequestException({ mensagem: 'Status de documento inválido.' });
     }
     const data: Record<string, unknown> = {};
-    if (dados.tipo !== undefined) data.tipo = dados.tipo;
     if (dados.status !== undefined) data.status = dados.status;
     if (dados.parecer !== undefined) data.parecer = dados.parecer || null;
-    if (dados.versao !== undefined) data.versao = dados.versao;
     if (dados.nomeArquivo !== undefined) data.nomeArquivo = dados.nomeArquivo;
     return this.prisma.documentoTcc.update({ where: { id: docId }, data });
   }
@@ -215,6 +424,14 @@ export class TccsService {
     await buscarTccAtivoOuFalhar(this.prisma, tccId); // 404 se TCC inexistente ou excluído
     if (!TccsService.TIPOS_DOC.includes(tipo)) {
       throw new BadRequestException({ mensagem: 'Tipo de documento inválido.' });
+    }
+    // AVALIACAO_BANCA só nasce/é substituído pelo fluxo próprio da banca (formar banca ou
+    // substituir o arquivo do documento vinculado): um upload genérico criaria um documento
+    // sem vínculo com banca nenhuma, invisível para os avaliadores.
+    if (tipo === 'AVALIACAO_BANCA') {
+      throw new BadRequestException({
+        mensagem: 'Documento de avaliação da banca não pode ser adicionado avulso — forme a banca (ou substitua o arquivo do documento da banca existente).',
+      });
     }
     const st = status || 'PENDENTE';
     if (!TccsService.STATUS_DOC.includes(st)) {
@@ -250,9 +467,14 @@ export class TccsService {
       return await this.prisma.$transaction(async (tx) => {
         await tx.documentoTcc.update({ where: { id: docId }, data: { status: 'SUBSTITUIDA' } });
         const versao = (await tx.documentoTcc.count({ where: { tccId: antigo.tccId, tipo: antigo.tipo } })) + 1;
-        return tx.documentoTcc.create({
+        const novo = await tx.documentoTcc.create({
           data: { tccId: antigo.tccId, tipo: antigo.tipo, status: st, parecer: antigo.parecer, versao, ...arq },
         });
+        // Se o documento substituído era o "documento para avaliação" de uma banca, o vínculo
+        // acompanha a NOVA versão na MESMA transação — senão os avaliadores continuariam
+        // baixando/visualizando o arquivo antigo (a banca aponta por id, não por tipo).
+        await tx.banca.updateMany({ where: { documentoAvaliacaoId: docId }, data: { documentoAvaliacaoId: novo.id } });
+        return novo;
       });
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
@@ -442,22 +664,27 @@ export class TccsService {
     return { ok: true };
   }
 
-  // Exclusão LÓGICA (soft delete) por COORDENADOR (qualquer TCC) ou pelo PROFESSOR ORIENTADOR
-  // (só o TCC dele). Não apaga nada fisicamente: apenas marca excluidoEm/excluidoPorId/
-  // motivoExclusao. Documentos, bancas, avaliações, notas e arquivos permanecem no banco/disco.
-  async excluir(usuario: { sub: string; papel: string }, tccId: string, motivo?: string) {
+  // Exclusão PERMANENTE por COORDENADOR (qualquer TCC) ou pelo PROFESSOR ORIENTADOR (só o
+  // TCC dele). Não é soft delete e NÃO tem restauração: o registro sai do banco (o cascade
+  // do schema leva junto solicitações, documentos, bancas, membros/avaliações e liberações
+  // de prazo; as preferências de histórico, sem FK, saem na mesma transação) e os arquivos
+  // físicos de upload são removidos DEPOIS de a transação confirmar — se o banco falhar,
+  // nenhum arquivo é apagado. Notificações não têm vínculo por id com o TCC e ficam como
+  // estão (nada de apagar por texto/título).
+  async excluir(usuario: { sub: string; papel: string }, tccId: string) {
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId } });
-    if (!tcc) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
-    if (tcc.excluidoEm) return { ok: true }; // já excluído: idempotente
+    if (!tcc) return { ok: true }; // já não existe: idempotente
     const ehCoordenador = usuario.papel === 'COORDENADOR';
     const ehOrientador = usuario.papel === 'PROFESSOR' && tcc.orientadorId === usuario.sub;
     if (!ehCoordenador && !ehOrientador) {
       throw new ForbiddenException({ mensagem: 'Você não tem permissão para excluir este TCC.' });
     }
-    await this.prisma.tcc.update({
-      where: { id: tccId },
-      data: { excluidoEm: new Date(), excluidoPorId: usuario.sub, motivoExclusao: (motivo ?? '').trim() || null },
-    });
+    const docs = await this.prisma.documentoTcc.findMany({ where: { tccId }, select: { caminho: true } });
+    await this.prisma.$transaction([
+      this.prisma.historicoTccOculto.deleteMany({ where: { tccId } }),
+      this.prisma.tcc.delete({ where: { id: tccId } }),
+    ]);
+    for (const d of docs) await fs.rm(join(process.cwd(), d.caminho), { force: true }).catch(() => {});
     return { ok: true };
   }
 
