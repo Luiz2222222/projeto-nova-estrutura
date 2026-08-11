@@ -39,6 +39,7 @@ function fakePrisma() {
       updateMany: vi.fn().mockResolvedValue({ count: 0 }),
     },
     membroBanca: {
+      count: vi.fn().mockResolvedValue(0), // avaliações com nota (guarda de concorrência)
       findFirst: vi.fn().mockResolvedValue(null),
       findUnique: vi.fn(),
       findMany: vi.fn().mockResolvedValue([]),
@@ -185,7 +186,7 @@ describe('Correção de fluxo (corrigirFase)', () => {
     expect(r.aplicado).toBe(false);
     expect(r.impactos.join(' ')).toMatch(/defesa/i);
     expect(r.impactos.join(' ')).toMatch(/avalia/i); // avaliações da F2 serão invalidadas
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
     expect(p.membroBanca.updateMany).not.toHaveBeenCalled();
   });
 
@@ -200,7 +201,7 @@ describe('Correção de fluxo (corrigirFase)', () => {
       where: { bancaId: 'b2' },
       data: expect.objectContaining({ status: 'PENDENTE', nota: null }),
     }));
-    expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         faseAtual: 'AGENDAMENTO_DEFESA_FASE_2',
         defesaAgendadaPara: null,
@@ -230,7 +231,7 @@ describe('Correção de fluxo (corrigirFase)', () => {
       where: { bancaId: 'b2' },
       data: expect.objectContaining({ status: 'PENDENTE', nota: null }),
     }));
-    expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({ faseAtual: 'VALIDACAO_FASE_1', nf1: null, nf2: null, nf: null, defesaLiberadaEm: null }),
     }));
   });
@@ -241,7 +242,7 @@ describe('Correção de fluxo (corrigirFase)', () => {
     p.banca.findMany.mockResolvedValue([bancas[0]]); // sem banca F2
     const { servico } = criarTccsService(p);
     await expect(servico.corrigirFase('t1', 'AGENDAMENTO_DEFESA_FASE_2', true)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('NÃO abre a avaliação da Fase II com defesa marcada para o FUTURO (liberação segue automática)', async () => {
@@ -256,7 +257,7 @@ describe('Correção de fluxo (corrigirFase)', () => {
     p.banca.findMany.mockResolvedValue(bancas);
     const { servico } = criarTccsService(p);
     await expect(servico.corrigirFase('t1', 'AVALIACAO_FASE_2', true)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('CONCLUIDO exige versão final enviada (mesmo com NF aprovada)', async () => {
@@ -266,7 +267,50 @@ describe('Correção de fluxo (corrigirFase)', () => {
     p.documentoTcc.findFirst.mockResolvedValue(null); // sem VERSAO_FINAL
     const { servico } = criarTccsService(p);
     await expect(servico.corrigirFase('t1', 'CONCLUIDO', true)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
+  });
+
+  // ----- Concorrência -----
+
+  it('avaliação enviada DEPOIS do "ver impacto" aborta a correção com 409 (impacto ficou velho)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccNaFase2);
+    p.banca.findMany.mockResolvedValue(bancas);
+    // 1ª contagem (base dos impactos) = 3; 2ª (antes de aplicar) = 4 → um avaliador enviou
+    // nota no meio, sem mudar nenhum campo do TCC.
+    p.membroBanca.count.mockResolvedValueOnce(3).mockResolvedValueOnce(4);
+    const { servico } = criarTccsService(p);
+    await expect(servico.corrigirFase('t1', 'AGENDAMENTO_DEFESA_FASE_2', true)).rejects.toMatchObject({ status: 409 });
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
+    expect(p.membroBanca.updateMany).not.toHaveBeenCalled(); // nada foi invalidado
+  });
+
+  it('TCC alterado por outro fluxo no meio (updateMany não casa) → 409', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccNaFase2);
+    p.banca.findMany.mockResolvedValue(bancas);
+    p.tcc.updateMany.mockResolvedValue({ count: 0 }); // estado mudou entre ler e gravar
+    const { servico } = criarTccsService(p);
+    await expect(servico.corrigirFase('t1', 'AGENDAMENTO_DEFESA_FASE_2', true)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('a gravação é CONDICIONAL ao estado lido (fase, notas e defesa no where)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccNaFase2);
+    p.banca.findMany.mockResolvedValue(bancas);
+    const { servico } = criarTccsService(p);
+    await servico.corrigirFase('t1', 'AGENDAMENTO_DEFESA_FASE_2', true);
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 't1',
+        faseAtual: 'AVALIACAO_FASE_2',
+        nf1: 7.5,
+        nf2: 6,
+        nf: 6.9,
+        defesaAgendadaPara: tccNaFase2.defesaAgendadaPara,
+        defesaLiberadaEm: tccNaFase2.defesaLiberadaEm,
+      }),
+    }));
   });
 });
 
@@ -347,7 +391,7 @@ describe('Edição genérica do TCC não aceita fase nem notas calculadas', () =
     p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'DESENVOLVIMENTO' });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { titulo: 'X', nf1: 9, faseAtual: 'CONCLUIDO' } as any);
-    const data = p.tcc.update.mock.calls[0][0].data;
+    const data = p.tcc.updateMany.mock.calls[0][0].data;
     expect(data.titulo).toBe('X');
     expect(data.nf1).toBeUndefined();
     expect(data.faseAtual).toBeUndefined();
@@ -390,7 +434,7 @@ describe('Semestre do TCC exige Calendário configurado', () => {
     p.calendario.findUnique.mockResolvedValue(null);
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('formato inválido (texto livre) → 400', async () => {
@@ -398,7 +442,7 @@ describe('Semestre do TCC exige Calendário configurado', () => {
     p.tcc.findUnique.mockResolvedValue(tccBase);
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { semestre: 'qualquer coisa' } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('semestre com calendário e SEM avaliações → grava', async () => {
@@ -407,7 +451,7 @@ describe('Semestre do TCC exige Calendário configurado', () => {
     p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { semestre: '2027.1' } as any);
-    expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ semestre: '2027.1' }) }));
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ semestre: '2027.1' }) }));
   });
 
   it('TCC com NF apurada não troca de semestre (régua de pesos divergiria)', async () => {
@@ -416,17 +460,52 @@ describe('Semestre do TCC exige Calendário configurado', () => {
     p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('TCC com avaliação de banca registrada (mesmo sem NF) não troca de semestre', async () => {
     const p = fakePrisma();
     p.tcc.findUnique.mockResolvedValue(tccBase);
     p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
-    p.membroBanca.findFirst.mockResolvedValue({ id: 'm1' }); // alguém já enviou nota
+    p.membroBanca.count.mockResolvedValue(1); // alguém já enviou nota
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
+  });
+
+  // Cenário-chave da revisão: a nota entra DEPOIS da validação e NÃO muda campo nenhum do
+  // TCC — sem a recontagem, a troca de semestre passaria com a régua já divergente.
+  it('avaliador envia nota no meio da edição (fase inalterada) → 409 e semestre NÃO troca', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccBase);
+    p.calendario.findUnique.mockResolvedValue({ semestre: '2027.1' });
+    p.membroBanca.count.mockResolvedValueOnce(0).mockResolvedValueOnce(1); // 0 ao validar, 1 depois
+    const { servico } = criarTccsService(p);
+    await expect(servico.editarTcc('t1', { semestre: '2027.1' } as any)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('TCC alterado por outro fluxo entre ler e gravar (updateMany não casa) → 409', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue(tccBase);
+    p.tcc.updateMany.mockResolvedValue({ count: 0 });
+    const { servico } = criarTccsService(p);
+    await expect(servico.editarTcc('t1', { titulo: 'Novo' } as any)).rejects.toMatchObject({ status: 409 });
+  });
+
+  it('a gravação condiciona ao estado lido (fase, notas e flags no where)', async () => {
+    const p = fakePrisma();
+    p.tcc.findUnique.mockResolvedValue({ ...tccBase, nf1: null, monografiaAprovada: true, continuidadeConfirmada: false });
+    const { servico } = criarTccsService(p);
+    await servico.editarTcc('t1', { titulo: 'Novo' } as any);
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: expect.objectContaining({
+        id: 't1',
+        faseAtual: 'DESENVOLVIMENTO',
+        semestre: '2026.1',
+        monografiaAprovada: true,
+        continuidadeConfirmada: false,
+      }),
+    }));
   });
 });
 
@@ -438,7 +517,7 @@ describe('Monografia aprovada / continuidade só mudam em DESENVOLVIMENTO', () =
     p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'AVALIACAO_FASE_2', monografiaAprovada: true, continuidadeConfirmada: true });
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { continuidadeConfirmada: false } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('reenviar o MESMO valor fora do desenvolvimento não é bloqueado (salvar dados gerais segue ok)', async () => {
@@ -446,7 +525,7 @@ describe('Monografia aprovada / continuidade só mudam em DESENVOLVIMENTO', () =
     p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'AVALIACAO_FASE_2', monografiaAprovada: true, continuidadeConfirmada: true });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { titulo: 'X', monografiaAprovada: true, continuidadeConfirmada: true } as any);
-    expect(p.tcc.update).toHaveBeenCalled();
+    expect(p.tcc.updateMany).toHaveBeenCalled();
   });
 
   it('em DESENVOLVIMENTO a mudança é aceita', async () => {
@@ -454,7 +533,7 @@ describe('Monografia aprovada / continuidade só mudam em DESENVOLVIMENTO', () =
     p.tcc.findUnique.mockResolvedValue({ id: 't1', excluidoEm: null, semestre: '2026.1', alunoId: 'al', orientadorId: 'o', coorientadorId: null, faseAtual: 'DESENVOLVIMENTO', monografiaAprovada: false, continuidadeConfirmada: false });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { monografiaAprovada: true } as any);
-    expect(p.tcc.update).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ monografiaAprovada: true }) }));
+    expect(p.tcc.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ monografiaAprovada: true }) }));
   });
 });
 
@@ -469,7 +548,7 @@ describe('Coorientador interno × externo são mutuamente exclusivos', () => {
     p.usuario.findUnique.mockResolvedValue({ id: 'c1', papel: 'PROFESSOR' });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { coorientadorId: 'c1' } as any);
-    const data = p.tcc.update.mock.calls[0][0].data;
+    const data = p.tcc.updateMany.mock.calls[0][0].data;
     expect(data.coorientadorId).toBe('c1');
     expect(data.coorientadorNome).toBeNull();
     expect(data.coorientadorTitulacao).toBeNull();
@@ -482,7 +561,7 @@ describe('Coorientador interno × externo são mutuamente exclusivos', () => {
     p.tcc.findUnique.mockResolvedValue({ ...tccComExterno, coorientadorId: 'c1', coorientadorNome: null });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { coorientadorNome: 'Novo Externo', coorientadorTitulacao: 'Doutor' } as any);
-    const data = p.tcc.update.mock.calls[0][0].data;
+    const data = p.tcc.updateMany.mock.calls[0][0].data;
     expect(data.coorientadorId).toBeNull();
     expect(data.coorientadorNome).toBe('Novo Externo');
   });
@@ -493,7 +572,7 @@ describe('Coorientador interno × externo são mutuamente exclusivos', () => {
     p.usuario.findUnique.mockResolvedValue({ id: 'c1', papel: 'PROFESSOR' });
     const { servico } = criarTccsService(p);
     await expect(servico.editarTcc('t1', { coorientadorId: 'c1', coorientadorNome: 'Ext' } as any)).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.update).not.toHaveBeenCalled();
+    expect(p.tcc.updateMany).not.toHaveBeenCalled();
   });
 
   it('remover o interno não ressuscita dados de externo antigo', async () => {
@@ -501,7 +580,7 @@ describe('Coorientador interno × externo são mutuamente exclusivos', () => {
     p.tcc.findUnique.mockResolvedValue({ ...tccComExterno, coorientadorId: 'c1' });
     const { servico } = criarTccsService(p);
     await servico.editarTcc('t1', { coorientadorId: null } as any);
-    const data = p.tcc.update.mock.calls[0][0].data;
+    const data = p.tcc.updateMany.mock.calls[0][0].data;
     expect(data.coorientadorId).toBeNull();
     expect(data.coorientadorNome).toBeNull(); // o resto de externo antigo sai junto
   });

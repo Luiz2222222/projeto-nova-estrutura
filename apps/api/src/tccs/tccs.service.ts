@@ -55,7 +55,17 @@ export class TccsService {
   // NÃO passam por aqui: são derivados do fluxo e só mudam pela correção administrativa de
   // fluxo (corrigirFase), que limpa os dados dependentes de forma coerente.
   async editarTcc(tccId: string, dados: DadosEditarTcc) {
-    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
+    // TUDO (leituras, validações e gravação) acontece DENTRO da mesma transação: as decisões
+    // aqui dependem de estado que outros papéis mudam em paralelo (um avaliador enviando
+    // nota, o orientador aprovando a monografia). Validar fora e gravar depois decidiria com
+    // estado velho — ex.: liberar a troca de semestre num TCC que acabou de receber nota.
+    return this.prisma.$transaction(async (tx) => {
+    const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
+    // Assinatura do estado que EMBASA as decisões abaixo. Uma nota nova de avaliador não
+    // muda a fase, então `faseAtual` sozinho não protegeria nada: contamos também as
+    // avaliações com nota e reconferimos tudo depois de gravar.
+    const avaliacoesComNota = () => tx.membroBanca.count({ where: { banca: { tccId }, nota: { not: null } } });
+    const notasAntes = await avaliacoesComNota();
 
     const data: Record<string, unknown> = {};
     if (dados.titulo !== undefined) data.titulo = dados.titulo;
@@ -65,7 +75,7 @@ export class TccsService {
       if (!FORMATO_SEMESTRE.test(dados.semestre)) {
         throw new BadRequestException({ mensagem: 'Semestre inválido — use o formato AAAA.1 ou AAAA.2 (ex.: 2026.1).' });
       }
-      const cal = await this.prisma.calendario.findUnique({ where: { semestre: dados.semestre } });
+      const cal = await tx.calendario.findUnique({ where: { semestre: dados.semestre } });
       if (!cal) {
         throw new BadRequestException({
           mensagem: `O semestre ${dados.semestre} ainda não tem Calendário configurado no Planejamento — configure-o antes de mover o TCC.`,
@@ -76,10 +86,7 @@ export class TccsService {
       // notas gravadas deixaria números e régua divergentes — bloqueia; o caminho é reabrir
       // a fase pela Correção de fluxo (que invalida as avaliações às claras) e então trocar.
       const temNotaApurada = tcc.nf1 != null || tcc.nf2 != null || tcc.nf != null;
-      const avaliacaoRegistrada = temNotaApurada
-        ? true
-        : !!(await this.prisma.membroBanca.findFirst({ where: { banca: { tccId }, nota: { not: null } }, select: { id: true } }));
-      if (avaliacaoRegistrada) {
+      if (temNotaApurada || notasAntes > 0) {
         throw new BadRequestException({
           mensagem: 'Este TCC já tem avaliações/notas registradas com os pesos do período atual — trocar o semestre mudaria a régua das notas. ' +
             'Se a troca for mesmo necessária, reabra a fase pela Correção de fluxo (as avaliações são invalidadas explicitamente) e depois troque.',
@@ -104,7 +111,7 @@ export class TccsService {
     if (dados.parecerContinuidade !== undefined) data.parecerContinuidade = dados.parecerContinuidade || null;
 
     if (dados.alunoId !== undefined) {
-      const aluno = await this.prisma.usuario.findUnique({ where: { id: dados.alunoId } });
+      const aluno = await tx.usuario.findUnique({ where: { id: dados.alunoId } });
       if (!aluno || aluno.papel !== 'ALUNO') {
         throw new BadRequestException({ mensagem: 'Aluno inválido (precisa ser um usuário do tipo aluno).' });
       }
@@ -116,7 +123,7 @@ export class TccsService {
         // defesa e compõe a banca da Fase II. Todo TCC ativo precisa ter um orientador.
         throw new BadRequestException({ mensagem: 'O TCC precisa ter um orientador — escolha outro em vez de remover.' });
       }
-      const o = await this.prisma.usuario.findUnique({ where: { id: dados.orientadorId } });
+      const o = await tx.usuario.findUnique({ where: { id: dados.orientadorId } });
       if (!o || !['PROFESSOR', 'COORDENADOR'].includes(o.papel)) {
         throw new BadRequestException({ mensagem: 'Orientador inválido (precisa ser professor ou coordenador).' });
       }
@@ -125,7 +132,7 @@ export class TccsService {
     if (dados.coorientadorId !== undefined) {
       if (!dados.coorientadorId) data.coorientadorId = null;
       else {
-        const co = await this.prisma.usuario.findUnique({ where: { id: dados.coorientadorId } });
+        const co = await tx.usuario.findUnique({ where: { id: dados.coorientadorId } });
         if (!co || !['PROFESSOR', 'AVALIADOR', 'COORDENADOR'].includes(co.papel)) {
           throw new BadRequestException({ mensagem: 'Coorientador inválido.' });
         }
@@ -167,14 +174,14 @@ export class TccsService {
     const novoAluno = (data.alunoId as string) ?? tcc.alunoId;
     const novoSem = (data.semestre as string) ?? tcc.semestre;
     if (novoAluno !== tcc.alunoId || novoSem !== tcc.semestre) {
-      const conflito = await this.prisma.tcc.findFirst({
+      const conflito = await tx.tcc.findFirst({
         where: { alunoId: novoAluno, semestre: novoSem, NOT: { id: tccId } },
       });
       if (conflito) throw new BadRequestException({ mensagem: 'Já existe um TCC para este aluno neste semestre.' });
     }
 
-    // ----- Coerência com as bancas (mesma transação da gravação) -----
-    return this.prisma.$transaction(async (tx) => {
+    // ----- Coerência com as bancas -----
+    {
       const bancas = await tx.banca.findMany({ where: { tccId }, include: { membros: true } });
       const trocouOrientador = data.orientadorId !== undefined && data.orientadorId !== tcc.orientadorId;
 
@@ -212,8 +219,37 @@ export class TccsService {
           await tx.membroBanca.create({ data: { bancaId: bancaF2.id, avaliadorId: data.orientadorId as string } });
         }
       }
+    }
 
-      return tx.tcc.update({ where: { id: tccId }, data });
+    // Gravação CONDICIONAL ao estado em que as decisões foram tomadas: se outro papel mexeu
+    // no TCC no meio do caminho, nenhuma linha casa e a transação inteira é abortada com 409.
+    const alterou = await tx.tcc.updateMany({
+      where: {
+        id: tccId,
+        excluidoEm: null,
+        faseAtual: tcc.faseAtual,
+        semestre: tcc.semestre,
+        alunoId: tcc.alunoId,
+        orientadorId: tcc.orientadorId,
+        coorientadorId: tcc.coorientadorId,
+        nf1: tcc.nf1,
+        nf2: tcc.nf2,
+        nf: tcc.nf,
+        monografiaAprovada: tcc.monografiaAprovada,
+        continuidadeConfirmada: tcc.continuidadeConfirmada,
+      },
+      data,
+    });
+    if (alterou.count !== 1) {
+      throw new ConflictException({ mensagem: 'O TCC mudou enquanto você editava (outra ação do fluxo aconteceu). Atualize a página e refaça a alteração.' });
+    }
+    // Uma nota de avaliador NÃO altera nenhum campo do TCC — o updateMany acima não a
+    // pegaria. Reconferimos a contagem depois de gravar: se alguém enviou avaliação no meio,
+    // o rollback desfaz tudo (importante sobretudo para a troca de semestre).
+    if ((await avaliacoesComNota()) !== notasAntes) {
+      throw new ConflictException({ mensagem: 'Uma avaliação da banca foi registrada enquanto você editava. Atualize a página e refaça a alteração.' });
+    }
+    return tx.tcc.findUnique({ where: { id: tccId } });
     });
   }
 
@@ -229,12 +265,18 @@ export class TccsService {
     if (!(FASES as readonly string[]).includes(fase)) {
       throw new BadRequestException({ mensagem: 'Fase inválida.' });
     }
-    const tcc = await buscarTccAtivoOuFalhar(this.prisma, tccId);
+    // Leituras, validações e gravação numa transação só: os pré-requisitos dependem de
+    // estado que muda em paralelo (nota de avaliador, defesa liberada pelo agendador), e
+    // decidir fora da transação usaria um retrato já vencido.
+    return this.prisma.$transaction(async (tx) => {
+    const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
     if (fase === tcc.faseAtual) {
       return { aplicado: false, faseAtual: tcc.faseAtual, impactos: ['O TCC já está nesta fase — nada a alterar.'] };
     }
 
-    const bancas = await this.prisma.banca.findMany({ where: { tccId }, include: { membros: true } });
+    const bancas = await tx.banca.findMany({ where: { tccId }, include: { membros: true } });
+    const avaliacoesComNota = () => tx.membroBanca.count({ where: { banca: { tccId }, nota: { not: null } } });
+    const notasAntes = await avaliacoesComNota();
     const f1 = bancas.find((b) => b.fase === 'FASE_1');
     const f2 = bancas.find((b) => b.fase === 'FASE_2');
     const comNota = (b?: { membros: { nota: number | null }[] }) => (b?.membros ?? []).filter((m) => m.nota != null).length;
@@ -384,7 +426,7 @@ export class TccsService {
       case 'VALIDACAO_VERSAO_FINAL': {
         exigir(tcc.nf != null && aprovadoFinal(tcc.nf), 'Este destino exige nota final aprovada (NF ≥ 7) já apurada — valide a Fase II primeiro.');
         if (fase === 'VALIDACAO_VERSAO_FINAL') {
-          const versaoFinal = await this.prisma.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
+          const versaoFinal = await tx.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
           exigir(versaoFinal, 'Não há versão final enviada — o destino coerente é "Ajustes finais — versão final".');
         }
         if (tcc.resultado || tcc.concluidoEm) impactos.push('O resultado/conclusão registrados serão desfeitos até a nova validação da versão final.');
@@ -397,7 +439,7 @@ export class TccsService {
         exigir(tcc.nf != null && aprovadoFinal(tcc.nf), 'Concluir exige nota final aprovada (NF ≥ 7) já apurada — valide a Fase II primeiro.');
         // Sem versão final enviada não existe TCC concluído — o superpoder administrativo
         // pula só a VALIDAÇÃO do orientador (com aviso), nunca a existência do documento.
-        const versaoFinalConcluir = await this.prisma.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
+        const versaoFinalConcluir = await tx.documentoTcc.findFirst({ where: { tccId, tipo: 'VERSAO_FINAL', status: { not: 'SUBSTITUIDA' } } });
         exigir(versaoFinalConcluir, 'Não há versão final enviada — sem ela o destino coerente é "Ajustes finais — versão final".');
         data.resultado = 'APROVADO';
         data.concluidoEm = tcc.concluidoEm ?? new Date();
@@ -425,11 +467,35 @@ export class TccsService {
     }
 
     if (!confirmar) return { aplicado: false, faseAtual: tcc.faseAtual, impactos };
-    await this.prisma.$transaction(async (tx) => {
-      for (const acao of acoes) await acao(tx);
-      await tx.tcc.update({ where: { id: tccId }, data });
+
+    // Antes de aplicar: as avaliações com nota são a base dos impactos que o coordenador
+    // acabou de confirmar. Se entrou nota nova depois da leitura (uma nota NÃO muda campo
+    // nenhum do TCC, então o updateMany abaixo não a detectaria), o que seria invalidado já
+    // não é o que foi mostrado → 409 antes de qualquer escrita.
+    if ((await avaliacoesComNota()) !== notasAntes) {
+      throw new ConflictException({ mensagem: 'Uma avaliação da banca foi registrada enquanto a correção era preparada. Atualize a página e revise o impacto novamente.' });
+    }
+    for (const acao of acoes) await acao(tx);
+    // Mesma blindagem do editarTcc: grava só se o estado que embasou os pré-requisitos
+    // (fase, notas apuradas, defesa) continuar exatamente o mesmo; senão, 409 e rollback.
+    const alterou = await tx.tcc.updateMany({
+      where: {
+        id: tccId,
+        excluidoEm: null,
+        faseAtual: tcc.faseAtual,
+        nf1: tcc.nf1,
+        nf2: tcc.nf2,
+        nf: tcc.nf,
+        defesaAgendadaPara: tcc.defesaAgendadaPara,
+        defesaLiberadaEm: tcc.defesaLiberadaEm,
+      },
+      data,
     });
+    if (alterou.count !== 1) {
+      throw new ConflictException({ mensagem: 'O TCC mudou enquanto a correção era preparada (outra ação do fluxo aconteceu). Atualize a página e revise o impacto novamente.' });
+    }
     return { aplicado: true, faseAtual: fase, impactos };
+    });
   }
 
   // Edita metadados de um documento do TCC (não substitui o arquivo). Coordenador.

@@ -20,6 +20,7 @@ import { ModalEditarTcc } from '../../componentes/ModalEditarTcc';
 import { ModalConfirmacao } from '../../componentes/ModalConfirmacao';
 import { ModalCorrigirFase } from '../../componentes/ModalCorrigirFase';
 import { ModalAgendarDefesa } from '../../componentes/ModalAgendarDefesa';
+import { ModalArquivosNaoRemovidos } from '../../componentes/ModalArquivosNaoRemovidos';
 import { Modal } from '../../componentes/Modal';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
 import { LiberacoesPrazo } from '../../componentes/LiberacoesPrazo';
@@ -111,6 +112,7 @@ export function TccDetalheCoordenador() {
   const [corrigindoFase, setCorrigindoFase] = useState(false); // modal "Correção de fluxo"
   const [agendandoDefesa, setAgendandoDefesa] = useState(false); // modal de defesa (coordenação)
   const [erroExcluir, setErroExcluir] = useState('');
+  const [arquivosOrfaos, setArquivosOrfaos] = useState<string[] | null>(null); // exclusão ok, arquivos presos
 
   function carregar() {
     setCarregando(true);
@@ -313,13 +315,21 @@ export function TccDetalheCoordenador() {
     }
   }
 
-  // Exclusão PERMANENTE do TCC (coordenador) — sem restauração. Volta para a lista.
+  // Exclusão PERMANENTE do TCC (coordenador) — sem restauração. Volta para a lista, exceto
+  // quando o backend avisa que algum arquivo ficou no disco: aí mostra os órfãos primeiro
+  // (senão a falha só existiria no log do servidor).
   async function excluirTcc() {
     if (!tcc) return;
     setErroExcluir('');
     setExcluindoProc(true);
     try {
-      await apiDelete(`/tccs/${tcc.id}`);
+      const r = await apiDelete<{ ok: boolean; arquivosNaoRemovidos?: string[] }>(`/tccs/${tcc.id}`);
+      if (r?.arquivosNaoRemovidos?.length) {
+        setExcluindo(false);
+        setExcluindoProc(false);
+        setArquivosOrfaos(r.arquivosNaoRemovidos);
+        return;
+      }
       navigate('/coordenador/tccs');
     } catch (e) {
       setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');
@@ -759,6 +769,10 @@ export function TccDetalheCoordenador() {
 
       {agendandoDefesa && (
         <ModalAgendarDefesa tcc={tcc} aoFechar={() => setAgendandoDefesa(false)} aoSalvo={carregar} />
+      )}
+
+      {arquivosOrfaos && (
+        <ModalArquivosNaoRemovidos arquivos={arquivosOrfaos} aoFechar={() => navigate('/coordenador/tccs')} />
       )}
 
       {excluindo && (

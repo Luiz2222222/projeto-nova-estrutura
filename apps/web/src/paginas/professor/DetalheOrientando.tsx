@@ -22,6 +22,7 @@ import { CardNotasFinais } from '../../componentes/CardNotasFinais';
 import { AvaliacaoBancaForm } from '../../componentes/AvaliacaoBancaForm';
 import { BancaNotasTcc } from '../../componentes/BancaNotasTcc';
 import { ModalExcluirTcc } from '../../componentes/ModalExcluirTcc';
+import { ModalArquivosNaoRemovidos } from '../../componentes/ModalArquivosNaoRemovidos';
 import { CardDefesa } from '../../componentes/CardDefesa';
 import { partesDefesaFortaleza, montarInstanteDefesa } from '../../utils/defesa';
 import type { Tcc, MembroBanca, UsuarioResumo } from '../../tipos';
@@ -98,6 +99,7 @@ export function DetalheOrientando() {
   const [excluindo, setExcluindo] = useState(false); // modal "Excluir TCC"
   const [excluindoProc, setExcluindoProc] = useState(false);
   const [erroExcluir, setErroExcluir] = useState('');
+  const [arquivosOrfaos, setArquivosOrfaos] = useState<string[] | null>(null); // exclusão ok, arquivos presos
 
   function carregar() {
     setCarregando(true);
@@ -115,7 +117,14 @@ export function DetalheOrientando() {
     setErroExcluir('');
     setExcluindoProc(true);
     try {
-      await apiDelete(`/tccs/${tcc.id}`);
+      const r = await apiDelete<{ ok: boolean; arquivosNaoRemovidos?: string[] }>(`/tccs/${tcc.id}`);
+      // Arquivo preso no disco: avisa antes de sair, senão a falha só apareceria no log.
+      if (r?.arquivosNaoRemovidos?.length) {
+        setExcluindo(false);
+        setExcluindoProc(false);
+        setArquivosOrfaos(r.arquivosNaoRemovidos);
+        return;
+      }
       navigate('/professor/orientandos');
     } catch (e) {
       setErroExcluir((e as ErroApi).mensagem || 'Não foi possível excluir o TCC.');
@@ -589,6 +598,10 @@ export function DetalheOrientando() {
 
       {excluindo && (
         <ModalExcluirTcc aoFechar={() => setExcluindo(false)} aoConfirmar={excluirTcc} processando={excluindoProc} erro={erroExcluir} />
+      )}
+
+      {arquivosOrfaos && (
+        <ModalArquivosNaoRemovidos arquivos={arquivosOrfaos} aoFechar={() => navigate('/professor/orientandos')} />
       )}
     </>
   );
