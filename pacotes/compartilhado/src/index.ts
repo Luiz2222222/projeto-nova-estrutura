@@ -120,6 +120,21 @@ export const esquemaTrocarSenha = z
   });
 export type DadosTrocarSenha = z.infer<typeof esquemaTrocarSenha>;
 
+// Criação de um novo COORDENADOR por outro coordenador já autenticado (card em "Meu perfil").
+// Schema PRÓPRIO de propósito: não reaproveita `esquemaCadastro` para não abrir COORDENADOR no
+// cadastro público e para não exigir código de cadastro. Também não aceita `papel` — o papel é
+// definido no backend; qualquer `papel` enviado no corpo é descartado pelo zod (object strip).
+export const esquemaCriarCoordenador = z.object({
+  nomeCompleto: z
+    .string()
+    .trim()
+    .min(3, 'Informe o nome completo')
+    .refine((v) => v.split(/\s+/).filter(Boolean).length >= 2, 'Informe o nome completo'),
+  email: z.string().email('E-mail inválido'),
+  senha: z.string().min(6, 'A senha precisa ter ao menos 6 caracteres'),
+});
+export type DadosCriarCoordenador = z.infer<typeof esquemaCriarCoordenador>;
+
 // Usuário "público" (sem senha) devolvido pela API.
 export interface UsuarioPublico {
   id: string;

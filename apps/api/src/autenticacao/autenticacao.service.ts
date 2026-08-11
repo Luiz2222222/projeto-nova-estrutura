@@ -8,7 +8,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
-import type { DadosCadastro, DadosLogin, UsuarioPublico } from '@tcc/compartilhado';
+import type { DadosCadastro, DadosCriarCoordenador, DadosLogin, UsuarioPublico } from '@tcc/compartilhado';
 
 @Injectable()
 export class AutenticacaoService {
@@ -70,6 +70,37 @@ export class AutenticacaoService {
         afiliacao: dados.papel === 'AVALIADOR' ? dados.afiliacao ?? null : null,
       },
     });
+    return this.publicar(u);
+  }
+
+  // Cria um novo COORDENADOR. Só chega aqui quem já está autenticado COMO coordenador
+  // (a rota exige GuardaJwt + @Papeis('COORDENADOR')). Diferente do cadastro público:
+  // não pede código de cadastro e o papel é fixado aqui — `dados` nem carrega `papel`,
+  // então não há como escalar privilégio pelo corpo da requisição.
+  async criarCoordenador(dados: DadosCriarCoordenador): Promise<UsuarioPublico> {
+    const email = dados.email.toLowerCase();
+    const existe = await this.prisma.usuario.findUnique({ where: { email } });
+    if (existe) {
+      throw new BadRequestException({
+        mensagem: 'E-mail já cadastrado',
+        erros: [{ campo: 'email', mensagem: 'Este e-mail já está em uso' }],
+      });
+    }
+
+    const senhaHash = await bcrypt.hash(dados.senha, 10);
+    const u = await this.prisma.usuario.create({
+      data: {
+        nomeCompleto: dados.nomeCompleto,
+        email,
+        senhaHash,
+        papel: 'COORDENADOR',
+        // Coordenador não tem curso/titulação/afiliação (campos dos demais papéis).
+        curso: null,
+        tratamento: null,
+        afiliacao: null,
+      },
+    });
+    // `publicar` já remove a senha/hash da resposta.
     return this.publicar(u);
   }
 

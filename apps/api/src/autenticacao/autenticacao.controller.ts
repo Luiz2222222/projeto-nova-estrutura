@@ -21,9 +21,11 @@ import { ZodValidacaoPipe } from '../comum/zod-validacao.pipe';
 import { LimitadorTentativas, ipDaRequisicao } from '../comum/limitador-tentativas';
 import {
   esquemaCadastro,
+  esquemaCriarCoordenador,
   esquemaLogin,
   esquemaTrocarSenha,
   type DadosCadastro,
+  type DadosCriarCoordenador,
   type DadosLogin,
   type DadosTrocarSenha,
 } from '@tcc/compartilhado';
@@ -67,6 +69,18 @@ export class AutenticacaoController {
     const ip = ipDaRequisicao(req);
     this.bloquearSeExcedeu([{ lim: this.limCadastroIp, chave: `cadastro:ip:${ip}` }]);
     return this.auth.cadastrar(dados);
+  }
+
+  // Criação de coordenador pelo card em "Meu perfil". Fora do cadastro público: exige sessão
+  // válida E papel COORDENADOR (o guard lê o papel do BANCO, não do token). Não recebe `papel`
+  // nem código de cadastro — quem define o papel é o service.
+  @Post('coordenadores')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR')
+  async criarCoordenador(
+    @Body(new ZodValidacaoPipe(esquemaCriarCoordenador)) dados: DadosCriarCoordenador,
+  ) {
+    return this.auth.criarCoordenador(dados);
   }
 
   @Post('login')
