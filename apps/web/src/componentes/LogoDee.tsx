@@ -2,8 +2,8 @@ import { useTema, type Tema } from '../tema/contexto';
 
 const TEMAS_ESCUROS: Tema[] = ['escuro', 'preto'];
 
-const LOGO_CLARO = '/logo-dee-1.png';
-const LOGO_ESCURO = '/logo-dee-4.png';
+const LOGO_CLARO = '/logo-dee-clara.png';
+const LOGO_ESCURO = '/logo-dee-escura.png';
 
 interface Props {
   className?: string;
