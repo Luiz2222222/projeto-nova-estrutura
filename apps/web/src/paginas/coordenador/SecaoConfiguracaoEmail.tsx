@@ -12,16 +12,15 @@ const icoOlhoFechado = (
   </svg>
 );
 
-// Configuração GLOBAL de e-mails (coordenador): 2 interruptores + servidor SMTP.
+// Configuração GLOBAL de e-mails (coordenador): 2 interruptores + conta remetente.
+// Host, porta e TLS não aparecem aqui: são fixos no backend (Google Workspace, 587 +
+// STARTTLS obrigatório). A tela pede só o e-mail remetente e a senha de app.
 export function SecaoConfiguracaoEmail() {
   const [cfg, setCfg] = useState<any | null>(null);
   const [salvando, setSalvando] = useState(false);
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
-  // Form do SMTP (separado; salva com botão).
-  const [host, setHost] = useState('');
-  const [porta, setPorta] = useState('');
-  const [secure, setSecure] = useState(false);
+  // Form da conta remetente (separado; salva com botão).
   const [usuario, setUsuario] = useState('');
   const [senha, setSenha] = useState(''); // vazio = manter a atual
   const [salvandoSmtp, setSalvandoSmtp] = useState(false);
@@ -30,9 +29,6 @@ export function SecaoConfiguracaoEmail() {
 
   function aplicar(c: any) {
     setCfg(c);
-    setHost(c.smtpHost ?? '');
-    setPorta(c.smtpPort != null ? String(c.smtpPort) : '');
-    setSecure(!!c.smtpSecure);
     setUsuario(c.smtpUsuario ?? '');
     setSenha('');
   }
@@ -61,16 +57,13 @@ export function SecaoConfiguracaoEmail() {
     setErro('');
     setSalvandoSmtp(true);
     try {
+      // Só e-mail e senha: host/porta/TLS/remetente são definidos pelo backend.
       const c = await apiPut('/email-config', {
-        smtpHost: host,
-        smtpPort: porta ? Number(porta) : null,
-        smtpSecure: secure,
         smtpUsuario: usuario,
-        smtpRemetente: '', // sem campo From: o remetente cai no próprio e-mail (smtpUsuario)
         smtpSenha: senha, // vazio = mantém a atual
       });
       aplicar(c); // recarrega (atualiza temSenha e limpa o campo de senha)
-      setMsg('Configuração de servidor salva.');
+      setMsg('Configuração de e-mail salva.');
     } catch (e) {
       setErro((e as ErroApi).mensagem || 'Não foi possível salvar.');
     } finally {
@@ -127,46 +120,28 @@ export function SecaoConfiguracaoEmail() {
           </div>
 
           <div className="config-grupo">
-            <h3>Servidor de e-mail (SMTP)</h3>
+            <h3>Conta que envia os e-mails</h3>
             <p className="legenda" style={{ marginBottom: 8 }}>
-              Configure o servidor que envia os e-mails. Quando preenchido aqui, substitui as variáveis
-              do servidor (.env). A senha é guardada criptografada e nunca é exibida.
+              Configuração global compartilhada entre os coordenadores. Use o e-mail institucional do
+              setor e uma senha de app do Google. A senha é guardada criptografada e nunca é exibida.
             </p>
             {msg && <div className="erro-geral" style={{ background: 'var(--aprovado-suave)', borderColor: 'rgba(21,128,61,0.25)', color: 'var(--aprovado)' }}>{msg}</div>}
             {erro && <div className="erro-geral">{erro}</div>}
             <div className="grade-2">
-              <label className="campo"><span>E-mail</span><input value={usuario} onChange={(e) => setUsuario(e.target.value)} placeholder="seu-email@provedor.com" /></label>
+              <label className="campo"><span>E-mail remetente</span><input value={usuario} onChange={(e) => setUsuario(e.target.value)} placeholder="coordenacaodee@ufpe.br" /></label>
               <label className="campo">
                 <span>Senha de app</span>
                 <span className="campo-com-acao">
-                  <input type={mostrarSenha ? 'text' : 'password'} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder={cfg.temSenha ? '•••••• (deixe em branco para manter)' : 'Senha de app do provedor'} />
+                  <input type={mostrarSenha ? 'text' : 'password'} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder={cfg.temSenha ? '•••••• (deixe em branco para manter)' : 'Senha de app do Google'} />
                   <button type="button" className="campo-acao" onClick={() => setMostrarSenha((v) => !v)} title={mostrarSenha ? 'Ocultar' : 'Mostrar'} aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}>
                     {mostrarSenha ? icoOlhoFechado : icoOlho}
                   </button>
                 </span>
-                <small className="legenda">Use uma senha de app do provedor, não sua senha principal.</small>
+                <small className="legenda">Use uma senha de app do Google, nunca a senha normal da conta. Ao trocar o e-mail, informe a senha de app da nova conta.</small>
               </label>
-              <label className="campo"><span>Servidor (host)</span><input value={host} onChange={(e) => setHost(e.target.value)} placeholder="smtp.seuprovedor.com" /></label>
-              <label className="campo"><span>Porta</span><input type="number" value={porta} onChange={(e) => setPorta(e.target.value)} placeholder="587" /></label>
-              <div className="pref-item pref-item-span">
-                <div className="pref-texto">
-                  <span className="pref-rotulo">Conexão segura (TLS/SSL)</span>
-                  <span className="pref-desc">Marque para porta 465 (SSL). Para 587 (STARTTLS), deixe desmarcado.</span>
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={secure}
-                  aria-label="Conexão segura (TLS/SSL)"
-                  className={`pref-switch${secure ? ' on' : ''}`}
-                  onClick={() => setSecure((v) => !v)}
-                >
-                  <span className="pref-switch-bolinha" aria-hidden="true" />
-                </button>
-              </div>
             </div>
             <div className="acoes" style={{ justifyContent: 'flex-start' }}>
-              <button className="botao" disabled={salvandoSmtp} onClick={salvarSmtp}>{salvandoSmtp ? 'Salvando…' : 'Salvar servidor'}</button>
+              <button className="botao" disabled={salvandoSmtp} onClick={salvarSmtp}>{salvandoSmtp ? 'Salvando…' : 'Salvar configuração'}</button>
             </div>
           </div>
         </>

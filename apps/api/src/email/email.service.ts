@@ -20,8 +20,14 @@ function escaparHtml(texto: string): string {
     .replace(/'/g, '&#39;');
 }
 
+// SMTP fixo da configuração salva pela tela: conta institucional no Google Workspace.
+// A tela pede só e-mail + senha de app; host/porta/TLS NÃO são escolhidos por quem chama a
+// API (nem pela tela, nem por um cliente montando a requisição na mão). Porta 587 com
+// requireTLS: sem SSL implícito, mas STARTTLS obrigatório — a conexão nunca fica em texto puro.
+const SMTP_GOOGLE = { host: 'smtp.gmail.com', porta: 587, secure: false } as const;
+
 // Camada de envio de e-mail + controle de envio (global e por usuário).
-// SMTP vem do BANCO (configurado pela UID do coordenador) quando smtpHost está
+// SMTP vem do BANCO (configurado pela UI do coordenador) quando smtpHost está
 // setado; senão cai no .env; sem nenhum dos dois, modo dev/console (só loga).
 @Injectable()
 export class EmailService {
@@ -63,8 +69,11 @@ export class EmailService {
       const senha = cfg.smtpSenhaCriptografada ? this.descriptografar(cfg.smtpSenhaCriptografada) : undefined;
       const transporter = nodemailer.createTransport({
         host: cfg.smtpHost,
-        port: cfg.smtpPort ?? 587,
+        port: cfg.smtpPort ?? SMTP_GOOGLE.porta,
         secure: !!cfg.smtpSecure,
+        // STARTTLS obrigatório: se o servidor não oferecer TLS, a conexão falha em vez de
+        // seguir em texto puro. Tirar o campo TLS da tela não tira a criptografia.
+        requireTLS: true,
         auth: cfg.smtpUsuario ? { user: cfg.smtpUsuario, pass: senha } : undefined,
       });
       return { transporter, remetente: cfg.smtpRemetente || cfg.smtpUsuario || REMETENTE_PADRAO };
@@ -119,27 +128,67 @@ export class EmailService {
   async atualizarConfig(dados: {
     recuperacaoSenhaAtiva?: boolean;
     fluxoTccAtivo?: boolean;
+    // Aceitos na assinatura só por compatibilidade com quem já chama a rota: são IGNORADOS.
+    // Host/porta/TLS são fixos (SMTP_GOOGLE) e o remetente é sempre o smtpUsuario.
     smtpHost?: string | null;
     smtpPort?: number | null;
     smtpSecure?: boolean;
-    smtpUsuario?: string | null;
     smtpRemetente?: string | null;
+    smtpUsuario?: string | null; // e-mail remetente (único campo de identidade editável)
     smtpSenha?: string; // texto puro do form; vazio/ausente = mantém a senha atual
   }) {
-    await this.obterConfig(); // garante a linha
+    const atual = await this.obterConfig(); // garante a linha
     const data: Record<string, unknown> = {};
     if (typeof dados.recuperacaoSenhaAtiva === 'boolean') data.recuperacaoSenhaAtiva = dados.recuperacaoSenhaAtiva;
     if (typeof dados.fluxoTccAtivo === 'boolean') data.fluxoTccAtivo = dados.fluxoTccAtivo;
-    if (dados.smtpHost !== undefined) data.smtpHost = dados.smtpHost?.trim() || null;
-    if (dados.smtpPort !== undefined) {
-      const n = Number(dados.smtpPort);
-      data.smtpPort = dados.smtpPort != null && Number.isFinite(n) ? n : null;
+
+    // smtpHost/smtpPort/smtpSecure/smtpRemetente vindos do cliente são IGNORADOS de propósito:
+    // a configuração salva pela tela é sempre a do Google Workspace (SMTP_GOOGLE) e o remetente
+    // é sempre o próprio e-mail informado. Só o e-mail e a senha de app são escolhidos.
+    let desligou = false;
+    if (dados.smtpUsuario !== undefined) {
+      const email = dados.smtpUsuario?.trim() || '';
+      const senha = typeof dados.smtpSenha === 'string' ? dados.smtpSenha : '';
+
+      if (!email) {
+        desligou = true;
+        // E-mail em branco desliga a configuração salva (volta a valer o .env, se houver).
+        data.smtpUsuario = null;
+        data.smtpRemetente = null;
+        data.smtpHost = null;
+        data.smtpPort = null;
+        data.smtpSecure = false;
+        data.smtpSenhaCriptografada = null;
+      } else {
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+          throw new BadRequestException({
+            mensagem: 'Informe um e-mail válido.',
+            erros: [{ campo: 'smtpUsuario', mensagem: 'E-mail inválido' }],
+          });
+        }
+        // Senha de app é obrigatória no primeiro cadastro E sempre que o e-mail muda (a senha
+        // de app é vinculada à conta: manter a antiga com outro e-mail nunca autenticaria).
+        const trocouEmail = (atual.smtpUsuario ?? '') !== email;
+        const precisaSenha = trocouEmail || !atual.smtpSenhaCriptografada;
+        if (precisaSenha && !senha) {
+          throw new BadRequestException({
+            mensagem: trocouEmail
+              ? 'Ao trocar o e-mail remetente, informe a senha de app da nova conta.'
+              : 'Informe a senha de app para ativar o envio de e-mails.',
+            erros: [{ campo: 'smtpSenha', mensagem: 'Senha de app obrigatória' }],
+          });
+        }
+        data.smtpUsuario = email;
+        data.smtpRemetente = email; // remetente = o próprio e-mail informado
+        data.smtpHost = SMTP_GOOGLE.host;
+        data.smtpPort = SMTP_GOOGLE.porta;
+        data.smtpSecure = SMTP_GOOGLE.secure;
+      }
     }
-    if (typeof dados.smtpSecure === 'boolean') data.smtpSecure = dados.smtpSecure;
-    if (dados.smtpUsuario !== undefined) data.smtpUsuario = dados.smtpUsuario?.trim() || null;
-    if (dados.smtpRemetente !== undefined) data.smtpRemetente = dados.smtpRemetente?.trim() || null;
-    // Senha: só atualiza se vier preenchida; vazia/ausente → mantém a atual.
-    if (typeof dados.smtpSenha === 'string' && dados.smtpSenha.length > 0) {
+
+    // Senha: só atualiza se vier preenchida; vazia/ausente → mantém a atual. Se o e-mail foi
+    // apagado (desligou), a senha já foi zerada acima e não deve ser regravada.
+    if (!desligou && typeof dados.smtpSenha === 'string' && dados.smtpSenha.length > 0) {
       data.smtpSenhaCriptografada = this.criptografar(dados.smtpSenha);
     }
     await this.prisma.configuracaoEmail.update({ where: { id: 'global' }, data });
