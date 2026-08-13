@@ -11,6 +11,10 @@ import { resolverSemestreAtivo } from '../comum/semestre';
 // Papéis que PODEM ser apagados no encerramento. Professor e coordenador nunca entram aqui.
 const PAPEIS_APAGAVEIS = ['ALUNO', 'AVALIADOR'];
 
+// Status de documento que podem ser preservados como arquivo final. REJEITADO e SUBSTITUIDA
+// ficam de fora: arquivar uma versão recusada como "a" versão do TCC seria um erro grave.
+const STATUS_PRESERVAVEIS = ['APROVADO', 'PENDENTE', 'EM_ANALISE'];
+
 // "Encerrar e arquivar período": arquiva no Drive + cria o histórico independente e só
 // então apaga TCCs, arquivos locais e contas de aluno/avaliador externo daquele período.
 //
@@ -34,6 +38,7 @@ export class EncerramentoService {
       where: { semestre },
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, papel: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, email: true, papel: true } },
         bancas: { include: { membros: { include: { avaliador: { select: { id: true, nomeCompleto: true, papel: true } } } } } },
       },
     });
@@ -61,6 +66,11 @@ export class EncerramentoService {
     const candidatos = new Map<string, any>();
     for (const t of tccs) {
       if (t.aluno && PAPEIS_APAGAVEIS.includes(t.aluno.papel)) candidatos.set(t.aluno.id, t.aluno);
+      // Coorientador INTERNO com conta: um AVALIADOR que seja só coorientador também precisa
+      // entrar na análise (antes ficava de fora e a conta sobrava órfã no sistema).
+      if (t.coorientador && PAPEIS_APAGAVEIS.includes(t.coorientador.papel)) {
+        candidatos.set(t.coorientador.id, t.coorientador);
+      }
       for (const b of t.bancas ?? []) {
         for (const m of b.membros ?? []) {
           if (m.avaliador && PAPEIS_APAGAVEIS.includes(m.avaliador.papel)) candidatos.set(m.avaliador.id, m.avaliador);
@@ -71,17 +81,20 @@ export class EncerramentoService {
     const apagaveis: any[] = [];
     const preservadas: any[] = [];
     for (const c of candidatos.values()) {
-      const tccsForaDoPeriodo = await this.prisma.tcc.count({
+      // Vínculo em QUALQUER papel fora deste período preserva a conta: aluno, membro de
+      // banca ou coorientador.
+      const comoAluno = await this.prisma.tcc.count({
         where: { alunoId: c.id, semestre: { not: semestre } },
       });
-      const bancasForaDoPeriodo = await this.prisma.membroBanca.count({
+      const comoCoorientador = await this.prisma.tcc.count({
+        where: { coorientadorId: c.id, semestre: { not: semestre } },
+      });
+      const comoAvaliador = await this.prisma.membroBanca.count({
         where: { avaliadorId: c.id, banca: { tcc: { semestre: { not: semestre } } } },
       });
-      if (tccsForaDoPeriodo > 0 || bancasForaDoPeriodo > 0) {
-        preservadas.push({
-          ...c,
-          motivo: `ainda participa de ${tccsForaDoPeriodo + bancasForaDoPeriodo} TCC(s) de outro período`,
-        });
+      const total = comoAluno + comoCoorientador + comoAvaliador;
+      if (total > 0) {
+        preservadas.push({ ...c, motivo: `ainda participa de ${total} TCC(s) de outro período` });
       } else {
         apagaveis.push(c);
       }
@@ -111,7 +124,7 @@ export class EncerramentoService {
       include: {
         aluno: { select: { id: true, nomeCompleto: true, email: true, curso: true, papel: true } },
         orientador: { select: { id: true, nomeCompleto: true } },
-        coorientador: { select: { id: true, nomeCompleto: true } },
+        coorientador: { select: { id: true, nomeCompleto: true, email: true, papel: true } },
         documentos: true,
         bancas: { include: { membros: { include: { avaliador: { select: { id: true, nomeCompleto: true, papel: true } } } } } },
       },
@@ -140,19 +153,23 @@ export class EncerramentoService {
       });
     }
 
-    // 3) Histórico independente ANTES de qualquer exclusão.
+    // 3) TRAVA DE BACKUP: exige, para TODO TCC, documento válido escolhido + mapeamento +
+    // confirmação remota no Drive. Aborta tudo se qualquer um falhar.
+    await this.exigirBackupComprovado(tccs);
+
+    // 4) Histórico independente ANTES de qualquer exclusão (idempotente por tccIdOriginal).
     const arquivados: string[] = [];
     for (const t of tccs) {
       arquivados.push(await this.arquivar(t));
     }
 
-    // 4) Poda no Drive: só depois de confirmar que o arquivo final está gravado.
+    // 5) Poda no Drive — agora seguro, porque o backup do arquivo final já foi comprovado.
     let podados = 0;
     for (const t of tccs) {
       podados += await this.podarDrive(t.id);
     }
 
-    // 5) Agora sim: apagar TCCs (cascata leva documentos, bancas, fila e mapeamentos) e os
+    // 6) Agora sim: apagar TCCs (cascata leva documentos, bancas, fila e mapeamentos) e os
     // arquivos locais — é isso que libera espaço no servidor.
     const { apagaveis, preservadas } = await this.classificarContas(tccs, semestre);
     const caminhos = tccs.flatMap((t) => t.documentos.map((d: any) => d.caminho));
@@ -167,7 +184,7 @@ export class EncerramentoService {
       }
     }
 
-    // 6) Contas de aluno/avaliador externo. Recheca vínculo DEPOIS da exclusão dos TCCs:
+    // 7) Contas de aluno/avaliador externo. Recheca vínculo DEPOIS da exclusão dos TCCs:
     // se sobrou qualquer vínculo, a conta é preservada em vez de falhar.
     const contasApagadas: string[] = [];
     const contasPuladas: { nome: string; motivo: string }[] = preservadas.map((c) => ({
@@ -177,6 +194,7 @@ export class EncerramentoService {
     for (const c of apagaveis) {
       const aindaTem =
         (await this.prisma.tcc.count({ where: { alunoId: c.id } })) +
+        (await this.prisma.tcc.count({ where: { coorientadorId: c.id } })) +
         (await this.prisma.membroBanca.count({ where: { avaliadorId: c.id } }));
       if (aindaTem > 0) {
         contasPuladas.push({ nome: c.nomeCompleto, motivo: 'ainda vinculada a TCC ativo' });
@@ -213,10 +231,10 @@ export class EncerramentoService {
     });
     const final = await this.arquivoFinal(tcc.id);
 
-    const arquivado = await this.prisma.tccArquivado.create({
-      data: {
-        tccIdOriginal: tcc.id,
-        semestre: tcc.semestre,
+    // Upsert em tccIdOriginal (chave única): reexecutar o encerramento — depois de uma
+    // interrupção, ou por um segundo coordenador — ATUALIZA o snapshot em vez de duplicar.
+    const dadosArquivo = {
+      semestre: tcc.semestre,
         titulo: tcc.titulo,
         alunoNome: tcc.aluno?.nomeCompleto ?? '(sem aluno)',
         alunoEmail: tcc.aluno?.email ?? '',
@@ -233,10 +251,15 @@ export class EncerramentoService {
         defesaLocal: tcc.defesaLocal ?? null,
         dadosJson: JSON.stringify(dados),
         resumoTexto: resumo,
-        drivePastaId: pasta?.driveId ?? null,
-        driveArquivoFinalId: final?.driveId ?? null,
-        driveArquivoFinalNome: final?.nome ?? null,
-      },
+      drivePastaId: pasta?.driveId ?? null,
+      driveArquivoFinalId: final?.driveId ?? null,
+      driveArquivoFinalNome: final?.nome ?? null,
+    };
+
+    const arquivado = await this.prisma.tccArquivado.upsert({
+      where: { tccIdOriginal: tcc.id },
+      create: { tccIdOriginal: tcc.id, ...dadosArquivo },
+      update: dadosArquivo,
     });
 
     // Participantes preserváveis: orientador, coorientador interno e membros de banca que
@@ -251,25 +274,73 @@ export class EncerramentoService {
         }
       }
     }
+    // Idempotente também aqui: repetir o encerramento não duplica participante.
     for (const [usuarioId, papel] of participantes) {
-      await this.prisma.tccArquivadoParticipante.create({
-        data: { arquivadoId: arquivado.id, usuarioId, papel },
+      await this.prisma.tccArquivadoParticipante.upsert({
+        where: { arquivadoId_usuarioId_papel: { arquivadoId: arquivado.id, usuarioId, papel } },
+        create: { arquivadoId: arquivado.id, usuarioId, papel },
+        update: {},
       });
     }
     return arquivado.id;
   }
 
-  // Documento que fica no Drive: versão final aprovada; sem ela, a última monografia.
-  private async arquivoFinal(tccId: string) {
+  // Documento que DEVE permanecer: versão final APROVADA mais recente; sem ela, o documento
+  // acadêmico mais recente permitido (monografia aprovada/pendente/em análise).
+  // Uma versão REJEITADA ou SUBSTITUIDA nunca pode ser escolhida como arquivo preservado.
+  private async escolherDocumentoFinal(tccId: string) {
     const docs = await this.prisma.documentoTcc.findMany({
-      where: { tccId, tipo: { in: ['VERSAO_FINAL', 'MONOGRAFIA'] } },
+      where: { tccId, tipo: { in: ['VERSAO_FINAL', 'MONOGRAFIA'] }, status: { in: STATUS_PRESERVAVEIS } },
       orderBy: [{ versao: 'desc' }, { criadoEm: 'desc' }],
     });
-    const escolhido = docs.find((d) => d.tipo === 'VERSAO_FINAL') ?? docs.find((d) => d.tipo === 'MONOGRAFIA');
+    const finais = docs.filter((d) => d.tipo === 'VERSAO_FINAL');
+    // Entre as versões finais, prioriza a APROVADA; se não houver, a mais recente válida.
+    const escolhido = finais.find((d) => d.status === 'APROVADO') ?? finais[0] ?? docs.find((d) => d.tipo === 'MONOGRAFIA');
+    return escolhido ?? null;
+  }
+
+  // Mapeamento no Drive do documento escolhido (null se ainda não subiu).
+  private async arquivoFinal(tccId: string) {
+    const escolhido = await this.escolherDocumentoFinal(tccId);
     if (!escolhido) return null;
     return this.prisma.driveArquivo.findUnique({
       where: { tccId_chave: { tccId, chave: `DOC:${escolhido.id}` } },
     });
+  }
+
+  // TRAVA DE BACKUP: para cada TCC, exige documento escolhido + mapeamento no Drive +
+  // confirmação remota de que o arquivo existe e não está na lixeira. Qualquer falha aborta
+  // TODO o encerramento — nada de banco, arquivo local ou conta é apagado.
+  private async exigirBackupComprovado(tccs: any[]): Promise<void> {
+    const token = await this.drive.accessToken();
+    const problemas: string[] = [];
+
+    for (const t of tccs) {
+      const escolhido = await this.escolherDocumentoFinal(t.id);
+      if (!escolhido) {
+        problemas.push(`"${t.titulo}": nenhum documento acadêmico válido (versão final ou monografia) para arquivar`);
+        continue;
+      }
+      const mapeado = await this.prisma.driveArquivo.findUnique({
+        where: { tccId_chave: { tccId: t.id, chave: `DOC:${escolhido.id}` } },
+      });
+      if (!mapeado) {
+        problemas.push(`"${t.titulo}": ${escolhido.tipo} v${escolhido.versao} ainda não foi enviado ao Drive`);
+        continue;
+      }
+      if (!(await arquivoValido(token, mapeado.driveId))) {
+        problemas.push(`"${t.titulo}": o arquivo no Drive não foi encontrado ou está na lixeira`);
+      }
+    }
+
+    if (problemas.length) {
+      throw new BadRequestException({
+        mensagem:
+          `Backup não comprovado em ${problemas.length} TCC(s). NADA foi apagado. Detalhes: ` +
+          problemas.slice(0, 10).join('; ') +
+          (problemas.length > 10 ? ` (e mais ${problemas.length - 10})` : ''),
+      });
+    }
   }
 
   // Remove do Drive os arquivos intermediários, mantendo dados.json, resumo.txt e o final.

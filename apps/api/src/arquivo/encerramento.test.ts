@@ -62,7 +62,10 @@ function prismaFalso(over: Record<string, any> = {}) {
     membroBanca: { count: vi.fn(async () => 0) },
     syncDrive: { count: vi.fn(async () => 0) },
     documentoTcc: {
-      findMany: vi.fn(async () => [{ id: 'd1', tipo: 'VERSAO_FINAL', versao: 1, criadoEm: new Date() }]),
+      // Documento preservável padrão: versão final APROVADA.
+      findMany: vi.fn(async () => [
+        { id: 'd1', tipo: 'VERSAO_FINAL', versao: 1, status: 'APROVADO', criadoEm: new Date() },
+      ]),
     },
     driveArquivo: {
       findUnique: vi.fn(async ({ where }: any) => ({
@@ -79,8 +82,14 @@ function prismaFalso(over: Record<string, any> = {}) {
       ]),
     },
     tccArquivado: {
-      create: vi.fn(async ({ data }: any) => {
-        const a = { id: `a${arquivados.length + 1}`, ...data };
+      // Idempotente por tccIdOriginal (chave única): repetir atualiza, não duplica.
+      upsert: vi.fn(async ({ where, create, update }: any) => {
+        const achado = arquivados.find((a) => a.tccIdOriginal === where.tccIdOriginal);
+        if (achado) {
+          Object.assign(achado, update);
+          return achado;
+        }
+        const a = { id: `a${arquivados.length + 1}`, ...create };
         arquivados.push(a);
         return a;
       }),
@@ -88,9 +97,14 @@ function prismaFalso(over: Record<string, any> = {}) {
       findFirst: vi.fn(async () => arquivados[0] ?? null),
     },
     tccArquivadoParticipante: {
-      create: vi.fn(async ({ data }: any) => {
-        participantes.push(data);
-        return data;
+      upsert: vi.fn(async ({ where, create }: any) => {
+        const chave = where.arquivadoId_usuarioId_papel;
+        const achado = participantes.find(
+          (x) => x.arquivadoId === chave.arquivadoId && x.usuarioId === chave.usuarioId && x.papel === chave.papel,
+        );
+        if (achado) return achado;
+        participantes.push(create);
+        return create;
       }),
     },
     ...over,
@@ -159,7 +173,7 @@ describe('Encerramento completo', () => {
     const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
 
     // Arquivou primeiro
-    expect(p.tccArquivado.create).toHaveBeenCalled();
+    expect(p.tccArquivado.upsert).toHaveBeenCalled();
     expect(r.tccsArquivados).toBe(1);
     // Apagou TCCs
     expect(p.tcc.deleteMany).toHaveBeenCalledWith({ where: { semestre: '2026.2' } });
@@ -206,15 +220,113 @@ describe('Encerramento completo', () => {
     expect(vi.mocked(apagarArquivo).mock.calls[0][1]).toBe('i'); // id da monografia
   });
 
-  it('NÃO poda quando o arquivo final não está confirmado no Drive', async () => {
+  it('ABORTA tudo quando o arquivo final não está confirmado no Drive', async () => {
     const p = prismaFalso();
     const { arquivoValido, apagarArquivo } = await import('../drive/drive-api');
-    vi.mocked(arquivoValido).mockResolvedValueOnce(false);
+    vi.mocked(arquivoValido).mockResolvedValue(false); // o Drive não confirma o arquivo
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    // Nada apagado, nada podado, nada arquivado.
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    expect(p.usuario.delete).not.toHaveBeenCalled();
+    expect(vi.mocked(apagarArquivo)).not.toHaveBeenCalled();
+    expect(p.tccArquivado.upsert).not.toHaveBeenCalled();
+    vi.mocked(arquivoValido).mockResolvedValue(true);
+  });
+
+  it('ABORTA quando o documento escolhido ainda não foi enviado ao Drive', async () => {
+    const p = prismaFalso();
+    p.driveArquivo.findUnique = vi.fn(async ({ where }: any) =>
+      where.tccId_chave.chave.startsWith('DOC:') ? null : { driveId: 'x', chave: where.tccId_chave.chave, nome: 'n' },
+    );
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    expect(p.usuario.delete).not.toHaveBeenCalled();
+  });
+
+  it('ABORTA quando não há documento acadêmico válido para preservar', async () => {
+    const p = prismaFalso();
+    p.documentoTcc.findMany = vi.fn(async () => []); // só havia versões rejeitadas/substituídas
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('nunca escolhe versão REJEITADA: prefere a final aprovada', async () => {
+    const p = prismaFalso();
+    // O service filtra por status preserváveis; a rejeitada nem chega na consulta.
+    p.documentoTcc.findMany = vi.fn(async ({ where }: any) => {
+      const todos = [
+        { id: 'dRejeitada', tipo: 'VERSAO_FINAL', versao: 3, status: 'REJEITADO', criadoEm: new Date() },
+        { id: 'dAprovada', tipo: 'VERSAO_FINAL', versao: 2, status: 'APROVADO', criadoEm: new Date() },
+      ];
+      const permitidos: string[] = where?.status?.in ?? [];
+      return todos.filter((d) => permitidos.includes(d.status));
+    });
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    // O mapeamento buscado é o da APROVADA, nunca o da rejeitada.
+    const chaves = p.driveArquivo.findUnique.mock.calls.map((c: any) => c[0].where.tccId_chave.chave);
+    expect(chaves).toContain('DOC:dAprovada');
+    expect(chaves).not.toContain('DOC:dRejeitada');
+  });
+
+  it('poda o Drive mantendo dados.json, resumo.txt e o arquivo final', async () => {
+    const p = prismaFalso();
+    const { apagarArquivo } = await import('../drive/drive-api');
     const s = new EncerramentoService(p, driveFalso(), syncFalso());
     const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
 
-    expect(r.arquivosPodadosNoDrive).toBe(0);
-    expect(vi.mocked(apagarArquivo)).not.toHaveBeenCalled();
+    expect(r.arquivosPodadosNoDrive).toBe(1); // só a monografia intermediária
+    expect(vi.mocked(apagarArquivo)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(apagarArquivo).mock.calls[0][1]).toBe('i');
+  });
+
+  it('repetir o encerramento não duplica histórico nem participante', async () => {
+    const p = prismaFalso();
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR'); // segunda execução (retomada/2º coordenador)
+
+    expect(p._arquivados).toHaveLength(1);
+    expect(p._participantes).toHaveLength(2); // prof1 + prof2, sem repetição
+  });
+
+  it('coorientador externo entra na análise e é apagado quando só existe neste período', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [
+      baseTcc({
+        coorientadorId: 'ext2',
+        coorientador: { id: 'ext2', nomeCompleto: 'Diego', email: 'diego@x.com', papel: 'AVALIADOR' },
+      }),
+    ]);
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(p._apagados).toContain('ext2');
+    expect(r.contasApagadas).toContain('Diego');
+  });
+
+  it('coorientador externo com vínculo em outro período é PRESERVADO', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [
+      baseTcc({
+        coorientadorId: 'ext2',
+        coorientador: { id: 'ext2', nomeCompleto: 'Diego', email: 'diego@x.com', papel: 'AVALIADOR' },
+      }),
+    ]);
+    // Diego coorienta outro TCC, de outro semestre.
+    p.tcc.count = vi.fn(async ({ where }: any) => (where.coorientadorId === 'ext2' && where.semestre ? 1 : 0));
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(p._apagados).not.toContain('ext2');
+    expect(r.contasPreservadas.some((c: any) => c.nome === 'Diego')).toBe(true);
   });
 
   it('preserva conta com vínculo em outro período e informa o motivo', async () => {
@@ -239,7 +351,7 @@ describe('Prévia de impacto (não muda nada)', () => {
     expect(r.tccs).toBe(1);
     expect(r.contasParaApagar.map((c: any) => c.nome).sort()).toEqual(['Carlos', 'Lucas']);
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
-    expect(p.tccArquivado.create).not.toHaveBeenCalled();
+    expect(p.tccArquivado.upsert).not.toHaveBeenCalled();
     expect(p.usuario.delete).not.toHaveBeenCalled();
   });
 });
