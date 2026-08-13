@@ -12,7 +12,7 @@ function fakePrisma() {
 function criarServico(p: any) {
   const eventos = {} as any;
   const prazos = { prazoBloqueado: vi.fn().mockResolvedValue(false) } as any;
-  return new BancasService(p as any, eventos, prazos);
+  return new BancasService(p as any, eventos, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
 }
 
 // Membro de banca da Fase I, com o documento da banca cujo nome ORIGINAL revelaria o aluno.

@@ -72,11 +72,11 @@ function criarTccsService(p: any) {
 function criarBancasService(p: any) {
   const eventos = { emitirParaCoordenadores: vi.fn(), emitirParaUsuario: vi.fn() };
   const prazos = { exigirEtapaLiberada: vi.fn().mockResolvedValue(undefined), bloqueiosDoTcc: vi.fn().mockResolvedValue({}) };
-  return { servico: new BancasService(p as any, eventos as any, prazos as any), eventos };
+  return { servico: new BancasService(p as any, eventos as any, prazos as any, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any), eventos };
 }
 function criarDefesasService(p: any) {
   const eventos = { emitirParaCoordenadores: vi.fn(), emitirParaUsuario: vi.fn() };
-  return { servico: new DefesasService(p as any, eventos as any), eventos };
+  return { servico: new DefesasService(p as any, eventos as any, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any), eventos };
 }
 
 beforeEach(() => vi.restoreAllMocks());

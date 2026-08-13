@@ -34,15 +34,22 @@ export interface CredenciaisApp {
   redirectUri: string;
 }
 
-// Lê as credenciais do ambiente. NUNCA vêm do banco nem do frontend.
+// Base pública ÚNICA: o mesmo valor vale para o redirect do OAuth e para a volta à tela de
+// Planejamento — senão o Google recusaria o callback ou o usuário cairia em outro host.
+// Precisa ser estável: em produção exige domínio fixo (a URL do Quick Tunnel muda a cada
+// reinício do túnel).
+export function basePublica(): string {
+  return (process.env.DRIVE_REDIRECT_BASE || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+// Lê as credenciais do ambiente. NUNCA vêm do banco nem do frontend. A chave de
+// criptografia entra na conta porque sem ela o refresh token não pode ser guardado.
 export function credenciaisDoAmbiente(): CredenciaisApp | null {
   const clientId = process.env.GOOGLE_CLIENT_ID?.trim();
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET?.trim();
-  if (!clientId || !clientSecret) return null;
-  // A URL pública precisa ser estável: o redirect é conferido pelo Google. Em produção
-  // isso exige domínio fixo (a URL do Quick Tunnel muda a cada reinício).
-  const base = (process.env.DRIVE_REDIRECT_BASE || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-  return { clientId, clientSecret, redirectUri: `${base}/api/drive/callback` };
+  const cripto = process.env.DRIVE_CRYPTO_SEGREDO?.trim();
+  if (!clientId || !clientSecret || !cripto) return null;
+  return { clientId, clientSecret, redirectUri: `${basePublica()}/api/drive/callback` };
 }
 
 export function gerarState(): string {

@@ -57,7 +57,7 @@ beforeAll(async () => {
     prisma = new PrismaWasm({ adapter: new PrismaLibSQL(libsql) });
   }
 
-  defesas = new DefesasService(prisma as any, eventosSpy);
+  defesas = new DefesasService(prisma as any, eventosSpy, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
 });
 
 afterAll(async () => {

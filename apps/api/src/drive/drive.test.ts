@@ -147,14 +147,22 @@ function prismaFalso() {
   const p: any = {
     _fila: fila,
     syncDrive: {
-      findFirst: vi.fn(async ({ where }: any) =>
-        fila.find((i) => i.tccId === where.tccId && i.chave === where.chave && (!where.status || where.status.in.includes(i.status))) ?? null,
-      ),
-      create: vi.fn(async ({ data }: any) => {
-        const item = { id: `f${fila.length + 1}`, status: 'PENDENTE', tentativas: 0, ...data };
+      // Espelha a chave única (tccId, chave): upsert reaproveita a linha existente.
+      upsert: vi.fn(async ({ where, create, update }: any) => {
+        const achado = fila.find(
+          (i) => i.tccId === where.tccId_chave.tccId && i.chave === where.tccId_chave.chave,
+        );
+        if (achado) {
+          Object.assign(achado, update);
+          return achado;
+        }
+        const item = { id: `f${fila.length + 1}`, status: 'PENDENTE', tentativas: 0, ...create };
         fila.push(item);
         return item;
       }),
+      findFirst: vi.fn(async ({ where }: any) =>
+        fila.find((i) => i.tccId === where.tccId && i.chave === where.chave) ?? null,
+      ),
       update: vi.fn(async ({ where, data }: any) => {
         const i = fila.find((x) => x.id === where.id);
         Object.assign(i, data);
@@ -173,6 +181,8 @@ function prismaFalso() {
         return data;
       }),
     },
+    tcc: { findMany: vi.fn(async () => []) },
+    documentoTcc: { findMany: vi.fn(async () => []) },
   };
   return p;
 }
@@ -229,6 +239,55 @@ describe('Fila: nada vai ao Drive antes da aprovação da abertura', () => {
     await sync.enfileirar('t1', 'DADOS', 'DADOS');
     await sync.enfileirar('t1', 'DADOS', 'DADOS');
     expect(p._fila).toHaveLength(1);
+  });
+});
+
+describe('Reconciliação diária (não depende de gancho lembrado)', () => {
+  function prismaReconciliacao(docsMapeados: string[] = []) {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [{ id: 't1' }, { id: 't2' }]);
+    p.documentoTcc.findMany = vi.fn(async () => [{ id: 'mono1' }, { id: 'final1' }]);
+    p.driveArquivo.findUnique = vi.fn(async ({ where }: any) =>
+      docsMapeados.includes(where.tccId_chave.chave) ? { driveId: 'x' } : null,
+    );
+    return p;
+  }
+
+  it('encontra MONOGRAFIA/VERSAO_FINAL sem DriveArquivo e enfileira', async () => {
+    const p = prismaReconciliacao();
+    const sync = new DriveSyncService(p, driveConectado());
+    const r = await sync.reconciliar();
+
+    expect(r.tccs).toBe(2);
+    expect(r.documentos).toBe(4); // 2 documentos x 2 TCCs
+    expect(p._fila.filter((i: any) => i.tipo === 'DOCUMENTO')).toHaveLength(4);
+  });
+
+  it('não reenfileira documento que já tem mapeamento no Drive', async () => {
+    const p = prismaReconciliacao(['DOC:mono1', 'DOC:final1']);
+    const sync = new DriveSyncService(p, driveConectado());
+    const r = await sync.reconciliar();
+
+    expect(r.documentos).toBe(0);
+    expect(p._fila.some((i: any) => i.tipo === 'DOCUMENTO')).toBe(false);
+  });
+
+  it('garante pasta e dados de todo TCC ativo já aprovado', async () => {
+    const p = prismaReconciliacao();
+    const sync = new DriveSyncService(p, driveConectado());
+    await sync.reconciliar();
+
+    const chaves = p._fila.filter((i: any) => i.tccId === 't1').map((i: any) => i.chave);
+    expect(chaves).toEqual(expect.arrayContaining(['PASTA', 'DOC_INICIAL', 'DADOS']));
+    // TCC ainda em INICIALIZACAO não entra: o filtro exclui a fase.
+    expect(p.tcc.findMany.mock.calls[0][0].where.faseAtual).toEqual({ not: 'INICIALIZACAO' });
+    expect(p.tcc.findMany.mock.calls[0][0].where.excluidoEm).toBeNull();
+  });
+
+  it('Drive desconectado: reconciliação não faz nada', async () => {
+    const p = prismaReconciliacao();
+    const sync = new DriveSyncService(p, driveConectado(false));
+    await expect(sync.reconciliar()).resolves.toEqual({ tccs: 0, documentos: 0 });
   });
 });
 

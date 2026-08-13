@@ -5,6 +5,7 @@ import { GuardaPapeis } from '../comum/guarda-papeis';
 import { Papeis } from '../comum/papeis.decorator';
 import { DriveService } from './drive.service';
 import { DriveSyncService } from './drive-sync.service';
+import { basePublica } from './drive-api';
 
 // Integração global com o Google Drive. Tudo é de COORDENADOR, exceto o callback do OAuth,
 // que é aberto por definição (o Google redireciona o NAVEGADOR para cá, sem cookie garantido)
@@ -61,7 +62,8 @@ export class DriveController {
   // nenhum dado sensível trafega aqui.
   @Get('callback')
   async callback(@Query('code') code: string, @Query('state') state: string, @Res() res: Response) {
-    const base = (process.env.APP_URL || 'http://localhost:5173').replace(/\/+$/, '');
+    // MESMA base do redirect do OAuth (DRIVE_REDIRECT_BASE || APP_URL).
+    const base = basePublica();
     try {
       await this.drive.concluirAutorizacao(code ?? '', state ?? '');
       return res.redirect(`${base}/coordenador/planejamento?drive=conectado`);

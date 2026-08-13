@@ -69,7 +69,7 @@ beforeAll(async () => {
   }
   const prazos = new PrazosService(prisma as any);
   tccs = new TccsService(prisma as any, eventosStub, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
-  bancas = new BancasService(prisma as any, eventosStub, prazos);
+  bancas = new BancasService(prisma as any, eventosStub, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
   coordenacao = new CoordenacaoService(prisma as any);
 });
 

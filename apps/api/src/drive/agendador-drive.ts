@@ -47,11 +47,17 @@ export class AgendadorDrive implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  // Rede de segurança: itens em ERRO com backoff longo voltam a ser tentados uma vez por dia.
+  // Rede de segurança diária: reenfileira erros E reconcilia os TCCs ativos. A reconciliação
+  // é o que garante que um gancho esquecido no futuro não deixe TCC sem pasta nem documento
+  // sem subir — ela recalcula o que falta direto do banco.
   private async varreduraDiaria() {
     try {
       const n = await this.sync.reenfileirarErros();
       if (n > 0) this.logger.log(`Varredura diária do Drive: ${n} item(ns) em erro reenfileirado(s).`);
+      const { tccs, documentos } = await this.sync.reconciliar();
+      if (documentos > 0) {
+        this.logger.log(`Reconciliação: ${documentos} documento(s) sem sincronizar em ${tccs} TCC(s) ativo(s).`);
+      }
     } catch (e) {
       this.logger.error('Falha na varredura diária do Drive: ' + (e as Error).message);
     }

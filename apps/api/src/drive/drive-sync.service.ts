@@ -45,20 +45,15 @@ export class DriveSyncService {
 
   // ---------- Enfileiramento (chamado pelo fluxo acadêmico) ----------
 
-  // Não duplica: se já existe item PENDENTE/ERRO para a mesma chave, reaproveita e só
-  // reprograma a próxima tentativa para agora.
+  // Upsert na chave única (tccId, chave): duas ações simultâneas sobre o mesmo alvo
+  // reaproveitam a MESMA linha — nunca criam fila duplicada. Um item já CONCLUIDO volta
+  // para PENDENTE (é o caso de "os dados mudaram de novo").
   async enfileirar(tccId: string, tipo: string, chave: string, documentoId?: string): Promise<void> {
-    const existente = await this.prisma.syncDrive.findFirst({
-      where: { tccId, chave, status: { in: ['PENDENTE', 'ERRO'] } },
+    await this.prisma.syncDrive.upsert({
+      where: { tccId_chave: { tccId, chave } },
+      create: { tccId, tipo, chave, documentoId: documentoId ?? null },
+      update: { tipo, documentoId: documentoId ?? null, status: 'PENDENTE', proximaTentativaEm: new Date(), ultimoErro: null },
     });
-    if (existente) {
-      await this.prisma.syncDrive.update({
-        where: { id: existente.id },
-        data: { status: 'PENDENTE', proximaTentativaEm: new Date() },
-      });
-      return;
-    }
-    await this.prisma.syncDrive.create({ data: { tccId, tipo, chave, documentoId: documentoId ?? null } });
   }
 
   // Chamado DEPOIS que a coordenação aprova a abertura. É o único ponto que cria pasta:
@@ -133,6 +128,40 @@ export class DriveSyncService {
     }
     if (itens.length) await this.drive.registrarSync(falhas ? `${falhas} item(ns) com erro` : undefined);
     return { processados, falhas };
+  }
+
+  // Reconciliação diária dos TCCs ativos já aprovados: não depende de nenhum gancho ter sido
+  // lembrado. Para cada TCC que já passou da aprovação da abertura, garante pasta, reenfileira
+  // dados.json/resumo.txt e procura MONOGRAFIA/VERSAO_FINAL que ainda não têm DriveArquivo.
+  async reconciliar(): Promise<{ tccs: number; documentos: number }> {
+    if (!(await this.drive.conectado())) return { tccs: 0, documentos: 0 };
+
+    // "Aprovado" = saiu da INICIALIZACAO. TCC excluído logicamente fica de fora.
+    const tccs = await this.prisma.tcc.findMany({
+      where: { excluidoEm: null, faseAtual: { not: 'INICIALIZACAO' } },
+      select: { id: true },
+    });
+
+    let documentos = 0;
+    for (const t of tccs) {
+      await this.enfileirar(t.id, 'PASTA', 'PASTA');
+      await this.enfileirar(t.id, 'DOC_INICIAL', 'DOC_INICIAL');
+      await this.enfileirar(t.id, 'DADOS', 'DADOS');
+
+      const docs = await this.prisma.documentoTcc.findMany({
+        where: { tccId: t.id, tipo: { in: TIPOS_VERSIONADOS } },
+        select: { id: true },
+      });
+      for (const d of docs) {
+        const jaMapeado = await this.prisma.driveArquivo.findUnique({
+          where: { tccId_chave: { tccId: t.id, chave: `DOC:${d.id}` } },
+        });
+        if (jaMapeado) continue;
+        await this.enfileirar(t.id, 'DOCUMENTO', `DOC:${d.id}`, d.id);
+        documentos++;
+      }
+    }
+    return { tccs: tccs.length, documentos };
   }
 
   // Traz de volta tudo que está em ERRO (varredura diária e botão "tentar de novo").

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
+import { DriveSyncService } from '../drive/drive-sync.service';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import { type DadosAgendarDefesa } from '@tcc/compartilhado';
 
@@ -20,7 +21,18 @@ export class DefesasService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly eventos: EventosTccService,
+    private readonly driveSync: DriveSyncService,
   ) {}
+
+  // Enfileira a atualização do snapshot no Drive. Nunca lança: agendamento de defesa não
+  // pode falhar por causa do Drive.
+  private async sincronizarDrive(tccId: string) {
+    try {
+      await this.driveSync.aoAlterarTcc(tccId);
+    } catch {
+      /* a reconciliação diária cobre */
+    }
+  }
 
   // ORIENTADOR (do próprio TCC) ou COORDENADOR agenda (ou reagenda) a defesa: data/hora +
   // local + comentário — mesmas validações e mesmos avisos para os dois papéis. Pode marcar
@@ -64,6 +76,7 @@ export class DefesasService {
     });
     await this.notificarDefesaAgendada(tccId, reagendamento);
     const liberadaAgora = await this.liberarDefesaSeVencida(tccId);
+    await this.sincronizarDrive(tccId);
     return { ok: true, liberada: liberadaAgora || !!tcc.defesaLiberadaEm };
   }
 
@@ -84,6 +97,7 @@ export class DefesasService {
     });
     if (r.count !== 1) return false;
     await this.notificarDefesaLiberada(tccId);
+    await this.sincronizarDrive(tccId);
     return true;
   }
 

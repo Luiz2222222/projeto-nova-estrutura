@@ -6,9 +6,10 @@ import { AgendadorDefesas } from './agendador-defesas';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { AutenticacaoModule } from '../autenticacao/autenticacao.module';
 import { PrazosModule } from '../prazos/prazos.module';
+import { DriveModule } from '../drive/drive.module';
 
 @Module({
-  imports: [AutenticacaoModule, PrazosModule], // fornece GuardaJwt + JwtModule + PrazosService
+  imports: [AutenticacaoModule, PrazosModule, DriveModule], // GuardaJwt + JwtModule + PrazosService + fila do Drive
   controllers: [BancasController],
   providers: [BancasService, DefesasService, AgendadorDefesas, GuardaPapeis],
 })

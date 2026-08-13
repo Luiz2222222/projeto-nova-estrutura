@@ -29,6 +29,20 @@ export class TccsService {
     private readonly driveSync: DriveSyncService,
   ) {}
 
+  // Arquivamento no Drive: só ENFILEIRA, e sempre DEPOIS que a operação acadêmica já foi
+  // gravada. Nunca lança — uma falha aqui não pode desfazer nem bloquear a ação do usuário.
+  // A reconciliação diária cobre o que porventura não passar por aqui.
+  private async sincronizarDrive(tccId: string, documento?: { id: string; tipo: string }) {
+    try {
+      if (documento) await this.driveSync.aoEnviarDocumento(tccId, documento.id, documento.tipo);
+      else await this.driveSync.aoAlterarTcc(tccId);
+    } catch (e) {
+      new Logger(TccsService.name).warn(
+        `Falha ao enfileirar sincronização do TCC ${tccId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
   professoresDisponiveis() {
     return this.prisma.usuario.findMany({
       where: { papel: 'PROFESSOR', disponivelParaOrientar: true },
@@ -61,7 +75,7 @@ export class TccsService {
     // aqui dependem de estado que outros papéis mudam em paralelo (um avaliador enviando
     // nota, o orientador aprovando a monografia). Validar fora e gravar depois decidiria com
     // estado velho — ex.: liberar a troca de semestre num TCC que acabou de receber nota.
-    return this.prisma.$transaction(async (tx) => {
+    const editado = await this.prisma.$transaction(async (tx) => {
     const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
     // Assinatura do estado que EMBASA as decisões abaixo. Uma nota nova de avaliador não
     // muda a fase, então `faseAtual` sozinho não protegeria nada: contamos também as
@@ -253,6 +267,8 @@ export class TccsService {
     }
     return tx.tcc.findUnique({ where: { id: tccId } });
     });
+    await this.sincronizarDrive(tccId);
+    return editado;
   }
 
   // ---------- Correção administrativa de FLUXO (coordenador) ----------
@@ -270,7 +286,7 @@ export class TccsService {
     // Leituras, validações e gravação numa transação só: os pré-requisitos dependem de
     // estado que muda em paralelo (nota de avaliador, defesa liberada pelo agendador), e
     // decidir fora da transação usaria um retrato já vencido.
-    return this.prisma.$transaction(async (tx) => {
+    const correcao = await this.prisma.$transaction(async (tx) => {
     const tcc = await buscarTccAtivoOuFalhar(tx, tccId);
     if (fase === tcc.faseAtual) {
       return { aplicado: false, faseAtual: tcc.faseAtual, impactos: ['O TCC já está nesta fase — nada a alterar.'] };
@@ -498,6 +514,9 @@ export class TccsService {
     }
     return { aplicado: true, faseAtual: fase, impactos };
     });
+    // Só sincroniza quando a correção foi REALMENTE aplicada (confirmar=false só simula).
+    if ((correcao as { aplicado?: boolean })?.aplicado) await this.sincronizarDrive(tccId);
+    return correcao;
   }
 
   // Edita metadados de um documento do TCC (não substitui o arquivo). Coordenador.
@@ -514,7 +533,9 @@ export class TccsService {
     if (dados.status !== undefined) data.status = dados.status;
     if (dados.parecer !== undefined) data.parecer = dados.parecer || null;
     if (dados.nomeArquivo !== undefined) data.nomeArquivo = dados.nomeArquivo;
-    return this.prisma.documentoTcc.update({ where: { id: docId }, data });
+    const atualizado = await this.prisma.documentoTcc.update({ where: { id: docId }, data });
+    await this.sincronizarDrive(atualizado.tccId);
+    return atualizado;
   }
 
   private static readonly TIPOS_DOC = ['PLANO_DESENVOLVIMENTO', 'TERMO_ACEITE', 'MONOGRAFIA', 'VERSAO_FINAL', 'AVALIACAO_BANCA'];
@@ -548,9 +569,11 @@ export class TccsService {
     const arq = await this.gravarArquivo(arquivo);
     try {
       const versao = await this.proximaVersao(tccId, tipo);
-      return await this.prisma.documentoTcc.create({
+      const doc = await this.prisma.documentoTcc.create({
         data: { tccId, tipo, status: st, parecer: parecer || null, versao, ...arq },
       });
+      await this.sincronizarDrive(tccId, { id: doc.id, tipo: doc.tipo });
+      return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
       throw e;
@@ -571,7 +594,7 @@ export class TccsService {
     this.validarFormato(antigo.tipo, arquivo); // valida pelo tipo original do documento
     const arq = await this.gravarArquivo(arquivo);
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const novoDoc = await this.prisma.$transaction(async (tx) => {
         await tx.documentoTcc.update({ where: { id: docId }, data: { status: 'SUBSTITUIDA' } });
         const versao = (await tx.documentoTcc.count({ where: { tccId: antigo.tccId, tipo: antigo.tipo } })) + 1;
         const novo = await tx.documentoTcc.create({
@@ -583,6 +606,9 @@ export class TccsService {
         await tx.banca.updateMany({ where: { documentoAvaliacaoId: docId }, data: { documentoAvaliacaoId: novo.id } });
         return novo;
       });
+      // A substituição administrativa gera uma NOVA versão: ela precisa subir ao Drive.
+      await this.sincronizarDrive(novoDoc.tccId, { id: novoDoc.id, tipo: novoDoc.tipo });
+      return novoDoc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
       throw e;
@@ -1070,6 +1096,7 @@ export class TccsService {
       });
       await this.eventos.emitirParaUsuario('orientador_monografia_enviada', tcc.orientadorId, 'Monografia enviada para avaliação', `O aluno enviou/reenviou a monografia do TCC "${tcc.titulo}" para sua avaliação.`, `/professor/orientandos/${tcc.id}#acao`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia enviada', `O aluno enviou/reenviou a monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
+      await this.sincronizarDrive(tccId, { id: doc.id, tipo: doc.tipo });
       return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
@@ -1203,6 +1230,7 @@ export class TccsService {
       await this.eventos.emitirParaUsuario('aluno_monografia_rejeitada', tcc.alunoId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na sua monografia do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Monografia precisa de ajustes', `O orientador pediu ajustes na monografia do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -1263,6 +1291,7 @@ export class TccsService {
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC descontinuado', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi descontinuado — o orientador não confirmou a continuidade.`);
       await this.eventos.emitirParaCoordenadores('coord_continuidade', 'TCC descontinuado', `O TCC "${tcc.titulo}" foi descontinuado — o orientador não confirmou a continuidade.`, `/coordenador/tccs/${tcc.id}`);
     }
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -1296,6 +1325,7 @@ export class TccsService {
       const evento = reenvio ? 'orientador_versao_final_reenviada' : 'orientador_versao_final_enviada';
       await this.eventos.emitirParaUsuario(evento, tcc.orientadorId, 'Versão final enviada', `O aluno ${reenvio ? 'reenviou' : 'enviou'} a versão final do TCC "${tcc.titulo}" para sua validação.`, `/professor/orientandos/${tccId}#acao`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final enviada', `O aluno ${reenvio ? 'reenviou' : 'enviou'} a versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
+      await this.sincronizarDrive(tccId, { id: doc.id, tipo: doc.tipo });
       return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
@@ -1361,6 +1391,7 @@ export class TccsService {
       await this.eventos.emitirParaUsuario('aluno_versao_final_rejeitada', tcc.alunoId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}".${parecer ? ' Devolutiva: ' + parecer : ''}`);
       await this.eventos.emitirParaUsuario('coorientador_documentos', tcc.coorientadorId, 'Versão final precisa de ajustes', `O orientador pediu ajustes na versão final do TCC "${tcc.titulo}" (no qual você é coorientador).`);
     }
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -1381,12 +1412,14 @@ export class TccsService {
     const arq = await this.gravarArquivo(arquivo);
     try {
       // Transação: teto de documentos + criação atômicos (sem corrida entre uploads paralelos).
-      return await this.prisma.$transaction(async (tx) => {
+      const doc = await this.prisma.$transaction(async (tx) => {
         await this.exigirEspacoParaDocumento(tx, tccId);
         return tx.documentoTcc.create({
           data: { tccId, tipo, status: 'PENDENTE', ...arq },
         });
       });
+      await this.sincronizarDrive(tccId, { id: doc.id, tipo: doc.tipo });
+      return doc;
     } catch (e) {
       await fs.rm(join(process.cwd(), arq.caminho), { force: true }).catch(() => {});
       throw e;

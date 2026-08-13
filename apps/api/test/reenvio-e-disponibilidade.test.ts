@@ -56,7 +56,7 @@ beforeAll(async () => {
     prisma = new PrismaWasm({ adapter: new PrismaLibSQL(libsql) });
   }
   const prazos = new PrazosService(prisma as any);
-  bancas = new BancasService(prisma as any, eventosSpy, prazos);
+  bancas = new BancasService(prisma as any, eventosSpy, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
   tccs = new TccsService(prisma as any, eventosSpy, prazos);
 });
 

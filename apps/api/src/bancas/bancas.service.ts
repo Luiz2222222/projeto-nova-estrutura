@@ -1,10 +1,11 @@
-import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { extname, join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
+import { DriveSyncService } from '../drive/drive-sync.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc } from '../comum/sanitizar-notas';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
@@ -32,7 +33,20 @@ export class BancasService {
     private readonly prisma: PrismaService,
     private readonly eventos: EventosTccService,
     private readonly prazos: PrazosService,
+    private readonly driveSync: DriveSyncService,
   ) {}
+
+  // Enfileira a atualização do snapshot no Drive DEPOIS que a operação já foi gravada.
+  // Nunca lança: o Drive não pode desfazer nem bloquear banca/avaliação.
+  private async sincronizarDrive(tccId: string) {
+    try {
+      await this.driveSync.aoAlterarTcc(tccId);
+    } catch (e) {
+      new Logger(BancasService.name).warn(
+        `Falha ao enfileirar sincronização do TCC ${tccId}: ${(e as Error).message}`,
+      );
+    }
+  }
 
   // Candidatos a avaliador (professores e avaliadores externos), exceto o aluno e o orientador.
   async candidatos(tccId: string) {
@@ -137,6 +151,7 @@ export class BancasService {
       await this.eventos.emitirParaUsuario('avaliador_adicionado_fase1', m.avaliadorId, 'Você foi adicionado a uma banca (Fase I)', `Você foi adicionado à banca da Fase I do TCC "${tcc.titulo}".`, `${base}/${m.id}`);
       await this.eventos.emitirParaUsuario('avaliador_fase1_liberada', m.avaliadorId, 'Avaliação da Fase I liberada', `A avaliação da Fase I do TCC "${tcc.titulo}" está liberada — você já pode avaliar.`, `${base}/${m.id}`);
     }
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -356,6 +371,8 @@ export class BancasService {
     }
     // Devolve o status REAL salvo: ENVIADO (finalizar), AJUSTE_SOLICITADO (rascunho durante
     // ajuste) ou PENDENTE (rascunho normal).
+    // Só sincroniza quando a avaliação foi ENVIADA: rascunho é privado do avaliador.
+    if (res.statusSalvo === 'ENVIADO') await this.sincronizarDrive(res.tccId);
     return { ok: true, status: res.statusSalvo };
   }
 
@@ -775,6 +792,7 @@ export class BancasService {
       return fase;
     });
     await this.notificarAnaliseIniciada(tccId, fase);
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -970,6 +988,7 @@ export class BancasService {
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Resultado da Fase II', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi reprovado na Fase II.`);
     }
     await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
+    await this.sincronizarDrive(tccId);
     return { ok: true, fase: r.fase, nf2: r.nf2, nf: r.nf, aprovado: r.aprovado };
   }
 }
