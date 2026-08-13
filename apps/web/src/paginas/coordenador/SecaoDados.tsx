@@ -1,62 +1,31 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPost, type ErroApi } from '../../api';
-import { Modal } from '../../componentes/Modal';
+import { apiGet } from '../../api';
 import { ModalBaixarDados } from '../../componentes/ModalBaixarDados';
 
-// Seção do Planejamento: exportar backup dos dados e resetar o período (ação destrutiva).
+// Seção do Planejamento: backup dos dados do período.
+//
+// O antigo "Resetar período" foi REMOVIDO daqui: ele apagava os TCCs sem exigir arquivamento
+// no Drive, o que era um caminho destrutivo paralelo. O único fluxo de encerramento agora é
+// "Encerrar e arquivar período", na seção do Google Drive (com prévia de impacto, senha e
+// confirmação ENCERRAR).
 export function SecaoDados() {
-  const [modalReset, setModalReset] = useState(false);
   const [modalBaixar, setModalBaixar] = useState(false);
-  const [confirmacao, setConfirmacao] = useState('');
-  const [senha, setSenha] = useState('');
-  const [erro, setErro] = useState('');
-  const [resetando, setResetando] = useState(false);
   // Período ativo (manual) — usado no nome do arquivo de backup.
   const [periodo, setPeriodo] = useState('');
   useEffect(() => {
     apiGet('/semestre-ativo').then((r: any) => setPeriodo(r?.semestre ?? '')).catch(() => {});
   }, []);
 
-  function abrir() {
-    setConfirmacao('');
-    setSenha('');
-    setErro('');
-    setModalReset(true);
-  }
-
-  async function resetar() {
-    setErro('');
-    setResetando(true);
-    try {
-      const r: any = await apiPost('/resetar', { senha, confirmacao });
-      // Baixa o backup retornado antes de recarregar.
-      const blob = new Blob([JSON.stringify(r.backup, null, 2)], { type: 'application/json' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `backup_tcc_${r.backup?.semestre ?? 'periodo'}.json`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
-      window.alert(`Período resetado. ${r.apagados} TCC(s) apagado(s). Backup baixado.`);
-      window.location.reload();
-    } catch (e) {
-      setErro((e as ErroApi).mensagem || 'Não foi possível resetar o período.');
-    } finally {
-      setResetando(false);
-    }
-  }
-
   return (
     <section className="cartao-secao bloco">
       <h2>Dados do período</h2>
       <p className="legenda" style={{ marginBottom: 18 }}>
-        Baixe um backup completo dos TCCs ou reinicie o período. O reset apaga os TCCs do período ativo{periodo ? ` (${periodo})` : ''}, definido no Planejamento.
+        Baixe um backup completo dos TCCs do período ativo{periodo ? ` (${periodo})` : ''}. Para encerrar o
+        período, use “Encerrar e arquivar período” na seção do Google Drive — ela arquiva tudo antes de
+        apagar qualquer coisa.
       </p>
       <div className="acoes" style={{ justifyContent: 'flex-start' }}>
         <button className="botao botao-secundario" onClick={() => setModalBaixar(true)}>Baixar dados</button>
-        <button className="botao botao-perigo" onClick={abrir}>Resetar período</button>
       </div>
 
       {modalBaixar && (
@@ -66,30 +35,6 @@ export function SecaoDados() {
           nomeArquivo={`TCCs_${periodo || 'periodo'}.zip`}
           aoFechar={() => setModalBaixar(false)}
         />
-      )}
-
-      {modalReset && (
-        <Modal
-          titulo="Resetar período"
-          subtitulo={`Esta ação apaga todos os TCCs do período ativo${periodo ? ` (${periodo})` : ''} e seus arquivos. Não pode ser desfeita — um backup será baixado antes.`}
-          aoFechar={() => !resetando && setModalReset(false)}
-        >
-          {erro && <div className="erro-geral">{erro}</div>}
-          <label className="campo">
-            <span>Digite APAGAR para confirmar</span>
-            <input value={confirmacao} onChange={(e) => setConfirmacao(e.target.value)} placeholder="APAGAR" />
-          </label>
-          <label className="campo">
-            <span>Sua senha</span>
-            <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Senha do coordenador" />
-          </label>
-          <div className="acoes">
-            <button className="botao botao-secundario" disabled={resetando} onClick={() => setModalReset(false)}>Cancelar</button>
-            <button className="botao botao-perigo" disabled={resetando || confirmacao !== 'APAGAR' || !senha} onClick={resetar}>
-              {resetando ? 'Resetando…' : 'Resetar período'}
-            </button>
-          </div>
-        </Modal>
       )}
     </section>
   );
