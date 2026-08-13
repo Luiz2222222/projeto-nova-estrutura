@@ -5,9 +5,11 @@ import { HistoricoTccsService } from './historico-tccs.service';
 import { GuardaPapeis } from '../comum/guarda-papeis';
 import { AutenticacaoModule } from '../autenticacao/autenticacao.module';
 import { PrazosModule } from '../prazos/prazos.module';
+import { DriveModule } from '../drive/drive.module';
 
 @Module({
-  imports: [AutenticacaoModule, PrazosModule], // fornece GuardaJwt + JwtModule + PrazosService
+  // DriveModule entra só para ENFILEIRAR o arquivamento; nenhuma rota espera o Drive.
+  imports: [AutenticacaoModule, PrazosModule, DriveModule],
   controllers: [TccsController],
   providers: [TccsService, HistoricoTccsService, GuardaPapeis],
 })

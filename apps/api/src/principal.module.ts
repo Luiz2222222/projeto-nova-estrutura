@@ -9,6 +9,7 @@ import { TccsModule } from './tccs/tccs.module';
 import { CoordenacaoModule } from './coordenacao/coordenacao.module';
 import { BancasModule } from './bancas/bancas.module';
 import { PrazosModule } from './prazos/prazos.module';
+import { DriveModule } from './drive/drive.module';
 import { SaudeController } from './saude/saude.controller';
 
 @Module({
@@ -23,6 +24,7 @@ import { SaudeController } from './saude/saude.controller';
     CoordenacaoModule,
     BancasModule,
     PrazosModule,
+    DriveModule,
   ],
   controllers: [SaudeController],
 })

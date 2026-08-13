@@ -11,6 +11,7 @@ import { extname, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 import { PrazosService } from '../prazos/prazos.service';
+import { DriveSyncService } from '../drive/drive-sync.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho, FASES_NOTAS_LIBERADAS } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo, FORMATO_SEMESTRE } from '../comum/semestre';
@@ -25,6 +26,7 @@ export class TccsService {
     private readonly prisma: PrismaService,
     private readonly eventos: EventosTccService,
     private readonly prazos: PrazosService,
+    private readonly driveSync: DriveSyncService,
   ) {}
 
   professoresDisponiveis() {
@@ -893,6 +895,19 @@ export class TccsService {
         data: { status: 'APROVADO', parecer: null },
       });
     });
+    // Arquivamento no Drive: a pasta só nasce AQUI, depois da aprovação da abertura —
+    // solicitação pendente ou recusada nunca cria pasta nem sobe arquivo. Só enfileira
+    // (fora da transação, e sem esperar o Drive): se o Drive estiver fora, o fluxo
+    // acadêmico segue normalmente e o worker tenta depois.
+    // try/catch (e não .catch) para blindar também contra erro SÍNCRONO: nada aqui pode
+    // derrubar a aprovação, que já está commitada.
+    try {
+      await this.driveSync.aoAprovarAbertura(tccId);
+    } catch (e) {
+      new Logger(TccsService.name).warn(
+        `Não foi possível enfileirar o arquivamento do TCC ${tccId}: ${(e as Error).message}`,
+      );
+    }
     await this.eventos.emitirParaUsuario('aluno_solicitacao_aprovada', tcc.alunoId, 'Solicitação de TCC aprovada', `Sua solicitação do TCC "${tcc.titulo}" foi aprovada. O TCC entrou na fase de desenvolvimento.`);
     await this.eventos.emitirParaUsuario('orientador_definido', tcc.orientadorId, 'Você é orientador de um novo TCC', `Você foi confirmado como orientador do TCC "${tcc.titulo}".`);
     await this.eventos.emitirParaUsuario('orientador_confirmar_continuidade', tcc.orientadorId, 'Confirmar continuidade do TCC', `Quando puder, confirme a continuidade do TCC "${tcc.titulo}" na sua área de orientandos.`, `/professor/orientandos/${tcc.id}#acao`);

@@ -34,10 +34,15 @@ function fakePrisma() {
   return p;
 }
 
+// O arquivamento no Drive só ENFILEIRA; nestes testes ele é um dublê inerte.
+function driveSyncFalso() {
+  return { aoAprovarAbertura: vi.fn(), aoEnviarDocumento: vi.fn(), aoAlterarTcc: vi.fn() };
+}
+
 function criarServico(p: any) {
   const eventos = { emitirParaCoordenadores: vi.fn(), emitirParaUsuario: vi.fn() };
   const prazos = { exigirEtapaLiberada: vi.fn().mockResolvedValue(undefined) };
-  const servico = new TccsService(p as any, eventos as any, prazos as any);
+  const servico = new TccsService(p as any, eventos as any, prazos as any, driveSyncFalso() as any);
   return { servico, eventos, prazos };
 }
 
