@@ -22,6 +22,15 @@ export class HistoricoArquivadoService {
     throw new ForbiddenException({ mensagem: 'Você não tem permissão para ver o histórico arquivado.' });
   }
 
+  // Snapshot corrompido não pode derrubar a tela: devolve null e o resto do registro segue.
+  private lerDados(json: string): unknown {
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
+
   async listar(usuarioId: string, papel: string) {
     const itens = await this.prisma.tccArquivado.findMany({
       where: this.filtroPorPapel(usuarioId, papel),
@@ -49,13 +58,8 @@ export class HistoricoArquivadoService {
     });
     if (!item) throw new NotFoundException({ mensagem: 'Registro arquivado não encontrado.' });
     // dadosJson volta já desserializado; o snapshot nunca guarda credencial.
-    let dados: unknown = null;
-    try {
-      dados = JSON.parse(item.dadosJson);
-    } catch {
-      dados = null;
-    }
-    const { dadosJson, ...resto } = item;
+    const dados = this.lerDados(item.dadosJson);
+    const { dadosJson: _cru, ...resto } = item;
     return { ...resto, dados };
   }
 

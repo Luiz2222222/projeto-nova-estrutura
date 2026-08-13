@@ -31,6 +31,7 @@ const AvisosCoordenador = lazy(() => import('./paginas/coordenador/AvisosCoorden
 const Relatorios = lazy(() => import('./paginas/coordenador/Relatorios').then((m) => ({ default: m.Relatorios })));
 const Usuarios = lazy(() => import('./paginas/coordenador/Usuarios').then((m) => ({ default: m.Usuarios })));
 const ListaDoPeriodo = lazy(() => import('./paginas/coordenador/ListaDoPeriodo').then((m) => ({ default: m.ListaDoPeriodo })));
+const HistoricoArquivado = lazy(() => import('./paginas/HistoricoArquivado').then((m) => ({ default: m.HistoricoArquivado })));
 const DashboardProfessor = lazy(() => import('./paginas/professor/DashboardProfessor').then((m) => ({ default: m.DashboardProfessor })));
 const MeusOrientandos = lazy(() => import('./paginas/professor/MeusOrientandos').then((m) => ({ default: m.MeusOrientandos })));
 const DetalheOrientando = lazy(() => import('./paginas/professor/DetalheOrientando').then((m) => ({ default: m.DetalheOrientando })));
@@ -86,6 +87,12 @@ export function App() {
               <Route path="/aluno/informacoes" element={<Informacoes />} />
               <Route path="/aluno/avisos" element={<MuralAvisos />} />
               <Route path="/aluno/abrir" element={<AbrirTcc />} />
+            </Route>
+
+            {/* Períodos encerrados: coordenador vê tudo, professor vê onde participou. Rota
+                própria — os TCCs ativos correspondentes já não existem mais. */}
+            <Route element={<ExigePapel papeis={['COORDENADOR', 'PROFESSOR']} />}>
+              <Route path="/historico-arquivado" element={<HistoricoArquivado />} />
             </Route>
 
             {/* Rotas do coordenador (estrutura espelha o projeto original) */}
