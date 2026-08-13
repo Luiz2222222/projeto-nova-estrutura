@@ -504,6 +504,9 @@ model SyncDrive {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  // Uma linha por alvo: o enfileiramento é upsert, então duas ações simultâneas sobre o
+  // mesmo TCC/chave reaproveitam o item em vez de criar fila duplicada.
+  @@unique([tccId, chave])
   @@index([status, proximaTentativaEm])
   @@map("sync_drive")
 }
@@ -531,8 +534,10 @@ model DriveArquivo {
 // qualquer coisa. Não tem FK para o TCC nem para aluno/avaliador — os dados dessas pessoas
 // ficam em texto e no snapshot, para que o histórico sobreviva à exclusão das contas.
 model TccArquivado {
-  id            String @id @default(cuid())
-  tccIdOriginal String // referência textual (o TCC original é apagado)
+  id String @id @default(cuid())
+  // Referência textual (o TCC original é apagado). ÚNICA: se dois coordenadores encerrarem
+  // o mesmo período ao mesmo tempo, o segundo esbarra aqui em vez de duplicar o histórico.
+  tccIdOriginal String @unique
 
   semestre String
   titulo   String
