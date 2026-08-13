@@ -10,6 +10,7 @@ import { CoordenacaoModule } from './coordenacao/coordenacao.module';
 import { BancasModule } from './bancas/bancas.module';
 import { PrazosModule } from './prazos/prazos.module';
 import { DriveModule } from './drive/drive.module';
+import { ArquivoModule } from './arquivo/arquivo.module';
 import { SaudeController } from './saude/saude.controller';
 
 @Module({
@@ -25,6 +26,7 @@ import { SaudeController } from './saude/saude.controller';
     BancasModule,
     PrazosModule,
     DriveModule,
+    ArquivoModule,
   ],
   controllers: [SaudeController],
 })
