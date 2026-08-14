@@ -13,36 +13,22 @@ interface StatusDrive {
   comErro: number;
 }
 
-interface Previa {
-  semestre: string;
-  conectadoAoDrive: boolean;
-  tccs: number;
-  pendenciasSincronizacao: number;
-  podeEncerrar: boolean;
-  contasParaApagar: { nome: string; email: string; papel: string }[];
-  contasPreservadas: { nome: string; papel: string; motivo: string }[];
-}
-
 const quando = (v: string | null) => {
   if (!v) return 'nunca';
   const d = new Date(v);
   return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
 };
 
-// Arquivamento no Google Drive + encerramento de período. Configuração GLOBAL: todos os
-// coordenadores veem a mesma conta conectada.
+// Integração com o Google Drive: situação, conta autorizada, pasta raiz e sincronização.
+// Configuração GLOBAL — todos os coordenadores veem a mesma conta conectada.
+//
+// O encerramento de período NÃO mora aqui: ele vive no card "Dados do período", para não
+// existirem dois caminhos para uma ação destrutiva.
 export function SecaoDrive() {
   const [status, setStatus] = useState<StatusDrive | null>(null);
   const [erro, setErro] = useState('');
   const [msg, setMsg] = useState('');
   const [ocupado, setOcupado] = useState(false);
-
-  const [previa, setPrevia] = useState<Previa | null>(null);
-  const [mostrarEncerrar, setMostrarEncerrar] = useState(false);
-  const [senha, setSenha] = useState('');
-  const [confirmacao, setConfirmacao] = useState('');
-  const [encerrando, setEncerrando] = useState(false);
-  const [relatorio, setRelatorio] = useState<any | null>(null);
 
   const carregar = useCallback(() => {
     apiGet<StatusDrive>('/drive/status').then(setStatus).catch(() => setStatus(null));
@@ -83,34 +69,6 @@ export function SecaoDrive() {
     }
   }
 
-  async function abrirEncerramento() {
-    setErro('');
-    setRelatorio(null);
-    try {
-      setPrevia(await apiGet<Previa>('/periodo/encerrar/previa'));
-      setMostrarEncerrar(true);
-    } catch (e) {
-      setErro(mensagemErro(e, 'Não foi possível calcular o impacto do encerramento.'));
-    }
-  }
-
-  async function encerrar() {
-    setErro('');
-    setEncerrando(true);
-    try {
-      const r = await apiPost('/periodo/encerrar', { senha, confirmacao });
-      setRelatorio(r);
-      setMostrarEncerrar(false);
-      setSenha('');
-      setConfirmacao('');
-      carregar();
-    } catch (e) {
-      setErro(mensagemErro(e, 'Não foi possível encerrar o período.'));
-    } finally {
-      setEncerrando(false);
-    }
-  }
-
   return (
     <section className="cartao-secao bloco">
       <h2>Arquivamento no Google Drive</h2>
@@ -129,12 +87,10 @@ export function SecaoDrive() {
       {!status ? (
         <p className="nota-vazio">Carregando…</p>
       ) : !status.configurado ? (
-        // Integração indisponível NÃO esconde o encerramento: ele é garantido pelo arquivo
-        // local e precisa funcionar sem Drive nenhum.
         <div className="alerta-aviso bloco">
           <strong>Integração não configurada no servidor.</strong> Defina <code>GOOGLE_CLIENT_ID</code>,{' '}
           <code>GOOGLE_CLIENT_SECRET</code> e <code>DRIVE_CRYPTO_SEGREDO</code> no <code>.env</code> da API. O
-          encerramento de período abaixo continua funcionando: ele arquiva tudo na própria VPS.
+          encerramento de período, em “Dados do período”, não depende do Drive: ele arquiva tudo na própria VPS.
         </div>
       ) : (
         <>
@@ -181,106 +137,6 @@ export function SecaoDrive() {
         </>
       )}
 
-      {/* Encerramento SEMPRE visível: não depende de o Drive estar configurado nem conectado. */}
-      {status && (
-        <>
-          <div className="config-grupo" style={{ marginTop: 18 }}>
-            <h3>Encerrar e arquivar período</h3>
-            <p className="legenda" style={{ marginBottom: 8 }}>
-              Arquiva os TCCs do período no arquivo permanente da VPS (dados, notas, pareceres e documentos)
-              e no histórico do sistema. Só depois de a cópia ser validada é que os TCCs saem do fluxo ativo
-              e as contas de alunos e avaliadores externos são apagadas. Professores e coordenadores nunca
-              são apagados.
-            </p>
-
-            {relatorio && (
-              <div className="alerta-aviso bloco">
-                <strong>Período {relatorio.semestre} arquivado localmente.</strong> {relatorio.tccsArquivados} TCC(s)
-                guardado(s) no arquivo permanente da VPS (dados e documentos), {relatorio.tccsApagados} removido(s) do
-                fluxo ativo, {relatorio.arquivosLocaisRemovidos} arquivo(s) de trabalho liberado(s),{' '}
-                {relatorio.contasApagadas.length} conta(s) apagada(s).
-                <div style={{ marginTop: 6 }}>
-                  {relatorio.driveConectado
-                    ? `No Google Drive foi atualizado apenas o resumo de dados (dados.json e resumo.txt) de ${relatorio.snapshotEnviadoAoDrive} TCC(s) — os documentos lá dependem do que já havia sido sincronizado antes. A cópia completa é a da VPS.`
-                    : 'Sem cópia no Google Drive (a integração não estava conectada). O arquivo permanente da VPS está completo e é a fonte do Histórico.'}
-                </div>
-                {relatorio.contasPreservadas?.length > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    Preservadas: {relatorio.contasPreservadas.map((c: any) => `${c.nome} (${c.motivo})`).join('; ')}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {!mostrarEncerrar ? (
-              <button className="botao-secundario" onClick={abrirEncerramento}>
-                Ver impacto do encerramento
-              </button>
-            ) : (
-              previa && (
-                <>
-                  <div className="alerta-aviso bloco">
-                    <strong>Período {previa.semestre}:</strong> {previa.tccs} TCC(s).
-                    <div>Contas que serão apagadas: {previa.contasParaApagar.length}</div>
-                    <div>Contas preservadas: {previa.contasPreservadas.length}</div>
-                    <div style={{ marginTop: 6 }}>
-                      Os dados e documentos vão para o arquivo permanente da VPS antes de qualquer exclusão. Se a cópia
-                      não puder ser validada, nada é apagado.
-                    </div>
-                    {!previa.conectadoAoDrive && (
-                      <div style={{ marginTop: 6 }}>
-                        Google Drive não conectado: o período será arquivado <strong>somente</strong> na VPS. Isso não
-                        impede o encerramento — mas depois dele não há como enviar estes TCCs ao Drive.
-                      </div>
-                    )}
-                    {previa.conectadoAoDrive && previa.pendenciasSincronizacao > 0 && (
-                      <div style={{ marginTop: 6 }}>
-                        {previa.pendenciasSincronizacao} item(ns) ainda sincronizando com o Drive — a cópia adicional
-                        pode ficar incompleta.
-                      </div>
-                    )}
-                    {!previa.podeEncerrar && (
-                      <div style={{ marginTop: 6 }}>
-                        <strong>Não há TCC neste período para encerrar.</strong>
-                      </div>
-                    )}
-                  </div>
-
-                  {previa.contasParaApagar.length > 0 && (
-                    <p className="legenda">
-                      Serão apagadas: {previa.contasParaApagar.map((c) => `${c.nome} (${c.papel})`).join(', ')}
-                    </p>
-                  )}
-
-                  <div className="grade-2">
-                    <label className="campo">
-                      <span>Sua senha</span>
-                      <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Confirme sua senha" />
-                    </label>
-                    <label className="campo">
-                      <span>Digite ENCERRAR para confirmar</span>
-                      <input value={confirmacao} onChange={(e) => setConfirmacao(e.target.value)} placeholder="ENCERRAR" />
-                    </label>
-                  </div>
-
-                  <div className="acoes" style={{ justifyContent: 'flex-start', gap: 8 }}>
-                    <button
-                      className="botao-perigo"
-                      disabled={encerrando || !previa.podeEncerrar || confirmacao !== 'ENCERRAR' || !senha}
-                      onClick={encerrar}
-                    >
-                      {encerrando ? 'Encerrando…' : 'Encerrar e arquivar período'}
-                    </button>
-                    <button className="botao-secundario" disabled={encerrando} onClick={() => setMostrarEncerrar(false)}>
-                      Cancelar
-                    </button>
-                  </div>
-                </>
-              )
-            )}
-          </div>
-        </>
-      )}
     </section>
   );
 }

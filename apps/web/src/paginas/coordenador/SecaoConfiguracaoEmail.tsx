@@ -75,6 +75,9 @@ export function SecaoConfiguracaoEmail() {
     setCfg(c);
     setUsuario(c.smtpUsuario ?? '');
     setSenha('');
+    // Volta o olho para "oculto": depois de salvar, o campo está vazio de novo e não pode
+    // parecer que há algo revelado ali.
+    setMostrarSenha(false);
   }
 
   useEffect(() => {
@@ -181,12 +184,30 @@ export function SecaoConfiguracaoEmail() {
                     value={senha}
                     onChange={(e) => setSenha(e.target.value)}
                     placeholder={cfg.temSenha ? 'Digite uma nova senha para substituir' : 'Senha de app do Google'}
+                    // Sem autopreenchimento: senão o navegador reenche o campo depois de
+                    // salvar e ele volta a PARECER preenchido.
+                    autoComplete="new-password"
+                    name="senha-de-app-tcc"
                   />
-                  {/* O olho só existe para o que ACABOU de ser digitado. Antes ele aparecia
-                      sempre e, com o campo vazio, dava a impressão de revelar a senha salva. */}
-                  {senha.length > 0 && (
-                    <button type="button" className="campo-acao" onClick={() => setMostrarSenha((v) => !v)} title={mostrarSenha ? 'Ocultar' : 'Mostrar'} aria-label={mostrarSenha ? 'Ocultar senha digitada' : 'Mostrar senha digitada'}>
-                      {mostrarSenha ? icoOlhoFechado : icoOlho}
+                  {/* ÚNICA entrada para ver a senha. Com algo digitado, é um mostrar/ocultar
+                      local do que está no campo. Com o campo vazio e senha já salva, abre o
+                      modal seguro (senha do coordenador + confirmação) — nunca preenche o
+                      formulário com a senha salva. */}
+                  {(senha.length > 0 || cfg.temSenha) && (
+                    <button
+                      type="button"
+                      className="campo-acao"
+                      onClick={() => (senha.length > 0 ? setMostrarSenha((v) => !v) : abrirRevelacao())}
+                      title={senha.length > 0 ? (mostrarSenha ? 'Ocultar' : 'Mostrar') : 'Mostrar senha de app salva'}
+                      aria-label={
+                        senha.length > 0
+                          ? mostrarSenha
+                            ? 'Ocultar senha digitada'
+                            : 'Mostrar senha digitada'
+                          : 'Mostrar senha de app salva'
+                      }
+                    >
+                      {senha.length > 0 && mostrarSenha ? icoOlhoFechado : icoOlho}
                     </button>
                   )}
                 </span>
@@ -195,11 +216,6 @@ export function SecaoConfiguracaoEmail() {
                     ? 'Senha de app configurada. Digite uma nova senha para substituir; deixe em branco para manter a atual.'
                     : 'Use uma senha de app do Google, nunca a senha normal da conta.'}
                 </small>
-                {cfg.temSenha && (
-                  <button type="button" className="botao-secundario" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={abrirRevelacao}>
-                    Mostrar senha de app
-                  </button>
-                )}
               </label>
             </div>
             <div className="acoes" style={{ justifyContent: 'flex-start' }}>

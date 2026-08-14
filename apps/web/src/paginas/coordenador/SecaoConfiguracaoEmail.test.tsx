@@ -97,27 +97,48 @@ describe('Envio ao backend', () => {
 });
 
 describe('Revelar a senha de app (reautenticada)', () => {
-  it('com senha salva, oferece o botão e some com o olho enganoso', async () => {
+  // Uma entrada só: o olho do campo. Nada de botão textual duplicado embaixo.
+  it('não existe botão textual "Mostrar senha de app" (só o olho)', async () => {
     await montar();
-    expect(screen.getByRole('button', { name: 'Mostrar senha de app' })).toBeInTheDocument();
-    // Sem nada digitado, não existe olho no campo (ele não revelaria a senha salva).
-    expect(screen.queryByRole('button', { name: /Mostrar senha digitada/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Mostrar senha de app' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mostrar senha de app salva' })).toBeInTheDocument();
   });
 
-  it('o olho local só aparece depois de digitar algo', async () => {
+  it('com o campo vazio, o olho abre o modal seguro em vez de revelar direto', async () => {
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
+
+    expect(await screen.findByLabelText('Sua senha')).toBeInTheDocument();
+    // O formulário principal continua vazio: a senha salva nunca é preenchida ali.
+    expect(campoSenha()).toHaveValue('');
+  });
+
+  it('digitando, o MESMO olho vira mostrar/ocultar local', async () => {
     await montar();
     fireEvent.change(campoSenha(), { target: { value: 'nova' } });
-    expect(screen.getByRole('button', { name: /Mostrar senha digitada/i })).toBeInTheDocument();
+
+    const olho = screen.getByRole('button', { name: 'Mostrar senha digitada' });
+    fireEvent.click(olho);
+    expect(campoSenha()).toHaveAttribute('type', 'text'); // mostrou o que foi digitado
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar senha digitada' }));
+    expect(campoSenha()).toHaveAttribute('type', 'password');
+    // E não abriu modal nenhum.
+    expect(screen.queryByLabelText('Sua senha')).not.toBeInTheDocument();
   });
 
-  it('sem senha salva, não oferece revelar', async () => {
+  it('sem senha salva e campo vazio, não há olho nenhum', async () => {
     await montar({ ...config, temSenha: false });
-    expect(screen.queryByRole('button', { name: 'Mostrar senha de app' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Mostrar senha/i })).not.toBeInTheDocument();
+  });
+
+  it('o campo de senha bloqueia autopreenchimento do navegador', async () => {
+    await montar();
+    expect(campoSenha()).toHaveAttribute('autocomplete', 'new-password');
   });
 
   it('o modal exige senha do coordenador E confirmação antes de revelar', async () => {
     await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
 
     const revelar = await screen.findByRole('button', { name: 'Mostrar senha' });
     expect(revelar).toBeDisabled();
@@ -132,7 +153,7 @@ describe('Revelar a senha de app (reautenticada)', () => {
   it('revela pela rota protegida e limpa tudo ao fechar', async () => {
     apiPost.mockResolvedValue({ senha: 'senha-ficticia-de-teste' });
     await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
     fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
@@ -151,7 +172,7 @@ describe('Revelar a senha de app (reautenticada)', () => {
   it('senha do coordenador errada mostra o erro e não revela', async () => {
     apiPost.mockRejectedValue({ status: 400, mensagem: 'Senha incorreta.' });
     await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
     fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'errada' } });
     fireEvent.click(screen.getByRole('checkbox'));
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
