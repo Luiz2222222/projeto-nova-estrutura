@@ -26,6 +26,10 @@ function escaparHtml(texto: string): string {
 // requireTLS: sem SSL implícito, mas STARTTLS obrigatório — a conexão nunca fica em texto puro.
 const SMTP_GOOGLE = { host: 'smtp.gmail.com', porta: 587, secure: false } as const;
 
+// Ações válidas sobre a senha de app. Validadas em runtime porque o controller entrega o
+// body cru — um valor errado precisa dar 400, nunca virar MANTER por omissão.
+const ACOES_SENHA = ['MANTER', 'SUBSTITUIR', 'REMOVER'] as const;
+
 // Camada de envio de e-mail + controle de envio (global e por usuário).
 // SMTP vem do BANCO (configurado pela UI do coordenador) quando smtpHost está
 // setado; senão cai no .env; sem nenhum dos dois, modo dev/console (só loga).
@@ -164,6 +168,16 @@ export class EmailService {
     //   REMOVER         → apaga a senha guardada
     acaoSenha?: 'MANTER' | 'SUBSTITUIR' | 'REMOVER';
   }) {
+    // O controller recebe o body CRU (sem DTO/validação), então a ação é validada aqui.
+    // Valor desconhecido NÃO pode virar MANTER silenciosamente: um erro de digitação no
+    // cliente passaria despercebido e a senha ficaria diferente do que o usuário quis.
+    if (dados.acaoSenha !== undefined && !ACOES_SENHA.includes(dados.acaoSenha)) {
+      throw new BadRequestException({
+        mensagem: `Ação de senha inválida. Use ${ACOES_SENHA.join(', ')}.`,
+        erros: [{ campo: 'acaoSenha', mensagem: 'Valor inválido' }],
+      });
+    }
+
     const atual = await this.obterConfig(); // garante a linha
     const data: Record<string, unknown> = {};
     if (typeof dados.recuperacaoSenhaAtiva === 'boolean') data.recuperacaoSenhaAtiva = dados.recuperacaoSenhaAtiva;

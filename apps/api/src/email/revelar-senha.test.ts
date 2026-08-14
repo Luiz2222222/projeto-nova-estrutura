@@ -223,6 +223,38 @@ describe('Ação explícita sobre a senha (MANTER / SUBSTITUIR / REMOVER)', () =
     ).rejects.toMatchObject({ status: 400 });
   });
 
+  // O controller entrega o body cru, então a validação vive aqui.
+  it('acaoSenha inválida devolve 400 — nunca é tratada como MANTER', async () => {
+    const { p, servico } = await comSenha();
+    const antes = p._linha.smtpSenhaCriptografada;
+    p.configuracaoEmail.update.mockClear(); // ignora a gravação do preparo
+
+    await expect(
+      servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'APAGAR' as any }),
+    ).rejects.toMatchObject({ status: 400 });
+
+    expect(p.configuracaoEmail.update).not.toHaveBeenCalled();
+    expect(p._linha.smtpSenhaCriptografada).toBe(antes); // nada mudou
+  });
+
+  it('a mensagem do erro lista as ações aceitas', async () => {
+    const { servico } = await comSenha();
+    await expect(
+      servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'remover' as any }),
+    ).rejects.toMatchObject({
+      response: { mensagem: expect.stringMatching(/MANTER, SUBSTITUIR, REMOVER/) },
+    });
+  });
+
+  it('acaoSenha ausente continua valendo como MANTER (compatibilidade)', async () => {
+    const { p, servico } = await comSenha();
+    const antes = p._linha.smtpSenhaCriptografada;
+
+    await servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br' });
+
+    expect(p._linha.smtpSenhaCriptografada).toBe(antes);
+  });
+
   it('a máscara de pontos nunca chega ao banco como senha', async () => {
     const { p, servico } = await comSenha();
     // A tela manda MANTER e nenhum campo de senha — nada de "••••" virar segredo.

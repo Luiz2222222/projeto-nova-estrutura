@@ -105,13 +105,15 @@ describe('Campo mascarado: manter, substituir ou remover', () => {
     expect(JSON.stringify(corpo)).not.toContain('•');
   });
 
-  it('focar limpa a máscara para digitar por cima', async () => {
+  // Focar NÃO pode esvaziar o campo: se esvaziasse, apertar Delete não geraria onChange e
+  // o pedido de remoção se perderia (virava MANTER). A máscara fica e é selecionada.
+  it('focar mantém a máscara no campo (selecionada), não esvazia', async () => {
     await montar();
     fireEvent.focus(campoSenha());
-    expect(campoSenha()).toHaveValue('');
+    expect(campoSenha()).toHaveValue(MASCARA);
   });
 
-  it('só focar e sair (sem digitar) volta a máscara e mantém a senha', async () => {
+  it('só focar e sair (sem alterar) volta a máscara e mantém a senha', async () => {
     await montar();
     fireEvent.focus(campoSenha());
     fireEvent.blur(campoSenha());
@@ -120,6 +122,57 @@ describe('Campo mascarado: manter, substituir ou remover', () => {
     salvar();
     await waitFor(() => expect(apiPut).toHaveBeenCalled());
     expect(corpoEnviado().acaoSenha).toBe('MANTER');
+  });
+
+  // O caminho natural do usuário: clicar no campo e apagar, SEM digitar nada antes.
+  it('focar + Delete + salvar = REMOVER', async () => {
+    await montar();
+    const campo = campoSenha();
+    fireEvent.focus(campo);
+    fireEvent.keyDown(campo, { key: 'Delete' });
+    fireEvent.change(campo, { target: { value: '' } }); // apagou a máscara selecionada
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado()).toEqual({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'REMOVER' });
+  });
+
+  it('focar + Backspace + salvar = REMOVER', async () => {
+    await montar();
+    const campo = campoSenha();
+    fireEvent.focus(campo);
+    fireEvent.keyDown(campo, { key: 'Backspace' });
+    fireEvent.change(campo, { target: { value: '' } });
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado().acaoSenha).toBe('REMOVER');
+  });
+
+  it('focar + Ctrl+A + Delete + salvar = REMOVER', async () => {
+    await montar();
+    const campo = campoSenha();
+    fireEvent.focus(campo);
+    fireEvent.keyDown(campo, { key: 'a', ctrlKey: true });
+    fireEvent.keyDown(campo, { key: 'Delete' });
+    fireEvent.change(campo, { target: { value: '' } });
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado().acaoSenha).toBe('REMOVER');
+  });
+
+  it('mesmo alterando, a máscara em si nunca vira senha', async () => {
+    await montar();
+    const campo = campoSenha();
+    fireEvent.focus(campo);
+    // Situação limite: o valor volta a ser exatamente a máscara.
+    fireEvent.change(campo, { target: { value: MASCARA } });
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado().acaoSenha).toBe('MANTER');
+    expect(corpoEnviado()).not.toHaveProperty('smtpSenha');
   });
 
   it('digitar uma senha nova envia SUBSTITUIR com a senha', async () => {

@@ -110,9 +110,9 @@ export function SecaoConfiguracaoEmail() {
     }
   }
 
-  // Está digitando uma senha nova? Só aí o olho vira mostrar/ocultar local; com a máscara
-  // no campo, ele abre o modal reautenticado.
-  const digitando = editandoSenha && senha.length > 0;
+  // Está digitando uma senha NOVA? Só aí o olho vira mostrar/ocultar local; enquanto o campo
+  // tiver a máscara (mesmo focada/selecionada), o olho abre o modal reautenticado.
+  const digitando = editandoSenha && alterouSenha && senha.length > 0 && senha !== MASCARA;
 
   async function salvarSmtp() {
     setMsg('');
@@ -121,7 +121,9 @@ export function SecaoConfiguracaoEmail() {
     try {
       // Só e-mail + AÇÃO: host/porta/TLS/remetente são definidos pelo backend. A máscara de
       // pontos jamais é enviada — quando a ação não é SUBSTITUIR, nem existe campo de senha.
-      const acaoSenha = !alterouSenha ? 'MANTER' : senha ? 'SUBSTITUIR' : 'REMOVER';
+      // Rede de proteção: se o valor do campo ainda for a máscara, isso NÃO é senha —
+      // vale como "não mexi". Os pontos falsos nunca podem virar segredo.
+      const acaoSenha = !alterouSenha || senha === MASCARA ? 'MANTER' : senha ? 'SUBSTITUIR' : 'REMOVER';
       const c = await apiPut('/email-config', {
         smtpUsuario: usuario,
         acaoSenha,
@@ -200,12 +202,16 @@ export function SecaoConfiguracaoEmail() {
                   <input
                     type={mostrarSenha && editandoSenha ? 'text' : 'password'}
                     value={editandoSenha ? senha : cfg.temSenha ? MASCARA : ''}
-                    // Focar limpa a máscara para o coordenador digitar por cima.
-                    onFocus={() => {
+                    // Focar mantém a máscara no campo e a deixa SELECIONADA. É isso que faz o
+                    // caminho natural funcionar: digitar substitui a seleção (SUBSTITUIR) e
+                    // Delete/Backspace apaga a seleção gerando onChange com vazio (REMOVER).
+                    // Limpar o campo no foco quebrava isso — o Delete não gerava evento nenhum.
+                    onFocus={(e) => {
                       if (!editandoSenha && cfg.temSenha) {
                         setEditandoSenha(true);
-                        setSenha('');
+                        setSenha(MASCARA);
                       }
+                      e.target.select();
                     }}
                     onChange={(e) => {
                       setEditandoSenha(true);
@@ -247,7 +253,7 @@ export function SecaoConfiguracaoEmail() {
                 </span>
                 <small className="legenda">
                   {cfg.temSenha
-                    ? 'Senha de app configurada. Digite uma nova senha para substituir; deixe em branco para manter a atual.'
+                    ? 'Senha de app configurada. Não altere o campo para manter a atual; digite uma nova senha para substituir ou apague o conteúdo e salve para remover.'
                     : 'Use uma senha de app do Google, nunca a senha normal da conta.'}
                 </small>
               </label>
