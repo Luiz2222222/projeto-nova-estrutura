@@ -381,6 +381,8 @@ export class BancasService {
   // AVALIACAO_* para o coordenador não validar com avaliação pendente. Só enquanto a
   // avaliação não estiver BLOQUEADO/CONCLUIDO.
   async reabrir(avaliadorId: string, bancaId: string) {
+    // Sai da transação para enfileirar o Drive só depois do commit.
+    let tccIdSincronizar = '';
     // Mesmo gate de prazo do envio: reabrir uma avaliação ENVIADA só vale dentro do prazo
     // (ou com liberação). Senão o professor zeraria a nota sem poder reenviar — travando o TCC.
     const info = await this.prisma.membroBanca.findFirst({
@@ -436,7 +438,10 @@ export class BancasService {
       if (tcc.faseAtual === faseAguardando) {
         await tx.tcc.update({ where: { id: tcc.id }, data: { faseAtual: faseAval } });
       }
+      tccIdSincronizar = tcc.id;
     });
+    // Só o snapshot oficial: o rascunho privado do avaliador nunca vai para o Drive.
+    await this.sincronizarDrive(tccIdSincronizar);
     return { ok: true, status: 'PENDENTE' };
   }
 
@@ -477,6 +482,9 @@ export class BancasService {
   // aceita parcial (nota total null se incompleto). Ajusta a fase ao final. Não recalcula
   // NF1/NF2/NF (isso é feito na validação da coordenação).
   async editarAvaliacaoMembro(membroId: string, notas: Record<string, number>, parecer: string | undefined, status: string) {
+    // O id sai da transação para poder enfileirar o Drive DEPOIS do commit (`tcc` só existe
+    // dentro do callback).
+    let tccIdSincronizar = '';
     await this.prisma.$transaction(async (tx) => {
       const membro = await tx.membroBanca.findUnique({
         where: { id: membroId },
@@ -524,7 +532,9 @@ export class BancasService {
       await tx.membroBanca.update({ where: { id: membroId }, data });
       await this.ajustarFasePorBanca(tx, membro.banca, { id: tcc.id, faseAtual: tcc.faseAtual });
       await this.recalcularNotasApuradas(tx, tcc.id);
+      tccIdSincronizar = tcc.id;
     });
+    await this.sincronizarDrive(tccIdSincronizar);
     return { ok: true };
   }
 
@@ -696,6 +706,7 @@ export class BancasService {
         }
       }
     });
+    await this.sincronizarDrive(tccId);
     return { ok: true };
   }
 
@@ -820,6 +831,7 @@ export class BancasService {
     if (membro.nota == null) throw new BadRequestException({ mensagem: 'Não é possível aprovar uma avaliação sem nota.' });
     // Decisão tomada: além de aprovar, encerra a ação pendente de reenvio (se havia).
     await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'APROVADO', ajusteMotivo: null, ajusteReenviadoEm: null } });
+    await this.sincronizarDrive(membro.banca.tcc.id);
     return { ok: true };
   }
 
@@ -849,6 +861,7 @@ export class BancasService {
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
     const base = `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}".`;
     await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, texto ? `${base} Motivo: ${texto}` : base, this.linkDaAvaliacao(membro));
+    await this.sincronizarDrive(membro.banca.tcc.id);
     return { ok: true };
   }
 
@@ -864,6 +877,7 @@ export class BancasService {
     await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'EM_ANALISE', ajusteMotivo: null, rascunho: null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
     await this.eventos.emitirParaUsuario('avaliador_ajuste_cancelado', membro.avaliadorId, `Solicitação de ajuste cancelada — ${faseNome}`, `A solicitação de ajuste da sua avaliação foi cancelada pela coordenação.`, this.linkDaAvaliacao(membro));
+    await this.sincronizarDrive(membro.banca.tcc.id);
     return { ok: true };
   }
 
