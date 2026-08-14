@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Query, Res, UseGuards } from '@nestjs/common';
+import { Controller, Get, Logger, Post, Query, Res, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
@@ -12,6 +12,8 @@ import { basePublica } from './drive-api';
 // e por isso é protegido pelo `state` de uso único gerado no início do fluxo.
 @Controller('drive')
 export class DriveController {
+  private readonly logger = new Logger('DriveController');
+
   constructor(
     private readonly drive: DriveService,
     private readonly sync: DriveSyncService,
@@ -48,13 +50,12 @@ export class DriveController {
     return { ok: true };
   }
 
+  // Reenfileira erros -> reconcilia o que já existe -> processa a fila resultante.
   @Post('sincronizar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  async sincronizar() {
-    const reenfileirados = await this.sync.reenfileirarErros();
-    const r = await this.sync.processarPendentes();
-    return { reenfileirados, ...r };
+  sincronizar() {
+    return this.sync.sincronizarAgora();
   }
 
   // Callback do Google. Sem guard (é o navegador voltando do consentimento); a segurança
@@ -66,6 +67,12 @@ export class DriveController {
     const base = basePublica();
     try {
       await this.drive.concluirAutorizacao(code ?? '', state ?? '');
+      // Conectar num sistema que JÁ tem TCCs aprovados não pode esperar a varredura de 24h:
+      // dispara a sincronização na hora. Em segundo plano de propósito — o navegador do
+      // coordenador não fica preso esperando dezenas de uploads para ser redirecionado.
+      void this.sync.sincronizarAgora().catch((e) => {
+        this.logger.warn(`Sincronização inicial após conectar falhou: ${(e as Error).message}`);
+      });
       return res.redirect(`${base}/coordenador/planejamento?drive=conectado`);
     } catch {
       // Motivo detalhado fica no status/log; a URL só sinaliza a falha.
