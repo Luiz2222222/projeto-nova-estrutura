@@ -19,9 +19,11 @@ const config = {
 
 const apiGet = vi.fn();
 const apiPut = vi.fn();
+const apiPost = vi.fn();
 vi.mock('../../api', () => ({
   apiGet: (...a: unknown[]) => apiGet(...a),
   apiPut: (...a: unknown[]) => apiPut(...a),
+  apiPost: (...a: unknown[]) => apiPost(...a),
 }));
 
 async function montar(cfg: Record<string, unknown> = config) {
@@ -38,6 +40,7 @@ const campoSenha = () => screen.getByLabelText(/Senha de app/);
 beforeEach(() => {
   apiGet.mockReset();
   apiPut.mockReset();
+  apiPost.mockReset();
 });
 
 describe('Campos visíveis', () => {
@@ -93,11 +96,75 @@ describe('Envio ao backend', () => {
   });
 });
 
+describe('Revelar a senha de app (reautenticada)', () => {
+  it('com senha salva, oferece o botão e some com o olho enganoso', async () => {
+    await montar();
+    expect(screen.getByRole('button', { name: 'Mostrar senha de app' })).toBeInTheDocument();
+    // Sem nada digitado, não existe olho no campo (ele não revelaria a senha salva).
+    expect(screen.queryByRole('button', { name: /Mostrar senha digitada/i })).not.toBeInTheDocument();
+  });
+
+  it('o olho local só aparece depois de digitar algo', async () => {
+    await montar();
+    fireEvent.change(campoSenha(), { target: { value: 'nova' } });
+    expect(screen.getByRole('button', { name: /Mostrar senha digitada/i })).toBeInTheDocument();
+  });
+
+  it('sem senha salva, não oferece revelar', async () => {
+    await montar({ ...config, temSenha: false });
+    expect(screen.queryByRole('button', { name: 'Mostrar senha de app' })).not.toBeInTheDocument();
+  });
+
+  it('o modal exige senha do coordenador E confirmação antes de revelar', async () => {
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+
+    const revelar = await screen.findByRole('button', { name: 'Mostrar senha' });
+    expect(revelar).toBeDisabled();
+
+    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
+    expect(revelar).toBeDisabled(); // falta a confirmação explícita
+
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(revelar).toBeEnabled();
+  });
+
+  it('revela pela rota protegida e limpa tudo ao fechar', async () => {
+    apiPost.mockResolvedValue({ senha: 'senha-ficticia-de-teste' });
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith('/email-config/revelar-senha', { senha: 'minha-senha' }),
+    );
+    expect(await screen.findByDisplayValue('senha-ficticia-de-teste')).toBeInTheDocument();
+
+    // O Modal já tem seu próprio "Fechar" (X); o do rodapé é o último.
+    const fechar = screen.getAllByRole('button', { name: 'Fechar' });
+    fireEvent.click(fechar[fechar.length - 1]);
+    await waitFor(() => expect(screen.queryByDisplayValue('senha-ficticia-de-teste')).not.toBeInTheDocument());
+  });
+
+  it('senha do coordenador errada mostra o erro e não revela', async () => {
+    apiPost.mockRejectedValue({ status: 400, mensagem: 'Senha incorreta.' });
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'errada' } });
+    fireEvent.click(screen.getByRole('checkbox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+
+    expect(await screen.findByText('Senha incorreta.')).toBeInTheDocument();
+  });
+});
+
 describe('Senha nunca reaparece', () => {
   it('o campo de senha começa vazio mesmo com senha salva', async () => {
     await montar();
     expect(campoSenha()).toHaveValue('');
-    expect(campoSenha()).toHaveAttribute('placeholder', expect.stringContaining('manter'));
+    expect(campoSenha()).toHaveAttribute('placeholder', 'Digite uma nova senha para substituir');
   });
 
   it('após salvar, o campo de senha é limpo de novo', async () => {

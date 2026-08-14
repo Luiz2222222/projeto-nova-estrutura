@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { apiGet, apiPut, type ErroApi } from '../../api';
+import { apiGet, apiPost, apiPut, type ErroApi } from '../../api';
+import { Modal } from '../../componentes/Modal';
 
 const icoOlho = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18" strokeLinecap="round" strokeLinejoin="round">
@@ -26,6 +27,49 @@ export function SecaoConfiguracaoEmail() {
   const [salvandoSmtp, setSalvandoSmtp] = useState(false);
   const [msg, setMsg] = useState('');
   const [erro, setErro] = useState('');
+
+  // Revelação da senha de app: tudo vive SÓ aqui e é zerado ao fechar o modal — nada de
+  // localStorage/sessionStorage, e a senha nunca volta no GET normal da configuração.
+  const [modalRevelar, setModalRevelar] = useState(false);
+  const [senhaCoordenador, setSenhaCoordenador] = useState('');
+  const [confirmou, setConfirmou] = useState(false);
+  const [senhaRevelada, setSenhaRevelada] = useState('');
+  const [verRevelada, setVerRevelada] = useState(false);
+  const [revelando, setRevelando] = useState(false);
+  const [erroRevelar, setErroRevelar] = useState('');
+
+  function abrirRevelacao() {
+    setSenhaCoordenador('');
+    setConfirmou(false);
+    setSenhaRevelada('');
+    setVerRevelada(false);
+    setErroRevelar('');
+    setModalRevelar(true);
+  }
+
+  // Fechar SEMPRE limpa a senha revelada da memória do componente.
+  function fecharRevelacao() {
+    setModalRevelar(false);
+    setSenhaCoordenador('');
+    setSenhaRevelada('');
+    setVerRevelada(false);
+    setConfirmou(false);
+    setErroRevelar('');
+  }
+
+  async function revelar() {
+    setErroRevelar('');
+    setRevelando(true);
+    try {
+      const r = await apiPost<{ senha: string }>('/email-config/revelar-senha', { senha: senhaCoordenador });
+      setSenhaRevelada(r.senha);
+      setSenhaCoordenador(''); // a senha do coordenador não precisa mais ficar em memória
+    } catch (e) {
+      setErroRevelar((e as ErroApi).mensagem || 'Não foi possível revelar a senha.');
+    } finally {
+      setRevelando(false);
+    }
+  }
 
   function aplicar(c: any) {
     setCfg(c);
@@ -132,17 +176,85 @@ export function SecaoConfiguracaoEmail() {
               <label className="campo">
                 <span>Senha de app</span>
                 <span className="campo-com-acao">
-                  <input type={mostrarSenha ? 'text' : 'password'} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder={cfg.temSenha ? '•••••• (deixe em branco para manter)' : 'Senha de app do Google'} />
-                  <button type="button" className="campo-acao" onClick={() => setMostrarSenha((v) => !v)} title={mostrarSenha ? 'Ocultar' : 'Mostrar'} aria-label={mostrarSenha ? 'Ocultar senha' : 'Mostrar senha'}>
-                    {mostrarSenha ? icoOlhoFechado : icoOlho}
-                  </button>
+                  <input
+                    type={mostrarSenha ? 'text' : 'password'}
+                    value={senha}
+                    onChange={(e) => setSenha(e.target.value)}
+                    placeholder={cfg.temSenha ? 'Digite uma nova senha para substituir' : 'Senha de app do Google'}
+                  />
+                  {/* O olho só existe para o que ACABOU de ser digitado. Antes ele aparecia
+                      sempre e, com o campo vazio, dava a impressão de revelar a senha salva. */}
+                  {senha.length > 0 && (
+                    <button type="button" className="campo-acao" onClick={() => setMostrarSenha((v) => !v)} title={mostrarSenha ? 'Ocultar' : 'Mostrar'} aria-label={mostrarSenha ? 'Ocultar senha digitada' : 'Mostrar senha digitada'}>
+                      {mostrarSenha ? icoOlhoFechado : icoOlho}
+                    </button>
+                  )}
                 </span>
-                <small className="legenda">Use uma senha de app do Google, nunca a senha normal da conta. Ao trocar o e-mail, informe a senha de app da nova conta.</small>
+                <small className="legenda">
+                  {cfg.temSenha
+                    ? 'Senha de app configurada. Digite uma nova senha para substituir; deixe em branco para manter a atual.'
+                    : 'Use uma senha de app do Google, nunca a senha normal da conta.'}
+                </small>
+                {cfg.temSenha && (
+                  <button type="button" className="botao-secundario" style={{ marginTop: 6, alignSelf: 'flex-start' }} onClick={abrirRevelacao}>
+                    Mostrar senha de app
+                  </button>
+                )}
               </label>
             </div>
             <div className="acoes" style={{ justifyContent: 'flex-start' }}>
               <button className="botao" disabled={salvandoSmtp} onClick={salvarSmtp}>{salvandoSmtp ? 'Salvando…' : 'Salvar configuração'}</button>
             </div>
+
+            {modalRevelar && (
+              <Modal
+                titulo="Mostrar senha de app"
+                subtitulo="A configuração de e-mail é compartilhada por toda a coordenação. Confirme sua senha para ver a senha de app salva."
+                aoFechar={() => !revelando && fecharRevelacao()}
+              >
+                {erroRevelar && <div className="erro-geral">{erroRevelar}</div>}
+
+                {!senhaRevelada ? (
+                  <>
+                    <label className="campo">
+                      <span>Sua senha</span>
+                      <input
+                        type="password"
+                        value={senhaCoordenador}
+                        onChange={(e) => setSenhaCoordenador(e.target.value)}
+                        placeholder="Senha da sua conta de coordenador"
+                      />
+                    </label>
+                    <label className="campo-checkbox" style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                      <input type="checkbox" checked={confirmou} onChange={(e) => setConfirmou(e.target.checked)} />
+                      <span>Confirmo que quero exibir a senha de app na tela agora.</span>
+                    </label>
+                    <div className="acoes">
+                      <button className="botao botao-secundario" disabled={revelando} onClick={fecharRevelacao}>Cancelar</button>
+                      <button className="botao" disabled={revelando || !confirmou || !senhaCoordenador} onClick={revelar}>
+                        {revelando ? 'Verificando…' : 'Mostrar senha'}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <label className="campo">
+                      <span>Senha de app</span>
+                      <span className="campo-com-acao">
+                        <input type={verRevelada ? 'text' : 'password'} value={senhaRevelada} readOnly />
+                        <button type="button" className="campo-acao" onClick={() => setVerRevelada((v) => !v)} aria-label={verRevelada ? 'Ocultar senha' : 'Mostrar senha'}>
+                          {verRevelada ? icoOlhoFechado : icoOlho}
+                        </button>
+                      </span>
+                      <small className="legenda">Ela some desta tela ao fechar o modal.</small>
+                    </label>
+                    <div className="acoes">
+                      <button className="botao" onClick={fecharRevelacao}>Fechar</button>
+                    </div>
+                  </>
+                )}
+              </Modal>
+            )}
           </div>
         </>
       )}

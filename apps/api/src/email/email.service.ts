@@ -125,6 +125,26 @@ export class EmailService {
     };
   }
 
+  // Revela a senha de app UMA vez, já descriptografada. Só é chamada depois de o
+  // controller reautenticar o coordenador — a validação NÃO mora aqui para não haver
+  // caminho que descriptografe sem passar por ela.
+  //
+  // A configuração é global: qualquer coordenador que confirme a própria senha pode ver,
+  // porque todos já podem sobrescrevê-la de qualquer forma.
+  async revelarSenhaApp(): Promise<string> {
+    const c = await this.obterConfig();
+    if (!c.smtpSenhaCriptografada) {
+      throw new BadRequestException({ mensagem: 'Nenhuma senha de app está salva.' });
+    }
+    const senha = this.descriptografar(c.smtpSenhaCriptografada);
+    if (!senha) {
+      throw new BadRequestException({
+        mensagem: 'Não foi possível ler a senha salva (a chave de criptografia mudou). Cadastre a senha novamente.',
+      });
+    }
+    return senha; // nunca logado, nunca persistido
+  }
+
   async atualizarConfig(dados: {
     recuperacaoSenhaAtiva?: boolean;
     fluxoTccAtivo?: boolean;
