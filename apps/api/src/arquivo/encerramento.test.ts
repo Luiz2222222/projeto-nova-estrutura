@@ -1,7 +1,10 @@
 // Encerramento de período: nada é apagado antes do arquivamento confirmado, professores e
 // coordenadores nunca são apagados, contas com vínculo em outro período são preservadas e o
 // histórico continua acessível depois das exclusões.
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { promises as fs } from 'fs';
+import { tmpdir } from 'os';
+import { join } from 'path';
 import { EncerramentoService } from './encerramento.service';
 import { HistoricoArquivadoService } from './historico-arquivado.service';
 
@@ -27,7 +30,17 @@ function baseTcc(over: Record<string, any> = {}) {
     aluno: { id: 'aluno1', nomeCompleto: 'Lucas', email: 'lucas@ufpe.br', curso: 'ENGENHARIA_ELETRICA', papel: 'ALUNO' },
     orientador: { id: 'prof1', nomeCompleto: 'Ana' },
     coorientador: null,
-    documentos: [{ id: 'd1', tipo: 'VERSAO_FINAL', versao: 1, caminho: 'uploads/final.pdf', criadoEm: new Date() }],
+    documentos: [
+      {
+        id: 'd1',
+        tipo: 'VERSAO_FINAL',
+        versao: 1,
+        status: 'APROVADO',
+        nomeArquivo: 'final.pdf',
+        caminho: 'uploads/final.pdf',
+        criadoEm: new Date(),
+      },
+    ],
     bancas: [
       {
         membros: [
@@ -43,9 +56,11 @@ function baseTcc(over: Record<string, any> = {}) {
 function prismaFalso(over: Record<string, any> = {}) {
   const arquivados: any[] = [];
   const participantes: any[] = [];
+  const docsArquivados: any[] = [];
   const p: any = {
     _arquivados: arquivados,
     _participantes: participantes,
+    _docsArquivados: docsArquivados,
     _apagados: [] as string[],
     usuario: {
       findUnique: vi.fn(async () => ({ id: 'c1', senhaHash: 'hash' })),
@@ -101,8 +116,24 @@ function prismaFalso(over: Record<string, any> = {}) {
         arquivados.push(a);
         return a;
       }),
-      findMany: vi.fn(async () => arquivados),
+      // include: { documentos: true } — devolve os documentos arquivados junto.
+      findMany: vi.fn(async () => arquivados.map((a) => ({ ...a, documentos: docsArquivados.filter((d) => d.arquivadoId === a.id) }))),
       findFirst: vi.fn(async () => arquivados[0] ?? null),
+    },
+    documentoArquivado: {
+      upsert: vi.fn(async ({ where, create, update }: any) => {
+        const c = where.arquivadoId_tipo_versao;
+        const achado = docsArquivados.find(
+          (d) => d.arquivadoId === c.arquivadoId && d.tipo === c.tipo && d.versao === c.versao,
+        );
+        if (achado) {
+          Object.assign(achado, update);
+          return achado;
+        }
+        const novo = { id: `da${docsArquivados.length + 1}`, ...create };
+        docsArquivados.push(novo);
+        return novo;
+      }),
     },
     tccArquivadoParticipante: {
       upsert: vi.fn(async ({ where, create }: any) => {
@@ -130,7 +161,25 @@ const syncFalso = () =>
     montarConteudo: vi.fn(async () => ({ dados: { tcc: { titulo: 'TCC de teste' } }, resumo: 'resumo legível' })),
   }) as any;
 
-beforeEach(() => vi.clearAllMocks());
+// O encerramento copia arquivos DE VERDADE. Cada teste roda numa raiz temporária própria
+// (process.cwd mockado), com o documento do TCC existindo no disco.
+let raiz: string;
+let espiaoCwd: ReturnType<typeof vi.spyOn>;
+
+beforeEach(async () => {
+  vi.clearAllMocks();
+  raiz = await fs.mkdtemp(join(tmpdir(), 'tcc-encerr-'));
+  await fs.mkdir(join(raiz, 'uploads'), { recursive: true });
+  await fs.writeFile(join(raiz, 'uploads', 'final.pdf'), 'conteudo da versao final');
+  espiaoCwd = vi.spyOn(process, 'cwd').mockReturnValue(raiz);
+});
+
+afterEach(async () => {
+  // Restaura SÓ o cwd: restoreAllMocks zeraria também as implementações dos mocks de
+  // módulo (arquivoValido, apagarArquivo…), fazendo-os devolver undefined.
+  espiaoCwd.mockRestore();
+  await fs.rm(raiz, { recursive: true, force: true });
+});
 
 describe('Travas antes de apagar', () => {
   it('confirmação errada não apaga nada', async () => {
@@ -147,51 +196,84 @@ describe('Travas antes de apagar', () => {
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('Drive desconectado bloqueia o encerramento', async () => {
+  // O arquivo LOCAL é a garantia. Se a cópia de qualquer documento falhar, nada é apagado.
+  it('documento sumido do disco ABORTA o encerramento', async () => {
     const p = prismaFalso();
-    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+    await fs.rm(join(raiz, 'uploads', 'final.pdf')); // arquivo ativo não existe mais
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    expect(p.usuario.delete).not.toHaveBeenCalled();
+  });
+
+  it('sem nenhum documento válido para arquivar, ABORTA', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [baseTcc({ documentos: [] })]);
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
     await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('falha ao sincronizar um TCC aborta SEM apagar nada', async () => {
+  it('falha na revalidação final ABORTA antes de apagar', async () => {
+    const p = prismaFalso();
+    // O registro é gravado, mas a revalidação não encontra o arquivo (simula corrupção
+    // entre a cópia e a exclusão).
+    p.tccArquivado.findMany = vi.fn(async () => [
+      { id: 'a1', titulo: 'TCC de teste', documentos: [{ caminho: 'arquivo-permanente/x/y.pdf', tamanho: 10, sha256: 'abc', nomeArquivo: 'y.pdf' }] },
+    ]);
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    expect(p.usuario.delete).not.toHaveBeenCalled();
+  });
+});
+
+// O Drive é cópia ADICIONAL: sua ausência ou falha não pode impedir o encerramento.
+describe('Drive é opcional', () => {
+  it('SEM Drive conectado o encerramento acontece e marca a cópia como pendente', async () => {
+    const p = prismaFalso();
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(r.arquivadoLocalmente).toBe(true);
+    expect(r.driveConectado).toBe(false);
+    expect(r.copiaDrivePendente).toBe(1);
+    expect(r.tccsApagados).toBe(1); // apagou normalmente
+    expect(p._docsArquivados).toHaveLength(1); // com o documento guardado localmente
+  });
+
+  it('falha do Drive não impede o encerramento (fica pendente)', async () => {
     const p = prismaFalso();
     const sync = syncFalso();
     sync.gravarDados = vi.fn(async () => {
       throw new Error('Drive fora do ar');
     });
     const s = new EncerramentoService(p, driveFalso(), sync);
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
-    expect(p.usuario.delete).not.toHaveBeenCalled();
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(r.copiaDrivePendente).toBe(1);
+    expect(r.tccsApagados).toBe(1);
   });
 
-  it('pendência na fila bloqueia o encerramento', async () => {
+  it('pendência na fila do Drive não bloqueia mais o encerramento', async () => {
     const p = prismaFalso();
-    p._statusNaFila = ['PENDENTE', 'ERRO', 'PENDENTE'];
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    p._statusNaFila = ['PENDENTE', 'PROCESSANDO', 'ERRO'];
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).resolves.toMatchObject({ tccsApagados: 1 });
   });
 
-  // Um upload em curso não garante que o arquivo esteja completo no Drive: enquanto houver
-  // PROCESSANDO, nada pode ser apagado e a tela não pode dizer que dá para encerrar.
-  it('item PROCESSANDO bloqueia o encerramento e NÃO apaga nada', async () => {
+  it('a prévia libera o encerramento mesmo sem Drive', async () => {
     const p = prismaFalso();
     p._statusNaFila = ['PROCESSANDO'];
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    const r = await new EncerramentoService(p, driveFalso(false), syncFalso()).previa();
 
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled(); // nenhum TCC apagado
-    expect(p.usuario.delete).not.toHaveBeenCalled(); // nenhuma conta apagada
-    expect(p.tccArquivado.upsert).not.toHaveBeenCalled(); // nem chegou a arquivar
-  });
-
-  it('fila vazia libera o encerramento', async () => {
-    const p = prismaFalso();
-    p._statusNaFila = [];
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).resolves.toMatchObject({ tccsApagados: 1 });
+    expect(r.conectadoAoDrive).toBe(false);
+    expect(r.pendenciasSincronizacao).toBe(1); // informado…
+    expect(r.podeEncerrar).toBe(true); // …mas não bloqueia
   });
 });
 
@@ -249,42 +331,6 @@ describe('Encerramento completo', () => {
     expect(vi.mocked(apagarArquivo).mock.calls[0][1]).toBe('i'); // id da monografia
   });
 
-  it('ABORTA tudo quando o arquivo final não está confirmado no Drive', async () => {
-    const p = prismaFalso();
-    const { arquivoValido, apagarArquivo } = await import('../drive/drive-api');
-    vi.mocked(arquivoValido).mockResolvedValue(false); // o Drive não confirma o arquivo
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    // Nada apagado, nada podado, nada arquivado.
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
-    expect(p.usuario.delete).not.toHaveBeenCalled();
-    expect(vi.mocked(apagarArquivo)).not.toHaveBeenCalled();
-    expect(p.tccArquivado.upsert).not.toHaveBeenCalled();
-    vi.mocked(arquivoValido).mockResolvedValue(true);
-  });
-
-  it('ABORTA quando o documento escolhido ainda não foi enviado ao Drive', async () => {
-    const p = prismaFalso();
-    p.driveArquivo.findUnique = vi.fn(async ({ where }: any) =>
-      where.tccId_chave.chave.startsWith('DOC:') ? null : { driveId: 'x', chave: where.tccId_chave.chave, nome: 'n' },
-    );
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
-    expect(p.usuario.delete).not.toHaveBeenCalled();
-  });
-
-  it('ABORTA quando não há documento acadêmico válido para preservar', async () => {
-    const p = prismaFalso();
-    p.documentoTcc.findMany = vi.fn(async () => []); // só havia versões rejeitadas/substituídas
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-
-    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
-    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
-  });
-
   it('nunca escolhe versão REJEITADA: prefere a final aprovada', async () => {
     const p = prismaFalso();
     // O service filtra por status preserváveis; a rejeitada nem chega na consulta.
@@ -316,14 +362,19 @@ describe('Encerramento completo', () => {
     expect(vi.mocked(apagarArquivo).mock.calls[0][1]).toBe('i');
   });
 
-  it('repetir o encerramento não duplica histórico nem participante', async () => {
+  it('retomar o encerramento não duplica histórico, participante nem documento', async () => {
     const p = prismaFalso();
     const s = new EncerramentoService(p, driveFalso(), syncFalso());
     await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
-    await s.encerrar('c1', 'senha-certa', 'ENCERRAR'); // segunda execução (retomada/2º coordenador)
 
-    expect(p._arquivados).toHaveLength(1);
+    // Simula a retomada (interrupção antes de a limpeza terminar, ou um 2º coordenador):
+    // os arquivos de origem ainda existem e o encerramento roda de novo sobre o mesmo TCC.
+    await fs.writeFile(join(raiz, 'uploads', 'final.pdf'), 'conteudo da versao final');
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(p._arquivados).toHaveLength(1); // upsert por tccIdOriginal
     expect(p._participantes).toHaveLength(2); // prof1 + prof2, sem repetição
+    expect(p._docsArquivados).toHaveLength(1); // upsert por (arquivado, tipo, versão)
   });
 
   it('coorientador externo entra na análise e é apagado quando só existe neste período', async () => {
@@ -384,46 +435,37 @@ describe('Prévia de impacto (não muda nada)', () => {
     expect(p.usuario.delete).not.toHaveBeenCalled();
   });
 
-  it('com item PROCESSANDO, a prévia diz que NÃO dá para encerrar', async () => {
+  it('informa as pendências do Drive sem travar o encerramento', async () => {
     const p = prismaFalso();
-    p._statusNaFila = ['PROCESSANDO'];
+    p._statusNaFila = ['PENDENTE', 'PROCESSANDO', 'ERRO'];
     const s = new EncerramentoService(p, driveFalso(), syncFalso());
     const r = await s.previa();
 
-    expect(r.pendenciasSincronizacao).toBe(1);
+    expect(r.pendenciasSincronizacao).toBe(3); // mostrado na tela…
+    expect(r.podeEncerrar).toBe(true); // …mas o arquivo local é que garante
+  });
+
+  it('sem TCC no período não há o que encerrar', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => []);
+    const r = await new EncerramentoService(p, driveFalso(), syncFalso()).previa();
     expect(r.podeEncerrar).toBe(false);
-  });
-
-  it('com a fila limpa e o Drive conectado, a prévia libera o encerramento', async () => {
-    const p = prismaFalso();
-    p._statusNaFila = [];
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-    const r = await s.previa();
-
-    expect(r.pendenciasSincronizacao).toBe(0);
-    expect(r.podeEncerrar).toBe(true);
-  });
-
-  it('cada estado pendente da fila (inclusive PROCESSANDO) trava a prévia', async () => {
-    for (const estado of ['PENDENTE', 'PROCESSANDO', 'ERRO']) {
-      const p = prismaFalso();
-      p._statusNaFila = [estado];
-      const r = await new EncerramentoService(p, driveFalso(), syncFalso()).previa();
-      expect(r.podeEncerrar, `estado ${estado} deveria travar`).toBe(false);
-    }
   });
 });
 
 describe('Histórico arquivado: permissões e acesso após a exclusão', () => {
-  function prismaHistorico() {
+  function prismaHistorico(documentos: any[] = []) {
     return {
       tccArquivado: {
-        findMany: vi.fn(async () => [{ id: 'a1', titulo: 'TCC de teste', alunoNome: 'Lucas' }]),
-        findFirst: vi.fn(async ({ where }: any) =>
-          where.participantes && !where.participantes.some.usuarioId
-            ? null
-            : { id: 'a1', titulo: 'TCC', dadosJson: '{"ok":true}', driveArquivoFinalId: 'f', driveArquivoFinalNome: 'final.pdf' },
-        ),
+        findMany: vi.fn(async () => [{ id: 'a1', titulo: 'TCC de teste', alunoNome: 'Lucas', _count: { documentos: 1 } }]),
+        findFirst: vi.fn(async () => ({
+          id: 'a1',
+          titulo: 'TCC',
+          dadosJson: '{"ok":true}',
+          documentos,
+          driveArquivoFinalId: 'f',
+          driveArquivoFinalNome: 'final.pdf',
+        })),
       },
     } as any;
   }
@@ -445,13 +487,44 @@ describe('Histórico arquivado: permissões e acesso após a exclusão', () => {
     await expect(s.listar('x', 'AVALIADOR')).rejects.toMatchObject({ status: 403 });
   });
 
-  it('o download passa pelo backend (proxy autenticado), sem link público', async () => {
-    const p = prismaHistorico();
+  it('o download vem do ARQUIVO LOCAL, sem tocar no Drive', async () => {
+    const rel = join('arquivo-permanente', '2026.2', 't1', 'VERSAO_FINAL-v1.pdf');
+    await fs.mkdir(join(raiz, 'arquivo-permanente', '2026.2', 't1'), { recursive: true });
+    await fs.writeFile(join(raiz, rel), 'pdf arquivado localmente');
+
+    const p = prismaHistorico([{ id: 'da1', caminho: rel, nomeArquivo: 'final.pdf', ehFinal: true }]);
     const { baixarArquivo } = await import('../drive/drive-api');
     const s = new HistoricoArquivadoService(p, driveFalso());
 
     const r = await s.baixar('a1', 'c1', 'COORDENADOR');
     expect(r.nome).toBe('final.pdf');
+    expect(r.conteudo.toString()).toBe('pdf arquivado localmente');
+    expect(vi.mocked(baixarArquivo)).not.toHaveBeenCalled(); // Drive nem foi consultado
+  });
+
+  it('o histórico continua acessível mesmo SEM Drive nenhum', async () => {
+    const rel = join('arquivo-permanente', '2026.2', 't1', 'MONOGRAFIA-v2.docx');
+    await fs.mkdir(join(raiz, 'arquivo-permanente', '2026.2', 't1'), { recursive: true });
+    await fs.writeFile(join(raiz, rel), 'monografia arquivada');
+
+    const p = prismaHistorico([{ id: 'da2', caminho: rel, nomeArquivo: 'mono.docx', ehFinal: true }]);
+    p.tccArquivado.findFirst = vi.fn(async () => ({
+      id: 'a1',
+      dadosJson: '{}',
+      documentos: [{ id: 'da2', caminho: rel, nomeArquivo: 'mono.docx', ehFinal: true }],
+      driveArquivoFinalId: null, // nunca houve cópia no Drive
+    }));
+    const s = new HistoricoArquivadoService(p, driveFalso());
+
+    await expect(s.baixar('a1', 'c1', 'COORDENADOR')).resolves.toMatchObject({ nome: 'mono.docx' });
+  });
+
+  it('cai para o Drive só se a cópia local estiver inacessível', async () => {
+    const p = prismaHistorico([{ id: 'da3', caminho: 'arquivo-permanente/sumiu.pdf', nomeArquivo: 'x.pdf', ehFinal: true }]);
+    const { baixarArquivo } = await import('../drive/drive-api');
+    const s = new HistoricoArquivadoService(p, driveFalso());
+
+    const r = await s.baixar('a1', 'c1', 'COORDENADOR');
     expect(r.conteudo.toString()).toBe('conteudo-do-pdf');
     expect(vi.mocked(baixarArquivo)).toHaveBeenCalledWith('tok', 'f');
   });

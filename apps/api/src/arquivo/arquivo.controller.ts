@@ -50,11 +50,12 @@ export class ArquivoController {
     return this.historico.detalhe(id, req.usuario.sub, req.usuario.papel);
   }
 
+  // `documento` opcional: sem ele baixa o documento final do registro.
   @Get('historico-arquivado/:id/baixar')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR', 'PROFESSOR')
-  async baixar(@Param('id') id: string, @Req() req: Req, @Res() res: Response) {
-    const { conteudo, nome } = await this.historico.baixar(id, req.usuario.sub, req.usuario.papel);
+  async baixar(@Param('id') id: string, @Query('documento') documentoId: string | undefined, @Req() req: Req, @Res() res: Response) {
+    const { conteudo, nome } = await this.historico.baixar(id, req.usuario.sub, req.usuario.papel, documentoId);
     res.setHeader('Content-Type', 'application/octet-stream');
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(nome)}"`);
     res.send(conteudo);

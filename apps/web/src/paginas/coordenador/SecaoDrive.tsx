@@ -186,9 +186,17 @@ export function SecaoDrive() {
 
             {relatorio && (
               <div className="alerta-aviso bloco">
-                <strong>Período {relatorio.semestre} encerrado.</strong> {relatorio.tccsArquivados} TCC(s) arquivado(s),{' '}
-                {relatorio.tccsApagados} apagado(s), {relatorio.arquivosLocaisRemovidos} arquivo(s) local(is) removido(s),{' '}
+                <strong>Período {relatorio.semestre} arquivado localmente.</strong> {relatorio.tccsArquivados} TCC(s)
+                guardado(s) no arquivo permanente da VPS (dados e documentos), {relatorio.tccsApagados} removido(s) do
+                fluxo ativo, {relatorio.arquivosLocaisRemovidos} arquivo(s) de trabalho liberado(s),{' '}
                 {relatorio.contasApagadas.length} conta(s) apagada(s).
+                {relatorio.copiaDrivePendente > 0 && (
+                  <div style={{ marginTop: 6 }}>
+                    Cópia no Google Drive pendente para {relatorio.copiaDrivePendente} TCC(s)
+                    {!relatorio.driveConectado ? ' (Drive não conectado)' : ''}. O arquivo local já está completo — a
+                    cópia no Drive é adicional.
+                  </div>
+                )}
                 {relatorio.contasPreservadas?.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     Preservadas: {relatorio.contasPreservadas.map((c: any) => `${c.nome} (${c.motivo})`).join('; ')}
@@ -208,11 +216,25 @@ export function SecaoDrive() {
                     <strong>Período {previa.semestre}:</strong> {previa.tccs} TCC(s).
                     <div>Contas que serão apagadas: {previa.contasParaApagar.length}</div>
                     <div>Contas preservadas: {previa.contasPreservadas.length}</div>
-                    <div>Pendências de sincronização: {previa.pendenciasSincronizacao}</div>
+                    <div style={{ marginTop: 6 }}>
+                      Os dados e documentos vão para o arquivo permanente da VPS antes de qualquer exclusão. Se a cópia
+                      não puder ser validada, nada é apagado.
+                    </div>
+                    {!previa.conectadoAoDrive && (
+                      <div style={{ marginTop: 6 }}>
+                        Google Drive não conectado: a cópia adicional no Drive ficará pendente. Isso <strong>não</strong>{' '}
+                        impede o encerramento.
+                      </div>
+                    )}
+                    {previa.conectadoAoDrive && previa.pendenciasSincronizacao > 0 && (
+                      <div style={{ marginTop: 6 }}>
+                        {previa.pendenciasSincronizacao} item(ns) ainda sincronizando com o Drive — a cópia adicional
+                        pode ficar incompleta.
+                      </div>
+                    )}
                     {!previa.podeEncerrar && (
                       <div style={{ marginTop: 6 }}>
-                        <strong>Não é possível encerrar agora.</strong>{' '}
-                        {!previa.conectadoAoDrive ? 'Conecte o Drive.' : 'Resolva as pendências de sincronização.'}
+                        <strong>Não há TCC neste período para encerrar.</strong>
                       </div>
                     )}
                   </div>

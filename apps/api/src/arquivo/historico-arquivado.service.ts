@@ -1,4 +1,6 @@
 import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
+import { promises as fs } from 'fs';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { DriveService } from '../drive/drive.service';
 import { baixarArquivo } from '../drive/drive-api';
@@ -46,15 +48,25 @@ export class HistoricoArquivadoService {
         resultado: true,
         concluidoEm: true,
         arquivadoEm: true,
+        arquivadoLocalEm: true,
         driveArquivoFinalNome: true,
+        // Quantos documentos ficaram guardados (o download vem do arquivo local).
+        _count: { select: { documentos: true } },
       },
     });
-    return itens;
+    return itens.map(({ _count, ...i }) => ({ ...i, documentos: _count.documentos }));
   }
 
   async detalhe(id: string, usuarioId: string, papel: string) {
     const item = await this.prisma.tccArquivado.findFirst({
       where: { id, ...this.filtroPorPapel(usuarioId, papel) },
+      include: {
+        // Sem caminho de disco nem hash: o front só precisa identificar e baixar.
+        documentos: {
+          select: { id: true, tipo: true, nomeArquivo: true, versao: true, status: true, tamanho: true, ehFinal: true },
+          orderBy: [{ tipo: 'asc' }, { versao: 'asc' }],
+        },
+      },
     });
     if (!item) throw new NotFoundException({ mensagem: 'Registro arquivado não encontrado.' });
     // dadosJson volta já desserializado; o snapshot nunca guarda credencial.
@@ -63,18 +75,40 @@ export class HistoricoArquivadoService {
     return { ...resto, dados };
   }
 
-  // Proxy autenticado: o arquivo desce pela API, com a permissão do sistema. Nunca é
-  // exposto por link público do Drive.
-  async baixar(id: string, usuarioId: string, papel: string) {
+  // Download SEMPRE autenticado pela API. A fonte é o ARQUIVO LOCAL permanente — que não
+  // depende do Drive nem das contas apagadas. O Drive só entra como último recurso, se a
+  // cópia local não estiver acessível.
+  //
+  // `documentoId` opcional: sem ele, baixa o documento final; com ele, um documento
+  // específico do mesmo registro arquivado (o vínculo é conferido).
+  async baixar(id: string, usuarioId: string, papel: string, documentoId?: string) {
     const item = await this.prisma.tccArquivado.findFirst({
       where: { id, ...this.filtroPorPapel(usuarioId, papel) },
+      include: { documentos: true },
     });
     if (!item) throw new NotFoundException({ mensagem: 'Registro arquivado não encontrado.' });
-    if (!item.driveArquivoFinalId) {
-      throw new NotFoundException({ mensagem: 'Este registro não tem documento final arquivado.' });
+
+    const doc = documentoId
+      ? item.documentos.find((d) => d.id === documentoId)
+      : (item.documentos.find((d) => d.ehFinal) ?? item.documentos[0]);
+
+    if (doc) {
+      const abs = join(process.cwd(), doc.caminho);
+      try {
+        return { conteudo: await fs.readFile(abs), nome: doc.nomeArquivo };
+      } catch {
+        // Cai para o Drive abaixo; o erro real é registrado por quem chama.
+      }
     }
-    const token = await this.drive.accessToken();
-    const conteudo = await baixarArquivo(token, item.driveArquivoFinalId);
-    return { conteudo, nome: item.driveArquivoFinalNome ?? 'documento' };
+    if (documentoId && !doc) {
+      throw new NotFoundException({ mensagem: 'Documento arquivado não encontrado neste registro.' });
+    }
+
+    if (item.driveArquivoFinalId) {
+      const token = await this.drive.accessToken();
+      const conteudo = await baixarArquivo(token, item.driveArquivoFinalId);
+      return { conteudo, nome: item.driveArquivoFinalNome ?? 'documento' };
+    }
+    throw new NotFoundException({ mensagem: 'Este registro não tem documento arquivado disponível.' });
   }
 }

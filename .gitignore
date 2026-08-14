@@ -3,6 +3,8 @@ dist/
 build/
 .env
 apps/api/uploads/
+# Arquivo permanente dos períodos encerrados (documentos reais; nunca versionar)
+apps/api/arquivo-permanente/
 *.local
 .DS_Store
 

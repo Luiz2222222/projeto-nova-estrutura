@@ -569,17 +569,53 @@ model TccArquivado {
   dadosJson   String
   resumoTexto String
 
-  // Ponteiros no Drive (sem link público: o download passa por proxy autenticado).
+  // Arquivo LOCAL permanente (a garantia do encerramento): pasta própria na VPS, fora de
+  // uploads/, com os documentos copiados e validados. É daqui que o Histórico serve os
+  // downloads — não depende do Drive nem das contas apagadas.
+  pastaArquivo   String?
+  arquivadoLocalEm DateTime?
+
+  // Ponteiros no Drive (cópia ADICIONAL e opcional; sem link público).
   drivePastaId          String?
   driveArquivoFinalId   String?
   driveArquivoFinalNome String?
 
   arquivadoEm DateTime @default(now())
 
+  documentos    DocumentoArquivado[]
   participantes TccArquivadoParticipante[]
 
   @@index([semestre])
   @@map("tccs_arquivados")
+}
+
+// Cópia permanente de um documento do TCC na área de arquivamento local. `sha256` e
+// `tamanho` são gravados na cópia e reconferidos antes de qualquer exclusão — é essa
+// validação que autoriza o encerramento a apagar os dados ativos.
+model DocumentoArquivado {
+  id          String       @id @default(cuid())
+  arquivado   TccArquivado @relation(fields: [arquivadoId], references: [id], onDelete: Cascade)
+  arquivadoId String
+
+  tipo        String
+  nomeArquivo String // nome original, mostrado ao usuário
+  versao      Int
+  status      String
+  caminho     String // caminho relativo do arquivo copiado (área de arquivamento)
+  tamanho     Int
+  sha256      String
+
+  // Documento acadêmico principal do TCC (versão final aprovada; sem ela, a monografia
+  // mais recente). É o que o Histórico oferece em destaque e o que vai para o Drive.
+  ehFinal Boolean @default(false)
+
+  // Preenchido só quando a cópia adicional no Drive existe.
+  driveId String?
+
+  criadoEm DateTime @default(now())
+
+  @@unique([arquivadoId, tipo, versao])
+  @@map("documentos_arquivados")
 }
 
 // Quem (professor/coordenador) participou do TCC arquivado. Só entram papéis cujas contas

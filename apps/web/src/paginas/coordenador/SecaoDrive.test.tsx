@@ -111,29 +111,63 @@ describe('Encerramento de período', () => {
     expect(botao).toBeEnabled();
   });
 
-  it('com pendências, o encerramento fica bloqueado', async () => {
-    await abrirPrevia({ ...previaBase, podeEncerrar: false, pendenciasSincronizacao: 4 });
+  // O Drive deixou de ser pré-requisito: pendência dele informa, mas não trava.
+  it('sem Drive conectado, avisa da cópia pendente e AINDA permite encerrar', async () => {
+    await abrirPrevia({ ...previaBase, conectadoAoDrive: false, pendenciasSincronizacao: 4 });
+    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
+
+    expect(screen.getByText(/cópia adicional no Drive ficará pendente/i)).toBeInTheDocument();
+    expect(screen.getByText(/não.*impede o encerramento/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Encerrar e arquivar período/i })).toBeEnabled();
+  });
+
+  it('explica que nada é apagado sem o arquivo local validado', async () => {
+    await abrirPrevia();
+    expect(screen.getByText(/arquivo permanente da VPS antes de qualquer exclusão/i)).toBeInTheDocument();
+  });
+
+  it('sem TCC no período, o botão fica bloqueado', async () => {
+    await abrirPrevia({ ...previaBase, tccs: 0, podeEncerrar: false });
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
     expect(screen.getByRole('button', { name: /Encerrar e arquivar período/i })).toBeDisabled();
-    expect(screen.getByText(/Resolva as pendências/i)).toBeInTheDocument();
+    expect(screen.getByText(/Não há TCC neste período/i)).toBeInTheDocument();
   });
 
-  it('confirmado, envia senha e confirmação e mostra o relatório', async () => {
-    apiPost.mockResolvedValue({
-      semestre: '2026.2',
-      tccsArquivados: 12,
-      tccsApagados: 12,
-      arquivosLocaisRemovidos: 40,
-      contasApagadas: ['Lucas'],
-      contasPreservadas: [],
-    });
+  const relatorio = (over: Record<string, unknown> = {}) => ({
+    semestre: '2026.2',
+    tccsArquivados: 12,
+    tccsApagados: 12,
+    arquivosLocaisRemovidos: 40,
+    contasApagadas: ['Lucas'],
+    contasPreservadas: [],
+    arquivadoLocalmente: true,
+    driveConectado: true,
+    copiaDrivePendente: 0,
+    ...over,
+  });
+
+  it('confirmado, envia senha e confirmação e informa o arquivamento local', async () => {
+    apiPost.mockResolvedValue(relatorio());
     await abrirPrevia();
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
     fireEvent.click(screen.getByRole('button', { name: /Encerrar e arquivar período/i }));
 
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/periodo/encerrar', { senha: 'minha-senha', confirmacao: 'ENCERRAR' }));
-    expect(await screen.findByText(/Período 2026.2 encerrado/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Período 2026.2 arquivado localmente/i)).toBeInTheDocument();
+  });
+
+  it('sem Drive, o relatório diz que só a cópia no Drive ficou pendente', async () => {
+    apiPost.mockResolvedValue(relatorio({ driveConectado: false, copiaDrivePendente: 12 }));
+    await abrirPrevia({ ...previaBase, conectadoAoDrive: false });
+    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
+    fireEvent.click(screen.getByRole('button', { name: /Encerrar e arquivar período/i }));
+
+    expect(await screen.findByText(/arquivado localmente/i)).toBeInTheDocument();
+    expect(screen.getByText(/Cópia no Google Drive pendente para 12 TCC/i)).toBeInTheDocument();
+    expect(screen.getByText(/arquivo local já está completo/i)).toBeInTheDocument();
   });
 });
