@@ -168,8 +168,21 @@ function prismaFalso() {
         Object.assign(i, data);
         return i;
       }),
-      findMany: vi.fn(async () => fila.filter((i) => ['PENDENTE', 'ERRO'].includes(i.status))),
-      updateMany: vi.fn(async () => ({ count: 0 })),
+      findMany: vi.fn(async () => fila.filter((i) => ['PENDENTE', 'ERRO', 'PROCESSANDO'].includes(i.status))),
+      // Espelha o updateMany CONDICIONAL do Prisma: é isso que dá a reserva atômica.
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        const item = fila.find((i) => i.id === where.id);
+        if (!item) return { count: 0 };
+        if (where.OR) {
+          const livre = ['PENDENTE', 'ERRO'].includes(item.status);
+          const travado =
+            item.status === 'PROCESSANDO' && item.reservadoEm && item.reservadoEm < where.OR[1].reservadoEm.lt;
+          if (!livre && !travado) return { count: 0 };
+        }
+        if (where.reservaId !== undefined && item.reservaId !== where.reservaId) return { count: 0 };
+        Object.assign(item, data);
+        return { count: 1 };
+      }),
       count: vi.fn(async () => 0),
     },
     driveArquivo: {
@@ -288,6 +301,116 @@ describe('Reconciliação diária (não depende de gancho lembrado)', () => {
     const p = prismaReconciliacao();
     const sync = new DriveSyncService(p, driveConectado(false));
     await expect(sync.reconciliar()).resolves.toEqual({ tccs: 0, documentos: 0 });
+  });
+});
+
+describe('Reserva atômica: dois workers nunca processam o mesmo item', () => {
+  // O dublê base já espelha o updateMany condicional (a reserva de verdade).
+  const prismaComReserva = prismaFalso;
+
+  it('o segundo worker não reprocessa o item já reservado', async () => {
+    const p = prismaComReserva();
+    const sync = new DriveSyncService(p, driveConectado());
+    await sync.enfileirar('t1', 'DADOS', 'DADOS');
+
+    const gravar = vi.spyOn(sync, 'gravarDados').mockResolvedValue(undefined);
+    // Duas rodadas simultâneas (worker automático + botão manual).
+    const [a, b] = await Promise.all([sync.processarPendentes(), sync.processarPendentes()]);
+
+    expect(gravar).toHaveBeenCalledTimes(1); // o arquivo subiu UMA vez
+    expect(a.processados + b.processados).toBe(1);
+  });
+
+  it('item travado (API reiniciou no meio) volta a ser reservável', async () => {
+    const p = prismaComReserva();
+    const sync = new DriveSyncService(p, driveConectado());
+    await sync.enfileirar('t1', 'DADOS', 'DADOS');
+    // Simula reserva antiga de um processo que morreu.
+    Object.assign(p._fila[0], {
+      status: 'PROCESSANDO',
+      reservaId: 'reserva-morta',
+      reservadoEm: new Date(Date.now() - 60 * 60 * 1000),
+    });
+
+    vi.spyOn(sync, 'gravarDados').mockResolvedValue(undefined);
+    const r = await sync.processarPendentes();
+
+    expect(r.processados).toBe(1);
+    expect(p._fila[0].status).toBe('CONCLUIDO');
+  });
+
+  it('item PROCESSANDO recente NÃO é roubado por outro worker', async () => {
+    const p = prismaComReserva();
+    const sync = new DriveSyncService(p, driveConectado());
+    await sync.enfileirar('t1', 'DADOS', 'DADOS');
+    Object.assign(p._fila[0], { status: 'PROCESSANDO', reservaId: 'em-uso', reservadoEm: new Date() });
+
+    const gravar = vi.spyOn(sync, 'gravarDados').mockResolvedValue(undefined);
+    const r = await sync.processarPendentes();
+
+    expect(gravar).not.toHaveBeenCalled();
+    expect(r.processados).toBe(0);
+    expect(p._fila[0].reservaId).toBe('em-uso');
+  });
+
+  it('atualização nova durante o envio NÃO é marcada como concluída pelo worker antigo', async () => {
+    const p = prismaComReserva();
+    const sync = new DriveSyncService(p, driveConectado());
+    await sync.enfileirar('t1', 'DADOS', 'DADOS');
+
+    // Enquanto o worker envia, chega uma alteração nova do mesmo TCC.
+    vi.spyOn(sync, 'gravarDados').mockImplementation(async () => {
+      await sync.enfileirar('t1', 'DADOS', 'DADOS');
+    });
+    const r = await sync.processarPendentes();
+
+    expect(r.processados).toBe(0); // a conclusão não casou: a reserva foi invalidada
+    expect(p._fila[0].status).toBe('PENDENTE'); // a atualização nova sobrevive
+  });
+});
+
+describe('Sincronização imediata (conectar / tentar novamente)', () => {
+  it('sincronizarAgora reenfileira, reconcilia e processa — nesta ordem', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [{ id: 't1' }]);
+    p.documentoTcc.findMany = vi.fn(async () => [{ id: 'mono1' }]);
+    p.syncDrive.updateMany = vi.fn(async () => ({ count: 0 }));
+    const sync = new DriveSyncService(p, driveConectado());
+
+    const ordem: string[] = [];
+    vi.spyOn(sync, 'reenfileirarErros').mockImplementation(async () => {
+      ordem.push('reenfileirar');
+      return 2;
+    });
+    const reconciliar = sync.reconciliar.bind(sync);
+    vi.spyOn(sync, 'reconciliar').mockImplementation(async () => {
+      ordem.push('reconciliar');
+      return reconciliar();
+    });
+    vi.spyOn(sync, 'processarPendentes').mockImplementation(async () => {
+      ordem.push('processar');
+      return { processados: 3, falhas: 0 };
+    });
+
+    const r = await sync.sincronizarAgora();
+
+    expect(ordem).toEqual(['reenfileirar', 'reconciliar', 'processar']);
+    expect(r).toMatchObject({ reenfileirados: 2, tccs: 1, documentos: 1, processados: 3 });
+  });
+
+  it('num sistema que já tem TCCs, conectar enfileira tudo na hora (sem esperar 24h)', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [{ id: 't1' }, { id: 't2' }]);
+    p.documentoTcc.findMany = vi.fn(async () => [{ id: 'mono1' }]);
+    p.syncDrive.updateMany = vi.fn(async () => ({ count: 0 }));
+    const sync = new DriveSyncService(p, driveConectado());
+    vi.spyOn(sync, 'processarPendentes').mockResolvedValue({ processados: 0, falhas: 0 });
+
+    const r = await sync.sincronizarAgora();
+
+    expect(r.tccs).toBe(2);
+    expect(r.documentos).toBe(2); // 1 documento por TCC, nenhum mapeado ainda
+    expect(p._fila.length).toBeGreaterThan(0);
   });
 });
 

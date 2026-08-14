@@ -4,6 +4,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { TccsService } from '../tccs/tccs.service';
 import { DefesasService } from '../bancas/defesas.service';
+import { BancasService } from '../bancas/bancas.service';
 import { BloqueioResetAntigo } from '../arquivo/bloqueio-reset-antigo';
 
 function driveEspiao() {
@@ -79,6 +80,63 @@ describe('DefesasService chama a fila após agendar/liberar', () => {
 
     await expect(s.liberarDefesaSeVencida('t1')).resolves.toBe(false);
     expect(drive.aoAlterarTcc).not.toHaveBeenCalled();
+  });
+});
+
+describe('BancasService: ações de validação da coordenação enfileiram o snapshot', () => {
+  // membro em fase de validação, com o TCC embutido (é assim que o service carrega).
+  function prismaMembro(status = 'ENVIADO') {
+    return {
+      membroBanca: {
+        findUnique: vi.fn().mockResolvedValue({
+          id: 'm1',
+          avaliadorId: 'av1',
+          status,
+          nota: 8,
+          banca: { id: 'b1', fase: 'FASE_1', tcc: { id: 't1', excluidoEm: null, faseAtual: 'VALIDACAO_FASE_1', titulo: 'T' } },
+          avaliador: { papel: 'PROFESSOR' },
+        }),
+        update: vi.fn().mockResolvedValue({}),
+      },
+    } as any;
+  }
+
+  function servico(p: any) {
+    const drive = driveEspiao();
+    const eventos = { emitirParaCoordenadores: vi.fn(), emitirParaUsuario: vi.fn() };
+    const prazos = { exigirEtapaLiberada: vi.fn(), bloqueiosDoTcc: vi.fn().mockResolvedValue({}) };
+    return { s: new BancasService(p, eventos as any, prazos as any, drive as any), drive };
+  }
+
+  it('aprovar avaliação individual enfileira', async () => {
+    const p = prismaMembro();
+    const { s, drive } = servico(p);
+    await s.aprovarAvaliacaoMembro('m1');
+    expect(drive.aoAlterarTcc).toHaveBeenCalledWith('t1');
+  });
+
+  it('solicitar ajuste enfileira', async () => {
+    const p = prismaMembro();
+    const { s, drive } = servico(p);
+    await s.solicitarAjuste('m1', 'refazer o critério 2');
+    expect(drive.aoAlterarTcc).toHaveBeenCalledWith('t1');
+  });
+
+  it('cancelar ajuste enfileira', async () => {
+    const p = prismaMembro('AJUSTE_SOLICITADO');
+    const { s, drive } = servico(p);
+    await s.cancelarAjuste('m1');
+    expect(drive.aoAlterarTcc).toHaveBeenCalledWith('t1');
+  });
+
+  it('o rascunho privado do avaliador NUNCA é mandado ao Drive', async () => {
+    const p = prismaMembro('AJUSTE_SOLICITADO');
+    const { s, drive } = servico(p);
+    await s.cancelarAjuste('m1');
+    // O gancho só pede a atualização do snapshot oficial (dados.json/resumo.txt) por tccId;
+    // não existe caminho que envie rascunho.
+    expect(drive.aoAlterarTcc).toHaveBeenCalledWith('t1');
+    expect(drive.aoEnviarDocumento).not.toHaveBeenCalled();
   });
 });
 

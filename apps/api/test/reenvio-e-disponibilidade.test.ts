@@ -57,7 +57,7 @@ beforeAll(async () => {
   }
   const prazos = new PrazosService(prisma as any);
   bancas = new BancasService(prisma as any, eventosSpy, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
-  tccs = new TccsService(prisma as any, eventosSpy, prazos);
+  tccs = new TccsService(prisma as any, eventosSpy, prazos, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
 });
 
 afterAll(async () => {

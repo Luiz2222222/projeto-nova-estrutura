@@ -40,7 +40,7 @@ beforeAll(async () => {
     const { PrismaClient: PrismaWasm } = (await import('@prisma/client/wasm' as any)) as any;
     prisma = new PrismaWasm({ adapter: new PrismaLibSQL(libsql) });
   }
-  servico = new TccsService(prisma as any, eventosStub, prazosStub);
+  servico = new TccsService(prisma as any, eventosStub, prazosStub, { aoAprovarAbertura: async () => {}, aoEnviarDocumento: async () => {}, aoAlterarTcc: async () => {} } as any);
 });
 
 afterAll(async () => {
