@@ -201,7 +201,7 @@ export function SecaoDrive() {
                 {relatorio.contasApagadas.length} conta(s) apagada(s).
                 <div style={{ marginTop: 6 }}>
                   {relatorio.driveConectado
-                    ? `Cópia adicional enviada ao Google Drive para ${relatorio.copiadoParaDrive} TCC(s).`
+                    ? `No Google Drive foi atualizado apenas o resumo de dados (dados.json e resumo.txt) de ${relatorio.snapshotEnviadoAoDrive} TCC(s) — os documentos lá dependem do que já havia sido sincronizado antes. A cópia completa é a da VPS.`
                     : 'Sem cópia no Google Drive (a integração não estava conectada). O arquivo permanente da VPS está completo e é a fonte do Histórico.'}
                 </div>
                 {relatorio.contasPreservadas?.length > 0 && (

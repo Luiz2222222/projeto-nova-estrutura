@@ -146,11 +146,22 @@ export class EncerramentoService {
     // TRAVA: criar a linha é a reserva atômica (semestre é único). A partir daqui, qualquer
     // criação/alteração de TCC ou documento deste semestre recebe 409.
     await this.travar(semestre, usuarioId);
+    // `publicado` vira true no INSTANTE em que a transação (histórico + exclusão + trava
+    // ENCERRADO) comita. Depois disso a trava NUNCA pode ser solta: o período realmente
+    // acabou, e apagar a linha reabriria um semestre cujos TCCs já não existem mais.
+    const estado = { publicado: false };
     try {
-      return await this.executar(semestre, driveConectado);
+      return await this.executar(semestre, driveConectado, estado);
     } catch (e) {
-      // Falhou: solta a trava para o sistema voltar ao normal (nada foi apagado).
-      await this.prisma.periodoEncerramento.deleteMany({ where: { semestre, status: 'ENCERRANDO' } });
+      if (!estado.publicado) {
+        // A transação não comitou: nada foi arquivado nem apagado. Solta a trava.
+        await this.prisma.periodoEncerramento.deleteMany({ where: { semestre, status: 'ENCERRANDO' } });
+      } else {
+        // Falha DEPOIS do commit (limpeza de arquivos/contas): o encerramento valeu.
+        this.logger.error(
+          `Período ${semestre} foi encerrado, mas a limpeza pós-transação falhou: ${(e as Error).message}`,
+        );
+      }
       throw e;
     }
   }
@@ -177,7 +188,7 @@ export class EncerramentoService {
     }
   }
 
-  private async executar(semestre: string, driveConectado: boolean) {
+  private async executar(semestre: string, driveConectado: boolean, estado: { publicado: boolean }) {
     const tccs = await this.prisma.tcc.findMany({
       where: { semestre },
       include: {
@@ -219,17 +230,21 @@ export class EncerramentoService {
 
     // 3) Drive: cópia ADICIONAL e oportunista, feita AGORA se estiver conectado — depois da
     // exclusão não há como reenviar (o TCC ativo e a fila somem). Nunca bloqueia.
+    //
+    // ATENÇÃO ao escopo: `gravarDados` sobe dados.json/resumo.txt — o SNAPSHOT. Os
+    // documentos só estão lá se a fila já os tinha enviado antes; este passo não os
+    // garante. Por isso contamos "snapshots enviados", não "cópia completa".
     let podados = 0;
-    let copiaDriveFalhou = 0;
+    let snapshotEnviado = 0;
     if (driveConectado) {
       for (const t of tccs) {
         try {
           await this.sync.garantirPastaTcc(t.id);
           await this.sync.gravarDados(t.id);
+          snapshotEnviado++;
           podados += await this.podarDrive(t.id);
         } catch (e) {
-          copiaDriveFalhou++;
-          this.logger.warn(`Cópia no Drive do TCC ${t.id} não foi concluída: ${(e as Error).message}`);
+          this.logger.warn(`Snapshot do TCC ${t.id} não foi enviado ao Drive: ${(e as Error).message}`);
         }
       }
     }
@@ -251,8 +266,19 @@ export class EncerramentoService {
         // Rollback: alguém mexeu no período apesar da trava.
         throw new Error(`esperado apagar ${idsArquivados.length} TCC(s), apagou ${count}`);
       }
+      // A trava vira ENCERRADO na MESMA transação: histórico, exclusão e fechamento do
+      // período são um fato único. Exigir exatamente 1 linha detecta uma trava que sumiu
+      // ou já mudou de estado — e aí tudo volta atrás.
+      const trava = await tx.periodoEncerramento.updateMany({
+        where: { semestre, status: 'ENCERRANDO' },
+        data: { status: 'ENCERRADO', concluidoEm: new Date() },
+      });
+      if (trava.count !== 1) {
+        throw new Error(`a trava do período ${semestre} não pôde ser fechada (${trava.count} linha(s) afetada(s))`);
+      }
       return count;
     });
+    estado.publicado = true; // daqui em diante a trava não pode mais ser solta
 
     let arquivosRemovidos = 0;
     for (const caminho of caminhos) {
@@ -289,13 +315,6 @@ export class EncerramentoService {
       }
     }
 
-    // Sucesso: a trava vira registro de período ENCERRADO (não é removida — é o que impede
-    // encerrar duas vezes e documenta quando aconteceu).
-    await this.prisma.periodoEncerramento.updateMany({
-      where: { semestre, status: 'ENCERRANDO' },
-      data: { status: 'ENCERRADO', concluidoEm: new Date() },
-    });
-
     this.logger.log(
       `Período ${semestre} encerrado: ${tccsApagados} TCC(s), ${contasApagadas.length} conta(s) apagada(s).`,
     );
@@ -307,11 +326,12 @@ export class EncerramentoService {
       arquivosPodadosNoDrive: podados,
       contasApagadas,
       contasPreservadas: contasPuladas,
-      // O arquivo local é a garantia — e está completo. Não existe (ainda) fila para
-      // reenviar ao Drive o que já foi arquivado, então NÃO prometemos cópia pendente.
+      // O arquivo local é a garantia — e está completo. No Drive, este passo garante só o
+      // SNAPSHOT de dados; os documentos dependem do que a fila já tinha enviado. Não
+      // existe fila para reenviar o que foi arquivado, então nada de prometer pendência.
       arquivadoLocalmente: true,
       driveConectado,
-      copiadoParaDrive: driveConectado ? tccs.length - copiaDriveFalhou : 0,
+      snapshotEnviadoAoDrive: snapshotEnviado,
     };
   }
 
@@ -506,12 +526,19 @@ export class EncerramentoService {
     const final = await this.arquivoFinal(tccId);
     const token = await this.drive.accessToken();
 
-    if (final && !(await arquivoValido(token, final.driveId))) {
+    // SEM documento final mapeado no Drive não se poda NADA. Antes, `final` nulo caía no
+    // caminho de poda e apagava os documentos intermediários — num encerramento que nunca
+    // confirmou cópia documental, isso destruiria a única cópia que existia lá.
+    if (!final) {
+      this.logger.warn(`TCC ${tccId}: sem documento final no Drive — poda cancelada (nada é apagado lá).`);
+      return 0;
+    }
+    if (!(await arquivoValido(token, final.driveId))) {
       this.logger.warn(`TCC ${tccId}: arquivo final não confirmado no Drive — poda cancelada.`);
       return 0;
     }
 
-    const manter = new Set(['DADOS_JSON', 'RESUMO_TXT', 'PASTA', ...(final ? [final.chave] : [])]);
+    const manter = new Set(['DADOS_JSON', 'RESUMO_TXT', 'PASTA', final.chave]);
     const arquivos = await this.prisma.driveArquivo.findMany({ where: { tccId } });
     let podados = 0;
     for (const a of arquivos) {

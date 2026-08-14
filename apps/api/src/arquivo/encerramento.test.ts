@@ -315,6 +315,73 @@ describe('Trava de encerramento por período', () => {
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
   });
 
+  // Item 2: fechar a trava faz parte da MESMA transação. Se ela não afetar exatamente uma
+  // linha, tudo volta atrás — nada de histórico publicado com TCC apagado pela metade.
+  it('trava que não fecha (0 linhas) faz rollback de TUDO', async () => {
+    const p = prismaFalso();
+    // A transação roda no dublê; simulamos a trava sumindo no meio do caminho.
+    p.periodoEncerramento.updateMany = vi.fn(async () => ({ count: 0 }));
+    // Faz o $transaction se comportar como transação: desfaz o que a callback gravou.
+    p.$transaction = async (fn: any) => {
+      const antesArq = p._arquivados.length;
+      const antesDocs = p._docsArquivados.length;
+      try {
+        return await fn(p);
+      } catch (e) {
+        p._arquivados.length = antesArq; // rollback
+        p._docsArquivados.length = antesDocs;
+        throw e;
+      }
+    };
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toBeTruthy();
+    expect(p._arquivados).toHaveLength(0); // histórico não ficou publicado
+    expect(p.usuario.delete).not.toHaveBeenCalled(); // contas intactas
+    expect(p._travas).toHaveLength(0); // trava ENCERRANDO foi solta
+  });
+
+  it('a trava é fechada DENTRO da transação, junto do histórico e da exclusão', async () => {
+    const p = prismaFalso();
+    const ordem: string[] = [];
+    p.$transaction = async (fn: any) => {
+      ordem.push('inicio-transacao');
+      const r = await fn(p);
+      ordem.push('fim-transacao');
+      return r;
+    };
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    // updateMany da trava aconteceu entre o início e o fim da transação.
+    expect(ordem).toEqual(['inicio-transacao', 'fim-transacao']);
+    expect(p.periodoEncerramento.updateMany).toHaveBeenCalled();
+    expect(p._travas[0].status).toBe('ENCERRADO');
+  });
+
+  it('falha DEPOIS do commit não solta a trava (o período foi encerrado de fato)', async () => {
+    const p = prismaFalso();
+    // Quebra SÓ na limpeza pós-transação: até o commit tudo funciona normalmente.
+    let comitou = false;
+    const transacaoOriginal = p.$transaction;
+    p.$transaction = async (fn: any) => {
+      const r = await transacaoOriginal(fn);
+      comitou = true;
+      return r;
+    };
+    p.tcc.count = vi.fn(async () => {
+      if (comitou) throw new Error('banco caiu na limpeza');
+      return 0;
+    });
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toBeTruthy();
+    // O histórico e a exclusão já estavam confirmados: a trava fica ENCERRADO.
+    expect(p._travas).toHaveLength(1);
+    expect(p._travas[0].status).toBe('ENCERRADO');
+    expect(p._arquivados).toHaveLength(1);
+  });
+
   it('apaga SOMENTE os ids arquivados, nunca por semestre', async () => {
     const p = prismaFalso();
     p.tcc.findMany = vi.fn(async () => [baseTcc({ id: 't1' }), baseTcc({ id: 't2' })]);
@@ -336,9 +403,34 @@ describe('Drive é opcional', () => {
 
     expect(r.arquivadoLocalmente).toBe(true);
     expect(r.driveConectado).toBe(false);
-    expect(r.copiadoParaDrive).toBe(0);
+    expect(r.snapshotEnviadoAoDrive).toBe(0);
     expect(r.tccsApagados).toBe(1); // apagou normalmente
     expect(p._docsArquivados).toHaveLength(1); // com o documento guardado localmente
+  });
+
+  // Item 3: o passo do Drive envia dados.json/resumo.txt — não garante os documentos.
+  it('com Drive conectado, informa quantos SNAPSHOTS foram enviados', async () => {
+    const p = prismaFalso();
+    const s = new EncerramentoService(p, driveFalso(true), syncFalso());
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(r.snapshotEnviadoAoDrive).toBe(1);
+    expect(r).not.toHaveProperty('copiadoParaDrive'); // nada de sugerir cópia completa
+  });
+
+  it('NUNCA poda o Drive quando não há documento final mapeado lá', async () => {
+    const p = prismaFalso();
+    // Nenhum DOC:* mapeado: não existe cópia documental confirmada no Drive.
+    p.driveArquivo.findUnique = vi.fn(async ({ where }: any) =>
+      where.tccId_chave.chave.startsWith('DOC:') ? null : { driveId: 'x', chave: where.tccId_chave.chave, nome: 'n' },
+    );
+    const { apagarArquivo } = await import('../drive/drive-api');
+    const s = new EncerramentoService(p, driveFalso(true), syncFalso());
+    const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(r.arquivosPodadosNoDrive).toBe(0);
+    expect(vi.mocked(apagarArquivo)).not.toHaveBeenCalled(); // nada apagado no Drive
+    expect(r.tccsApagados).toBe(1); // o encerramento local segue normalmente
   });
 
   it("falha do Drive não impede o encerramento", async () => {
@@ -350,7 +442,7 @@ describe('Drive é opcional', () => {
     const s = new EncerramentoService(p, driveFalso(), sync);
     const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
 
-    expect(r.copiadoParaDrive).toBe(0);
+    expect(r.snapshotEnviadoAoDrive).toBe(0);
     expect(r.tccsApagados).toBe(1);
   });
 

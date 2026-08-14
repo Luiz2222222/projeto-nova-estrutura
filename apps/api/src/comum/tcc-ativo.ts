@@ -2,21 +2,26 @@ import { ConflictException, NotFoundException } from '@nestjs/common';
 
 const MSG_ENCERRANDO =
   'Este período está sendo encerrado e arquivado pela coordenação. Nenhuma alteração é aceita até o processo terminar.';
+const MSG_ENCERRADO =
+  'Este período já foi encerrado e arquivado. Para novas atividades, a coordenação precisa configurar/selecionar outro semestre no Planejamento.';
 
-// Recusa (409) qualquer ação sobre um semestre que está sendo encerrado. Sem esta trava,
-// um TCC criado/alterado durante o encerramento poderia ser apagado sem ter sido arquivado.
+interface DbComTrava {
+  periodoEncerramento?: { findFirst: (args: any) => Promise<{ status: string } | null> };
+}
+
+// Recusa (409) qualquer ação sobre um semestre encerrado ou em encerramento.
 //
-// Custo: uma leitura de UMA linha. Quando não há encerramento em curso (o caso normal),
-// para por aqui e nem consulta o semestre do TCC.
-export async function exigirPeriodoAberto(
-  db: { periodoEncerramento?: { findFirst: (args: any) => Promise<{ semestre: string } | null> } },
-  semestre: string | null | undefined,
-): Promise<void> {
-  if (!db.periodoEncerramento) return; // dublês de teste que não modelam a trava
-  const travado = await db.periodoEncerramento.findFirst({ where: { status: 'ENCERRANDO' } });
-  if (travado && semestre && travado.semestre === semestre) {
-    throw new ConflictException({ mensagem: MSG_ENCERRANDO });
-  }
+//  ENCERRANDO → temporário: o arquivamento está rodando agora.
+//  ENCERRADO  → definitivo: o período saiu do ar; sem isto, um aluno ainda conseguiria
+//               abrir TCC num semestre já arquivado (se ele seguisse ativo no Planejamento).
+//
+// Custo: a leitura de UMA linha, direto pelo semestre.
+export async function exigirPeriodoAberto(db: DbComTrava, semestre: string | null | undefined): Promise<void> {
+  if (!db.periodoEncerramento || !semestre) return; // dublês de teste / sem semestre a checar
+  const trava = await db.periodoEncerramento.findFirst({ where: { semestre } });
+  if (!trava) return;
+  if (trava.status === 'ENCERRANDO') throw new ConflictException({ mensagem: MSG_ENCERRANDO });
+  if (trava.status === 'ENCERRADO') throw new ConflictException({ mensagem: MSG_ENCERRADO });
 }
 
 // Um TCC está "ativo" quando existe e NÃO tem soft delete (excluidoEm == null). É um TYPE
@@ -36,10 +41,7 @@ export function tccEstaAtivo<T extends { excluidoEm?: Date | null }>(
 // Aceita tanto o PrismaService quanto um client de transação (tx). `args` permite passar
 // include/select; o tipo de retorno é inferido do findUnique correspondente.
 export async function buscarTccAtivoOuFalhar<T extends { excluidoEm?: Date | null }>(
-  db: {
-    tcc: { findUnique: (args: any) => Promise<T | null> };
-    periodoEncerramento?: { findFirst: (args: any) => Promise<{ semestre: string } | null> };
-  },
+  db: { tcc: { findUnique: (args: any) => Promise<T | null> } } & DbComTrava,
   tccId: string,
   args: Record<string, any> = {},
 ): Promise<T> {
@@ -47,20 +49,16 @@ export async function buscarTccAtivoOuFalhar<T extends { excluidoEm?: Date | nul
   if (!tccEstaAtivo(tcc)) throw new NotFoundException({ mensagem: 'TCC não encontrado.' });
 
   // Este é o ponto por onde passam TODOS os fluxos que agem sobre um TCC por id, então é
-  // aqui que a trava de encerramento pega criação de documento, avaliação, edição, defesa
-  // etc. de uma vez só. `semestre` pode não vir no select do chamador — nesse caso é lido
-  // à parte, e só quando existe encerramento em curso.
-  const comSemestre = tcc as unknown as { semestre?: string };
-  if (comSemestre.semestre !== undefined) {
-    await exigirPeriodoAberto(db, comSemestre.semestre);
-  } else if (db.periodoEncerramento) {
-    const travado = await db.periodoEncerramento.findFirst({ where: { status: 'ENCERRANDO' } });
-    if (travado) {
-      const so = (await db.tcc.findUnique({ where: { id: tccId }, select: { semestre: true } } as any)) as unknown as
-        | { semestre?: string }
-        | null;
-      if (so?.semestre === travado.semestre) throw new ConflictException({ mensagem: MSG_ENCERRANDO });
-    }
+  // aqui que a trava pega criação de documento, avaliação, edição, defesa etc. de uma vez.
+  // `semestre` costuma vir junto (include traz os escalares); quando o chamador usou um
+  // select que o omite, buscamos só esse campo — em ambos os casos a MESMA regra vale.
+  let semestre = (tcc as unknown as { semestre?: string }).semestre;
+  if (semestre === undefined && db.periodoEncerramento) {
+    const so = (await db.tcc.findUnique({ where: { id: tccId }, select: { semestre: true } } as any)) as unknown as
+      | { semestre?: string }
+      | null;
+    semestre = so?.semestre;
   }
+  await exigirPeriodoAberto(db, semestre);
   return tcc; // narrowed para T pelo type guard
 }

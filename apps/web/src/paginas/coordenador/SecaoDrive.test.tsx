@@ -165,7 +165,7 @@ describe('Encerramento de período', () => {
     contasPreservadas: [],
     arquivadoLocalmente: true,
     driveConectado: true,
-    copiadoParaDrive: 12,
+    snapshotEnviadoAoDrive: 12,
     ...over,
   });
 
@@ -182,7 +182,7 @@ describe('Encerramento de período', () => {
 
   // Nada de prometer "cópia pendente": não existe fila que reenvie ao Drive depois.
   it('sem Drive, o relatório diz que NÃO houve cópia — sem prometer pendência', async () => {
-    apiPost.mockResolvedValue(relatorio({ driveConectado: false, copiadoParaDrive: 0 }));
+    apiPost.mockResolvedValue(relatorio({ driveConectado: false, snapshotEnviadoAoDrive: 0 }));
     await abrirPrevia({ ...previaBase, conectadoAoDrive: false });
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
@@ -194,13 +194,17 @@ describe('Encerramento de período', () => {
     expect(screen.queryByText(/pendente/i)).not.toBeInTheDocument();
   });
 
-  it('com Drive conectado, o relatório informa quantos foram copiados', async () => {
-    apiPost.mockResolvedValue(relatorio({ driveConectado: true, copiadoParaDrive: 12 }));
+  // O passo do Drive só atualiza dados.json/resumo.txt: a tela não pode dar a entender
+  // que os documentos foram todos para lá.
+  it('com Drive conectado, o relatório fala em SNAPSHOT, não em cópia completa', async () => {
+    apiPost.mockResolvedValue(relatorio({ driveConectado: true, snapshotEnviadoAoDrive: 12 }));
     await abrirPrevia();
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
     fireEvent.click(screen.getByRole('button', { name: /Encerrar e arquivar período/i }));
 
-    expect(await screen.findByText(/Cópia adicional enviada ao Google Drive para 12 TCC/i)).toBeInTheDocument();
+    expect(await screen.findByText(/apenas o resumo de dados/i)).toBeInTheDocument();
+    expect(screen.getByText(/A cópia completa é a da VPS/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Cópia adicional enviada/i)).not.toBeInTheDocument();
   });
 });
