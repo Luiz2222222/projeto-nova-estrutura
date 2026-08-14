@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { promises as fs } from 'fs';
 import { join, extname } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
@@ -11,6 +12,9 @@ import { ErroDrive, atualizarConteudo, buscarPorNome, criarPasta, enviarArquivo 
 // diária ainda reenfileira, então nada fica parado para sempre.
 const BACKOFF_MIN = [1, 5, 15, 60, 240, 1440];
 const LOTE = 10; // itens por rodada, para não segurar o worker
+// Item PROCESSANDO parado além disso é considerado travado (API reiniciou no meio do envio)
+// e volta a ser reservável. Folgado o bastante para não roubar um upload grande em curso.
+const TEMPO_TRAVADO_MS = 15 * 60 * 1000;
 
 const MIME_POR_EXT: Record<string, string> = {
   '.pdf': 'application/pdf',
@@ -52,7 +56,18 @@ export class DriveSyncService {
     await this.prisma.syncDrive.upsert({
       where: { tccId_chave: { tccId, chave } },
       create: { tccId, tipo, chave, documentoId: documentoId ?? null },
-      update: { tipo, documentoId: documentoId ?? null, status: 'PENDENTE', proximaTentativaEm: new Date(), ultimoErro: null },
+      // Zera a reserva de propósito: se um worker estiver enviando a versão anterior deste
+      // mesmo alvo, ele perde a dona da reserva e NÃO conseguirá marcar CONCLUIDO — a
+      // atualização nova continua pendente e será processada depois.
+      update: {
+        tipo,
+        documentoId: documentoId ?? null,
+        status: 'PENDENTE',
+        proximaTentativaEm: new Date(),
+        ultimoErro: null,
+        reservaId: null,
+        reservadoEm: null,
+      },
     });
   }
 
@@ -88,11 +103,38 @@ export class DriveSyncService {
 
   // ---------- Worker ----------
 
+  // Tenta RESERVAR o item: updateMany condicional que só casa se ele ainda está livre
+  // (PENDENTE/ERRO no prazo) ou travado há muito tempo (API reiniciou no meio do envio).
+  // Quem casa exatamente 1 linha é o dono; qualquer outro worker recebe count 0 e pula.
+  private async reservar(id: string, reservaId: string): Promise<boolean> {
+    const agora = new Date();
+    const limiteTravado = new Date(agora.getTime() - TEMPO_TRAVADO_MS);
+    const r = await this.prisma.syncDrive.updateMany({
+      where: {
+        id,
+        OR: [
+          { status: { in: ['PENDENTE', 'ERRO'] }, proximaTentativaEm: { lte: agora } },
+          // Recuperação: PROCESSANDO parado além do tempo limite volta a ser reservável.
+          { status: 'PROCESSANDO', reservadoEm: { lt: limiteTravado } },
+        ],
+      },
+      data: { status: 'PROCESSANDO', reservaId, reservadoEm: agora },
+    });
+    return r.count === 1;
+  }
+
   async processarPendentes(): Promise<{ processados: number; falhas: number }> {
     if (!(await this.drive.conectado())) return { processados: 0, falhas: 0 };
 
+    const agora = new Date();
+    const limiteTravado = new Date(agora.getTime() - TEMPO_TRAVADO_MS);
     const itens = await this.prisma.syncDrive.findMany({
-      where: { status: { in: ['PENDENTE', 'ERRO'] }, proximaTentativaEm: { lte: new Date() } },
+      where: {
+        OR: [
+          { status: { in: ['PENDENTE', 'ERRO'] }, proximaTentativaEm: { lte: agora } },
+          { status: 'PROCESSANDO', reservadoEm: { lt: limiteTravado } },
+        ],
+      },
       orderBy: { proximaTentativaEm: 'asc' },
       take: LOTE,
     });
@@ -100,20 +142,28 @@ export class DriveSyncService {
     let processados = 0;
     let falhas = 0;
     for (const item of itens) {
+      const reservaId = randomUUID();
+      if (!(await this.reservar(item.id, reservaId))) continue; // outro worker pegou
+
       try {
         await this.processarItem(item);
-        await this.prisma.syncDrive.update({
-          where: { id: item.id },
-          data: { status: 'CONCLUIDO', ultimoErro: null, tentativas: item.tentativas + 1 },
+        // Só conclui se a reserva ainda é NOSSA. Se uma alteração nova chegou durante o
+        // envio, o upsert do enfileirar já zerou a reserva e devolveu o item a PENDENTE —
+        // marcá-lo CONCLUIDO aqui apagaria essa atualização.
+        const concluiu = await this.prisma.syncDrive.updateMany({
+          where: { id: item.id, reservaId },
+          data: { status: 'CONCLUIDO', ultimoErro: null, tentativas: item.tentativas + 1, reservaId: null, reservadoEm: null },
         });
-        processados++;
+        // count 0 = a reserva foi invalidada por uma atualização nova: o item segue PENDENTE
+        // e NÃO conta como processado (o envio recém-feito já está obsoleto).
+        if (concluiu.count === 1) processados++;
       } catch (e) {
         falhas++;
         const erro = e as ErroDrive;
         const tentativas = item.tentativas + 1;
         const minutos = BACKOFF_MIN[Math.min(tentativas - 1, BACKOFF_MIN.length - 1)];
-        await this.prisma.syncDrive.update({
-          where: { id: item.id },
+        await this.prisma.syncDrive.updateMany({
+          where: { id: item.id, reservaId },
           data: {
             status: 'ERRO',
             tentativas,
@@ -121,6 +171,8 @@ export class DriveSyncService {
             // Erro permanente também reprograma (no maior intervalo): o coordenador vê a
             // pendência na tela e pode corrigir a causa e mandar tentar de novo.
             proximaTentativaEm: new Date(Date.now() + (erro.permanente ? 1440 : minutos) * 60_000),
+            reservaId: null,
+            reservadoEm: null,
           },
         });
         this.logger.warn(`Sync ${item.tipo} do TCC ${item.tccId} falhou: ${erro.message}`);
@@ -128,6 +180,16 @@ export class DriveSyncService {
     }
     if (itens.length) await this.drive.registrarSync(falhas ? `${falhas} item(ns) com erro` : undefined);
     return { processados, falhas };
+  }
+
+  // Sincronização SOB DEMANDA (ao conectar o Drive e no botão "tentar de novo"):
+  // reenfileira erros -> reconcilia o que existe -> processa a fila resultante. É isso que
+  // faz um sistema com TCCs antigos começar a subir na hora, sem esperar a varredura diária.
+  async sincronizarAgora(): Promise<{ reenfileirados: number; tccs: number; documentos: number; processados: number; falhas: number }> {
+    const reenfileirados = await this.reenfileirarErros();
+    const { tccs, documentos } = await this.reconciliar();
+    const { processados, falhas } = await this.processarPendentes();
+    return { reenfileirados, tccs, documentos, processados, falhas };
   }
 
   // Reconciliação diária dos TCCs ativos já aprovados: não depende de nenhum gancho ter sido
@@ -176,7 +238,7 @@ export class DriveSyncService {
   // Pendências para a tela do coordenador (sem vazar caminho de arquivo do servidor).
   async pendencias() {
     const itens = await this.prisma.syncDrive.findMany({
-      where: { status: { in: ['PENDENTE', 'ERRO'] } },
+      where: { status: { in: ['PENDENTE', 'PROCESSANDO', 'ERRO'] } },
       orderBy: [{ status: 'asc' }, { atualizadoEm: 'desc' }],
       take: 50,
       include: { tcc: { select: { titulo: true, semestre: true, aluno: { select: { nomeCompleto: true } } } } },

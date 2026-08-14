@@ -495,11 +495,18 @@ model SyncDrive {
   chave       String
   documentoId String?
 
-  // PENDENTE | CONCLUIDO | ERRO
+  // PENDENTE | PROCESSANDO | CONCLUIDO | ERRO
   status             String   @default("PENDENTE")
   tentativas         Int      @default(0)
   ultimoErro         String?
   proximaTentativaEm DateTime @default(now())
+
+  // Reserva atômica do item: quem consegue gravar o próprio `reservaId` (updateMany
+  // condicional que casa exatamente 1 linha) é o dono do processamento. Impede o worker
+  // automático e o botão "tentar de novo" de subirem o mesmo arquivo duas vezes.
+  // `reservadoEm` permite recuperar item travado se a API reiniciar no meio do envio.
+  reservaId   String?
+  reservadoEm DateTime?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt

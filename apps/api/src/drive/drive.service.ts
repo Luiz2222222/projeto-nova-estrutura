@@ -36,7 +36,8 @@ export class DriveService {
   async statusSeguro() {
     const c = await this.obterConfig();
     const [pendentes, comErro] = await Promise.all([
-      this.prisma.syncDrive.count({ where: { status: 'PENDENTE' } }),
+      // PROCESSANDO conta como pendente na tela: ainda não terminou.
+      this.prisma.syncDrive.count({ where: { status: { in: ['PENDENTE', 'PROCESSANDO'] } } }),
       this.prisma.syncDrive.count({ where: { status: 'ERRO' } }),
     ]);
     return {
