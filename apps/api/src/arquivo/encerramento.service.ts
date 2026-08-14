@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import * as bcrypt from 'bcryptjs';
@@ -7,7 +7,14 @@ import { DriveService } from '../drive/drive.service';
 import { DriveSyncService } from '../drive/drive-sync.service';
 import { apagarArquivo, arquivoValido } from '../drive/drive-api';
 import { resolverSemestreAtivo } from '../comum/semestre';
-import { FalhaArquivoLocal, copiarDocumentos, gravarSnapshot, validarArquivados } from './arquivo-local';
+import {
+  FalhaArquivoLocal,
+  copiarDocumentos,
+  gravarSnapshot,
+  validarArquivados,
+  type ArquivoSnapshot,
+  type DocumentoArquivadoLocal,
+} from './arquivo-local';
 
 // Papéis que PODEM ser apagados no encerramento. Professor e coordenador nunca entram aqui.
 const PAPEIS_APAGAVEIS = ['ALUNO', 'AVALIADOR'];
@@ -16,11 +23,19 @@ const PAPEIS_APAGAVEIS = ['ALUNO', 'AVALIADOR'];
 // ficam de fora: arquivar uma versão recusada como "a" versão do TCC seria um erro grave.
 const STATUS_PRESERVAVEIS = ['APROVADO', 'PENDENTE', 'EM_ANALISE'];
 
-// Estados da fila do Drive que contam como pendência e IMPEDEM encerrar o período.
-// PROCESSANDO entra aqui de propósito: um upload em curso ainda não terminou, então o
-// arquivo pode não estar completo no Drive — apagar agora arriscaria perder o documento.
-// Constante única para os dois pontos (prévia e encerramento) nunca divergirem.
+// Estados da fila do Drive que ainda não terminaram. Servem apenas para INFORMAR a tela:
+// desde que o arquivo local passou a ser a garantia, nenhum deles bloqueia o encerramento.
 const STATUS_SYNC_PENDENTE = ['PENDENTE', 'PROCESSANDO', 'ERRO'];
+
+// O que o estágio produz para cada TCC: tudo pronto em disco, nada gravado no banco ainda.
+interface PreparadoParaArquivar {
+  tccId: string;
+  titulo: string;
+  dadosArquivo: Record<string, unknown>;
+  documentos: DocumentoArquivadoLocal[];
+  arquivosSnapshot: ArquivoSnapshot[];
+  participantes: { usuarioId: string; papel: string }[];
+}
 
 // "Encerrar e arquivar período": arquiva no Drive + cria o histórico independente e só
 // então apaga TCCs, arquivos locais e contas de aluno/avaliador externo daquele período.
@@ -128,6 +143,41 @@ export class EncerramentoService {
     // O Drive NÃO é pré-requisito: a garantia do encerramento é o arquivo local permanente.
     const driveConectado = await this.drive.conectado();
 
+    // TRAVA: criar a linha é a reserva atômica (semestre é único). A partir daqui, qualquer
+    // criação/alteração de TCC ou documento deste semestre recebe 409.
+    await this.travar(semestre, usuarioId);
+    try {
+      return await this.executar(semestre, driveConectado);
+    } catch (e) {
+      // Falhou: solta a trava para o sistema voltar ao normal (nada foi apagado).
+      await this.prisma.periodoEncerramento.deleteMany({ where: { semestre, status: 'ENCERRANDO' } });
+      throw e;
+    }
+  }
+
+  private async travar(semestre: string, usuarioId: string): Promise<void> {
+    const jaExiste = await this.prisma.periodoEncerramento.findUnique({ where: { semestre } });
+    if (jaExiste) {
+      throw new ConflictException({
+        mensagem:
+          jaExiste.status === 'ENCERRADO'
+            ? `O período ${semestre} já foi encerrado.`
+            : `O período ${semestre} já está sendo encerrado por outra pessoa. Aguarde o processo terminar.`,
+      });
+    }
+    try {
+      await this.prisma.periodoEncerramento.create({
+        data: { semestre, status: 'ENCERRANDO', iniciadoPorId: usuarioId },
+      });
+    } catch {
+      // Corrida: outro coordenador criou a linha entre o findUnique e o create.
+      throw new ConflictException({
+        mensagem: `O período ${semestre} já está sendo encerrado por outra pessoa. Aguarde o processo terminar.`,
+      });
+    }
+  }
+
+  private async executar(semestre: string, driveConectado: boolean) {
     const tccs = await this.prisma.tcc.findMany({
       where: { semestre },
       include: {
@@ -140,13 +190,14 @@ export class EncerramentoService {
     });
     if (!tccs.length) throw new BadRequestException({ mensagem: `Nenhum TCC no período ${semestre}.` });
 
-    // 1) ARQUIVO LOCAL PERMANENTE — a garantia do encerramento. Copia snapshot e documentos
-    // para a área de arquivamento e VALIDA cada cópia (tamanho + sha256). Qualquer falha
-    // aborta tudo aqui, antes de existir qualquer exclusão.
-    const arquivados: string[] = [];
+    // 1) ESTÁGIO: copia snapshot e documentos de TODOS os TCCs para a área de arquivamento,
+    // conferindo tamanho e sha256 de cada cópia. NADA é gravado no banco ainda — assim uma
+    // falha no meio não deixa metade do período aparecendo no Histórico como arquivado
+    // enquanto os TCCs continuam ativos.
+    const preparados: PreparadoParaArquivar[] = [];
     for (const t of tccs) {
       try {
-        arquivados.push(await this.arquivar(t));
+        preparados.push(await this.prepararArquivo(t));
       } catch (e) {
         throw new BadRequestException({
           mensagem: `Falha ao arquivar localmente o TCC "${t.titulo}": ${(e as Error).message}. NADA foi apagado.`,
@@ -154,20 +205,22 @@ export class EncerramentoService {
       }
     }
 
-    // 2) REVALIDAÇÃO imediatamente antes de apagar: relê do disco tudo que foi arquivado.
-    // É esta checagem que autoriza a exclusão dos dados ativos.
+    // 2) REVALIDAÇÃO de tudo que foi para o disco — documentos E dados.json/resumo.txt —
+    // relendo do disco. É esta checagem que autoriza a exclusão dos dados ativos.
     try {
-      await this.revalidarArquivoLocal(tccs.map((t) => t.id));
+      for (const p of preparados) {
+        await validarArquivados(process.cwd(), [...p.documentos, ...p.arquivosSnapshot]);
+      }
     } catch (e) {
       throw new BadRequestException({
         mensagem: `Validação do arquivo local falhou: ${(e as Error).message}. NADA foi apagado.`,
       });
     }
 
-    // 3) Drive: cópia ADICIONAL e opcional. Nunca bloqueia — se estiver desconectado ou
-    // falhar, o encerramento segue e a tela informa que a cópia no Drive ficou pendente.
+    // 3) Drive: cópia ADICIONAL e oportunista, feita AGORA se estiver conectado — depois da
+    // exclusão não há como reenviar (o TCC ativo e a fila somem). Nunca bloqueia.
     let podados = 0;
-    let copiaDrivePendente = 0;
+    let copiaDriveFalhou = 0;
     if (driveConectado) {
       for (const t of tccs) {
         try {
@@ -175,20 +228,32 @@ export class EncerramentoService {
           await this.sync.gravarDados(t.id);
           podados += await this.podarDrive(t.id);
         } catch (e) {
-          copiaDrivePendente++;
-          this.logger.warn(`Cópia no Drive do TCC ${t.id} ficou pendente: ${(e as Error).message}`);
+          copiaDriveFalhou++;
+          this.logger.warn(`Cópia no Drive do TCC ${t.id} não foi concluída: ${(e as Error).message}`);
         }
       }
-    } else {
-      copiaDrivePendente = tccs.length;
     }
 
-    // 4) Agora sim: apagar TCCs (cascata leva documentos, bancas, fila e mapeamentos) e os
-    // arquivos ATIVOS de uploads/ — é isso que libera espaço. As cópias arquivadas ficam
-    // em outra pasta e não são tocadas.
+    // 4) PUBLICAÇÃO ATÔMICA: grava o histórico E apaga os TCCs na MESMA transação. Ou o
+    // período inteiro fica arquivado e sai do fluxo ativo, ou nada acontece — nunca um
+    // Histórico com TCCs que continuam ativos.
+    //
+    // A exclusão usa os IDs EXATOS que foram copiados e validados (nunca deleteMany por
+    // semestre): um TCC criado durante o processo — se a trava falhasse — não seria apagado.
     const { apagaveis, preservadas } = await this.classificarContas(tccs, semestre);
     const caminhos = tccs.flatMap((t) => t.documentos.map((d: any) => d.caminho));
-    const { count: tccsApagados } = await this.prisma.tcc.deleteMany({ where: { semestre } });
+    const idsArquivados = preparados.map((p) => p.tccId);
+
+    const tccsApagados = await this.prisma.$transaction(async (tx) => {
+      for (const p of preparados) await this.publicarArquivo(tx, p);
+      const { count } = await tx.tcc.deleteMany({ where: { id: { in: idsArquivados } } });
+      if (count !== idsArquivados.length) {
+        // Rollback: alguém mexeu no período apesar da trava.
+        throw new Error(`esperado apagar ${idsArquivados.length} TCC(s), apagou ${count}`);
+      }
+      return count;
+    });
+
     let arquivosRemovidos = 0;
     for (const caminho of caminhos) {
       try {
@@ -224,32 +289,46 @@ export class EncerramentoService {
       }
     }
 
+    // Sucesso: a trava vira registro de período ENCERRADO (não é removida — é o que impede
+    // encerrar duas vezes e documenta quando aconteceu).
+    await this.prisma.periodoEncerramento.updateMany({
+      where: { semestre, status: 'ENCERRANDO' },
+      data: { status: 'ENCERRADO', concluidoEm: new Date() },
+    });
+
     this.logger.log(
       `Período ${semestre} encerrado: ${tccsApagados} TCC(s), ${contasApagadas.length} conta(s) apagada(s).`,
     );
     return {
       semestre,
-      tccsArquivados: arquivados.length,
+      tccsArquivados: preparados.length,
       tccsApagados,
       arquivosLocaisRemovidos: arquivosRemovidos,
       arquivosPodadosNoDrive: podados,
       contasApagadas,
       contasPreservadas: contasPuladas,
-      // A tela usa isto para dizer "arquivado localmente" e, se for o caso, "cópia no Drive
-      // pendente" — sem sugerir que faltou backup.
+      // O arquivo local é a garantia — e está completo. Não existe (ainda) fila para
+      // reenviar ao Drive o que já foi arquivado, então NÃO prometemos cópia pendente.
       arquivadoLocalmente: true,
       driveConectado,
-      copiaDrivePendente,
+      copiadoParaDrive: driveConectado ? tccs.length - copiaDriveFalhou : 0,
     };
   }
 
-  // Grava o TccArquivado + participantes (só professor/coordenador, que nunca são apagados).
-  private async arquivar(tcc: any): Promise<string> {
+  // ESTÁGIO: só disco. Copia snapshot e documentos e devolve tudo que a publicação vai
+  // gravar. Nada toca o banco aqui — é o que permite abortar sem histórico pela metade.
+  private async prepararArquivo(tcc: any): Promise<PreparadoParaArquivar> {
     const { dados, resumo } = await this.sync.montarConteudo(tcc.id);
     const raiz = process.cwd();
 
     // 1) Snapshot legível + estruturado na pasta permanente do TCC.
-    const { pasta: pastaArquivo } = await gravarSnapshot(raiz, tcc.semestre, tcc.id, dados, resumo);
+    const { pasta: pastaArquivo, arquivos: arquivosSnapshot } = await gravarSnapshot(
+      raiz,
+      tcc.semestre,
+      tcc.id,
+      dados,
+      resumo,
+    );
 
     // 2) Cópia validada dos documentos. Versões substituídas/rejeitadas ficam de fora —
     // o histórico guarda o que vale, não o descartado.
@@ -294,22 +373,6 @@ export class EncerramentoService {
       driveArquivoFinalNome: final?.nome ?? null,
     };
 
-    const arquivado = await this.prisma.tccArquivado.upsert({
-      where: { tccIdOriginal: tcc.id },
-      create: { tccIdOriginal: tcc.id, ...dadosArquivo },
-      update: dadosArquivo,
-    });
-
-    // Documentos arquivados: upsert por (arquivado, tipo, versão) — reexecutar o
-    // encerramento atualiza em vez de duplicar.
-    for (const d of copiados) {
-      await this.prisma.documentoArquivado.upsert({
-        where: { arquivadoId_tipo_versao: { arquivadoId: arquivado.id, tipo: d.tipo, versao: d.versao } },
-        create: { arquivadoId: arquivado.id, ...d },
-        update: d,
-      });
-    }
-
     // Participantes preserváveis: orientador, coorientador interno e membros de banca que
     // sejam PROFESSOR (avaliador externo é apagado, então fica só no snapshot/texto).
     const participantes = new Map<string, string>();
@@ -322,9 +385,34 @@ export class EncerramentoService {
         }
       }
     }
-    // Idempotente também aqui: repetir o encerramento não duplica participante.
-    for (const [usuarioId, papel] of participantes) {
-      await this.prisma.tccArquivadoParticipante.upsert({
+
+    return {
+      tccId: tcc.id,
+      titulo: tcc.titulo,
+      dadosArquivo,
+      documentos: copiados,
+      arquivosSnapshot,
+      participantes: [...participantes].map(([usuarioId, papel]) => ({ usuarioId, papel })),
+    };
+  }
+
+  // PUBLICAÇÃO: grava o histórico dentro da transação que também apaga os TCCs ativos.
+  // Upserts em todos os níveis mantêm a retomada idempotente.
+  private async publicarArquivo(tx: any, p: PreparadoParaArquivar): Promise<string> {
+    const arquivado = await tx.tccArquivado.upsert({
+      where: { tccIdOriginal: p.tccId },
+      create: { tccIdOriginal: p.tccId, ...p.dadosArquivo },
+      update: p.dadosArquivo,
+    });
+    for (const d of p.documentos) {
+      await tx.documentoArquivado.upsert({
+        where: { arquivadoId_tipo_versao: { arquivadoId: arquivado.id, tipo: d.tipo, versao: d.versao } },
+        create: { arquivadoId: arquivado.id, ...d },
+        update: d,
+      });
+    }
+    for (const { usuarioId, papel } of p.participantes) {
+      await tx.tccArquivadoParticipante.upsert({
         where: { arquivadoId_usuarioId_papel: { arquivadoId: arquivado.id, usuarioId, papel } },
         create: { arquivadoId: arquivado.id, usuarioId, papel },
         update: {},

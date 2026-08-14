@@ -62,6 +62,26 @@ describe('Status da integração', () => {
     expect(screen.queryByRole('button', { name: /Conectar conta/i })).not.toBeInTheDocument();
   });
 
+  // O encerramento é garantido pelo arquivo local: não pode sumir junto com a integração.
+  it('SEM integração configurada, o encerramento continua visível e utilizável', async () => {
+    responder({ ...statusBase, configurado: false, conectado: false });
+    render(<SecaoDrive />);
+
+    expect(await screen.findByRole('heading', { name: 'Encerrar e arquivar período' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Ver impacto do encerramento/i })).toBeEnabled();
+  });
+
+  it('SEM integração, dá para abrir a prévia e chegar ao botão de encerrar', async () => {
+    responder({ ...statusBase, configurado: false, conectado: false }, { ...previaBase, conectadoAoDrive: false });
+    render(<SecaoDrive />);
+    fireEvent.click(await screen.findByRole('button', { name: /Ver impacto do encerramento/i }));
+
+    await screen.findByText(/Contas que serão apagadas/i);
+    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
+    expect(screen.getByRole('button', { name: /Encerrar e arquivar período/i })).toBeEnabled();
+  });
+
   it('desconectado oferece conectar; conectado oferece tentar novamente e desconectar', async () => {
     responder({ ...statusBase, conectado: false });
     const { unmount } = render(<SecaoDrive />);
@@ -111,14 +131,15 @@ describe('Encerramento de período', () => {
     expect(botao).toBeEnabled();
   });
 
-  // O Drive deixou de ser pré-requisito: pendência dele informa, mas não trava.
-  it('sem Drive conectado, avisa da cópia pendente e AINDA permite encerrar', async () => {
+  // O Drive deixou de ser pré-requisito, e a prévia avisa que depois não há como enviar.
+  it('sem Drive conectado, avisa que só a VPS guarda — e AINDA permite encerrar', async () => {
     await abrirPrevia({ ...previaBase, conectadoAoDrive: false, pendenciasSincronizacao: 4 });
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
 
-    expect(screen.getByText(/cópia adicional no Drive ficará pendente/i)).toBeInTheDocument();
-    expect(screen.getByText(/não.*impede o encerramento/i)).toBeInTheDocument();
+    // O texto é quebrado por <strong>, então casamos trechos contíguos.
+    expect(screen.getByText(/Google Drive não conectado/i)).toBeInTheDocument();
+    expect(screen.getByText(/não há como enviar estes TCCs ao Drive/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Encerrar e arquivar período/i })).toBeEnabled();
   });
 
@@ -144,7 +165,7 @@ describe('Encerramento de período', () => {
     contasPreservadas: [],
     arquivadoLocalmente: true,
     driveConectado: true,
-    copiaDrivePendente: 0,
+    copiadoParaDrive: 12,
     ...over,
   });
 
@@ -159,15 +180,27 @@ describe('Encerramento de período', () => {
     expect(await screen.findByText(/Período 2026.2 arquivado localmente/i)).toBeInTheDocument();
   });
 
-  it('sem Drive, o relatório diz que só a cópia no Drive ficou pendente', async () => {
-    apiPost.mockResolvedValue(relatorio({ driveConectado: false, copiaDrivePendente: 12 }));
+  // Nada de prometer "cópia pendente": não existe fila que reenvie ao Drive depois.
+  it('sem Drive, o relatório diz que NÃO houve cópia — sem prometer pendência', async () => {
+    apiPost.mockResolvedValue(relatorio({ driveConectado: false, copiadoParaDrive: 0 }));
     await abrirPrevia({ ...previaBase, conectadoAoDrive: false });
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
     fireEvent.click(screen.getByRole('button', { name: /Encerrar e arquivar período/i }));
 
     expect(await screen.findByText(/arquivado localmente/i)).toBeInTheDocument();
-    expect(screen.getByText(/Cópia no Google Drive pendente para 12 TCC/i)).toBeInTheDocument();
-    expect(screen.getByText(/arquivo local já está completo/i)).toBeInTheDocument();
+    expect(screen.getByText(/Sem cópia no Google Drive/i)).toBeInTheDocument();
+    expect(screen.getByText(/arquivo permanente da VPS está completo/i)).toBeInTheDocument();
+    expect(screen.queryByText(/pendente/i)).not.toBeInTheDocument();
+  });
+
+  it('com Drive conectado, o relatório informa quantos foram copiados', async () => {
+    apiPost.mockResolvedValue(relatorio({ driveConectado: true, copiadoParaDrive: 12 }));
+    await abrirPrevia();
+    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'x' } });
+    fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
+    fireEvent.click(screen.getByRole('button', { name: /Encerrar e arquivar período/i }));
+
+    expect(await screen.findByText(/Cópia adicional enviada ao Google Drive para 12 TCC/i)).toBeInTheDocument();
   });
 });

@@ -111,14 +111,23 @@ export async function copiarDocumentos(
   return saida;
 }
 
-// Grava dados.json e resumo.txt na pasta do TCC e confere que foram escritos.
+// Arquivo do snapshot com o que a revalidação precisa conferir depois.
+export interface ArquivoSnapshot {
+  caminho: string;
+  tamanho: number;
+  sha256: string;
+  nomeArquivo: string;
+}
+
+// Grava dados.json e resumo.txt na pasta do TCC, confere que foram escritos e devolve os
+// metadados — dados.json e resumo.txt entram na MESMA revalidação dos documentos.
 export async function gravarSnapshot(
   raiz: string,
   semestre: string,
   tccId: string,
   dados: unknown,
   resumo: string,
-): Promise<{ pasta: string }> {
+): Promise<{ pasta: string; arquivos: ArquivoSnapshot[] }> {
   const relPasta = pastaDoTcc(semestre, tccId);
   const absPasta = join(raiz, relPasta);
   await fs.mkdir(absPasta, { recursive: true });
@@ -127,6 +136,7 @@ export async function gravarSnapshot(
     ['dados.json', JSON.stringify(dados, null, 2)],
     ['resumo.txt', resumo],
   ];
+  const arquivos: ArquivoSnapshot[] = [];
   for (const [nome, conteudo] of alvos) {
     const abs = join(absPasta, nome);
     await fs.writeFile(abs, conteudo, 'utf8');
@@ -134,8 +144,10 @@ export async function gravarSnapshot(
     if (lido !== conteudo) {
       throw new FalhaArquivoLocal(`${nome} do TCC ${tccId} não foi gravado corretamente no arquivo local`);
     }
+    const st = await fs.stat(abs);
+    arquivos.push({ caminho: join(relPasta, nome), tamanho: st.size, sha256: await sha256Arquivo(abs), nomeArquivo: nome });
   }
-  return { pasta: relPasta };
+  return { pasta: relPasta, arquivos };
 }
 
 // REVALIDAÇÃO final, imediatamente antes de apagar: relê cada cópia do disco e confere

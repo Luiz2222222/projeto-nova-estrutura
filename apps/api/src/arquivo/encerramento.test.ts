@@ -72,9 +72,32 @@ function prismaFalso(over: Record<string, any> = {}) {
     tcc: {
       findMany: vi.fn(async () => [baseTcc()]),
       count: vi.fn(async () => 0),
-      deleteMany: vi.fn(async () => ({ count: 1 })),
+      // Só apaga os IDs exatos que a publicação mandar.
+      deleteMany: vi.fn(async ({ where }: any) => ({ count: where?.id?.in?.length ?? 0 })),
     },
     membroBanca: { count: vi.fn(async () => 0) },
+    // Trava de encerramento: `semestre` é único, então create falha se já existir.
+    _travas: [] as any[],
+    periodoEncerramento: {
+      findUnique: vi.fn(async ({ where }: any) => p._travas.find((t: any) => t.semestre === where.semestre) ?? null),
+      findFirst: vi.fn(async ({ where }: any) => p._travas.find((t: any) => t.status === where.status) ?? null),
+      create: vi.fn(async ({ data }: any) => {
+        if (p._travas.some((t: any) => t.semestre === data.semestre)) throw new Error('unique constraint');
+        const nova = { id: `pe${p._travas.length + 1}`, ...data };
+        p._travas.push(nova);
+        return nova;
+      }),
+      updateMany: vi.fn(async ({ where, data }: any) => {
+        const alvos = p._travas.filter((t: any) => t.semestre === where.semestre && t.status === where.status);
+        alvos.forEach((t: any) => Object.assign(t, data));
+        return { count: alvos.length };
+      }),
+      deleteMany: vi.fn(async ({ where }: any) => {
+        const antes = p._travas.length;
+        p._travas = p._travas.filter((t: any) => !(t.semestre === where.semestre && t.status === where.status));
+        return { count: antes - p._travas.length };
+      }),
+    },
     // Fila do Drive: `_statusNaFila` simula o que existe pendente, e o count respeita o
     // filtro de status recebido — é isso que faz o teste enxergar PROCESSANDO.
     _statusNaFila: [] as string[],
@@ -148,6 +171,8 @@ function prismaFalso(over: Record<string, any> = {}) {
     },
     ...over,
   };
+  // $transaction(fn) executa a callback com o próprio dublê como tx.
+  p.$transaction = async (fn: any) => fn(p);
   return p;
 }
 
@@ -216,36 +241,107 @@ describe('Travas antes de apagar', () => {
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
   });
 
-  it('falha na revalidação final ABORTA antes de apagar', async () => {
+  it('cópia corrompida entre o estágio e a validação ABORTA antes de apagar', async () => {
     const p = prismaFalso();
-    // O registro é gravado, mas a revalidação não encontra o arquivo (simula corrupção
-    // entre a cópia e a exclusão).
-    p.tccArquivado.findMany = vi.fn(async () => [
-      { id: 'a1', titulo: 'TCC de teste', documentos: [{ caminho: 'arquivo-permanente/x/y.pdf', tamanho: 10, sha256: 'abc', nomeArquivo: 'y.pdf' }] },
-    ]);
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    p.tcc.findMany = vi.fn(async () => [baseTcc({ id: 't1' }), baseTcc({ id: 't2' })]);
+
+    // Enquanto o 2º TCC é preparado, a cópia do 1º some do disco (falha de disco/limpeza
+    // externa). A revalidação precisa pegar isso ANTES de qualquer exclusão.
+    const sync = syncFalso();
+    sync.montarConteudo = vi.fn(async (tccId: string) => {
+      if (tccId === 't2') {
+        await fs.rm(join(raiz, 'arquivo-permanente', '2026.2', 't1'), { recursive: true, force: true });
+      }
+      return { dados: { tcc: { titulo: 'T' } }, resumo: 'resumo' };
+    });
+    const s = new EncerramentoService(p, driveFalso(), sync);
 
     await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
     expect(p.usuario.delete).not.toHaveBeenCalled();
   });
+
+  // Item 4: histórico parcial é pior que nenhum — se um TCC falha, NENHUM pode aparecer
+  // como arquivado enquanto todos continuam ativos.
+  it('falha no 2º TCC não publica o 1º no Histórico', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [baseTcc({ id: 't1' }), baseTcc({ id: 't2', documentos: [] })]);
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p._arquivados).toHaveLength(0); // nada publicado
+    expect(p._docsArquivados).toHaveLength(0);
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('falha solta a trava do período (sistema volta ao normal)', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [baseTcc({ documentos: [] })]);
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toBeTruthy();
+    expect(p._travas).toHaveLength(0); // destravado
+  });
+});
+
+// Item 3: nada pode ser criado/alterado no período enquanto ele é encerrado.
+describe('Trava de encerramento por período', () => {
+  it('marca o período como ENCERRANDO no início e ENCERRADO no fim', async () => {
+    const p = prismaFalso();
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    expect(p._travas).toHaveLength(1);
+    expect(p._travas[0]).toMatchObject({ semestre: '2026.2', status: 'ENCERRADO' });
+    expect(p._travas[0].concluidoEm).toBeInstanceOf(Date);
+  });
+
+  it('segundo coordenador simultâneo recebe 409 e não apaga nada', async () => {
+    const p = prismaFalso();
+    p._travas.push({ id: 'pe0', semestre: '2026.2', status: 'ENCERRANDO' }); // já em curso
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+
+    await expect(s.encerrar('c2', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 409 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+    expect(p._arquivados).toHaveLength(0);
+  });
+
+  it('período já encerrado não pode ser encerrado de novo', async () => {
+    const p = prismaFalso();
+    p._travas.push({ id: 'pe0', semestre: '2026.2', status: 'ENCERRADO' });
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 409 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it('apaga SOMENTE os ids arquivados, nunca por semestre', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => [baseTcc({ id: 't1' }), baseTcc({ id: 't2' })]);
+    const s = new EncerramentoService(p, driveFalso(false), syncFalso());
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+
+    const where = p.tcc.deleteMany.mock.calls[0][0].where;
+    expect(where.id.in.sort()).toEqual(['t1', 't2']);
+    expect(where).not.toHaveProperty('semestre'); // nunca apaga "tudo do semestre"
+  });
 });
 
 // O Drive é cópia ADICIONAL: sua ausência ou falha não pode impedir o encerramento.
 describe('Drive é opcional', () => {
-  it('SEM Drive conectado o encerramento acontece e marca a cópia como pendente', async () => {
+  it("SEM Drive conectado o encerramento acontece e o arquivo local fica completo", async () => {
     const p = prismaFalso();
     const s = new EncerramentoService(p, driveFalso(false), syncFalso());
     const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
 
     expect(r.arquivadoLocalmente).toBe(true);
     expect(r.driveConectado).toBe(false);
-    expect(r.copiaDrivePendente).toBe(1);
+    expect(r.copiadoParaDrive).toBe(0);
     expect(r.tccsApagados).toBe(1); // apagou normalmente
     expect(p._docsArquivados).toHaveLength(1); // com o documento guardado localmente
   });
 
-  it('falha do Drive não impede o encerramento (fica pendente)', async () => {
+  it("falha do Drive não impede o encerramento", async () => {
     const p = prismaFalso();
     const sync = syncFalso();
     sync.gravarDados = vi.fn(async () => {
@@ -254,7 +350,7 @@ describe('Drive é opcional', () => {
     const s = new EncerramentoService(p, driveFalso(), sync);
     const r = await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
 
-    expect(r.copiaDrivePendente).toBe(1);
+    expect(r.copiadoParaDrive).toBe(0);
     expect(r.tccsApagados).toBe(1);
   });
 
@@ -286,8 +382,8 @@ describe('Encerramento completo', () => {
     // Arquivou primeiro
     expect(p.tccArquivado.upsert).toHaveBeenCalled();
     expect(r.tccsArquivados).toBe(1);
-    // Apagou TCCs
-    expect(p.tcc.deleteMany).toHaveBeenCalledWith({ where: { semestre: '2026.2' } });
+    // Apagou pelos IDs exatos que foram arquivados
+    expect(p.tcc.deleteMany).toHaveBeenCalledWith({ where: { id: { in: ['t1'] } } });
     // Contas: aluno + avaliador externo SIM; professores NÃO
     expect(p._apagados.sort()).toEqual(['aluno1', 'ext1']);
     expect(p._apagados).not.toContain('prof1');
@@ -362,15 +458,26 @@ describe('Encerramento completo', () => {
     expect(vi.mocked(apagarArquivo).mock.calls[0][1]).toBe('i');
   });
 
-  it('retomar o encerramento não duplica histórico, participante nem documento', async () => {
+  // Retomada REAL: a 1ª tentativa falha (o Drive não interfere, mas o disco sim), a trava é
+  // solta, e a 2ª tentativa conclui — sem duplicar nada do que já tinha sido preparado.
+  it('retomar após falha não duplica histórico, participante nem documento', async () => {
     const p = prismaFalso();
-    const s = new EncerramentoService(p, driveFalso(), syncFalso());
-    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+    const sync = syncFalso();
+    let primeira = true;
+    sync.montarConteudo = vi.fn(async () => {
+      if (primeira) {
+        primeira = false;
+        throw new Error('falha temporária ao montar o snapshot');
+      }
+      return { dados: { tcc: { titulo: 'T' } }, resumo: 'resumo' };
+    });
+    const s = new EncerramentoService(p, driveFalso(), sync);
 
-    // Simula a retomada (interrupção antes de a limpeza terminar, ou um 2º coordenador):
-    // os arquivos de origem ainda existem e o encerramento roda de novo sobre o mesmo TCC.
-    await fs.writeFile(join(raiz, 'uploads', 'final.pdf'), 'conteudo da versao final');
-    await s.encerrar('c1', 'senha-certa', 'ENCERRAR');
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toBeTruthy();
+    expect(p._travas).toHaveLength(0); // trava solta após a falha
+    expect(p._arquivados).toHaveLength(0); // nada publicado na tentativa que falhou
+
+    await s.encerrar('c1', 'senha-certa', 'ENCERRAR'); // 2ª tentativa conclui
 
     expect(p._arquivados).toHaveLength(1); // upsert por tccIdOriginal
     expect(p._participantes).toHaveLength(2); // prof1 + prof2, sem repetição

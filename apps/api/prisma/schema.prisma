@@ -589,6 +589,26 @@ model TccArquivado {
   @@map("tccs_arquivados")
 }
 
+// Trava PERSISTENTE de encerramento por período. Enquanto existe uma linha ENCERRANDO,
+// nenhuma criação/alteração de TCC ou documento daquele semestre é aceita (409) — sem isso,
+// um TCC criado no meio do processo seria apagado sem ter sido arquivado.
+//
+// `semestre` é único: é a própria criação da linha que serve de reserva atômica (duas
+// tentativas simultâneas → a segunda esbarra na constraint). Falha remove a linha;
+// sucesso muda para ENCERRADO.
+model PeriodoEncerramento {
+  id       String @id @default(cuid())
+  semestre String @unique
+
+  // ENCERRANDO | ENCERRADO
+  status       String    @default("ENCERRANDO")
+  iniciadoPorId String?
+  iniciadoEm   DateTime  @default(now())
+  concluidoEm  DateTime?
+
+  @@map("periodos_encerramento")
+}
+
 // Cópia permanente de um documento do TCC na área de arquivamento local. `sha256` e
 // `tamanho` são gravados na cópia e reconferidos antes de qualquer exclusão — é essa
 // validação que autoriza o encerramento a apagar os dados ativos.

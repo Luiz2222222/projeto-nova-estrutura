@@ -129,9 +129,12 @@ export function SecaoDrive() {
       {!status ? (
         <p className="nota-vazio">Carregando…</p>
       ) : !status.configurado ? (
+        // Integração indisponível NÃO esconde o encerramento: ele é garantido pelo arquivo
+        // local e precisa funcionar sem Drive nenhum.
         <div className="alerta-aviso bloco">
           <strong>Integração não configurada no servidor.</strong> Defina <code>GOOGLE_CLIENT_ID</code>,{' '}
-          <code>GOOGLE_CLIENT_SECRET</code> e <code>DRIVE_CRYPTO_SEGREDO</code> no <code>.env</code> da API.
+          <code>GOOGLE_CLIENT_SECRET</code> e <code>DRIVE_CRYPTO_SEGREDO</code> no <code>.env</code> da API. O
+          encerramento de período abaixo continua funcionando: ele arquiva tudo na própria VPS.
         </div>
       ) : (
         <>
@@ -175,13 +178,19 @@ export function SecaoDrive() {
               </>
             )}
           </div>
+        </>
+      )}
 
+      {/* Encerramento SEMPRE visível: não depende de o Drive estar configurado nem conectado. */}
+      {status && (
+        <>
           <div className="config-grupo" style={{ marginTop: 18 }}>
             <h3>Encerrar e arquivar período</h3>
             <p className="legenda" style={{ marginBottom: 8 }}>
-              Arquiva os TCCs do período no Drive e no histórico do sistema e, só então, apaga os TCCs,
-              os arquivos locais e as contas de alunos e avaliadores externos daquele período. Professores
-              e coordenadores nunca são apagados.
+              Arquiva os TCCs do período no arquivo permanente da VPS (dados, notas, pareceres e documentos)
+              e no histórico do sistema. Só depois de a cópia ser validada é que os TCCs saem do fluxo ativo
+              e as contas de alunos e avaliadores externos são apagadas. Professores e coordenadores nunca
+              são apagados.
             </p>
 
             {relatorio && (
@@ -190,13 +199,11 @@ export function SecaoDrive() {
                 guardado(s) no arquivo permanente da VPS (dados e documentos), {relatorio.tccsApagados} removido(s) do
                 fluxo ativo, {relatorio.arquivosLocaisRemovidos} arquivo(s) de trabalho liberado(s),{' '}
                 {relatorio.contasApagadas.length} conta(s) apagada(s).
-                {relatorio.copiaDrivePendente > 0 && (
-                  <div style={{ marginTop: 6 }}>
-                    Cópia no Google Drive pendente para {relatorio.copiaDrivePendente} TCC(s)
-                    {!relatorio.driveConectado ? ' (Drive não conectado)' : ''}. O arquivo local já está completo — a
-                    cópia no Drive é adicional.
-                  </div>
-                )}
+                <div style={{ marginTop: 6 }}>
+                  {relatorio.driveConectado
+                    ? `Cópia adicional enviada ao Google Drive para ${relatorio.copiadoParaDrive} TCC(s).`
+                    : 'Sem cópia no Google Drive (a integração não estava conectada). O arquivo permanente da VPS está completo e é a fonte do Histórico.'}
+                </div>
                 {relatorio.contasPreservadas?.length > 0 && (
                   <div style={{ marginTop: 6 }}>
                     Preservadas: {relatorio.contasPreservadas.map((c: any) => `${c.nome} (${c.motivo})`).join('; ')}
@@ -222,8 +229,8 @@ export function SecaoDrive() {
                     </div>
                     {!previa.conectadoAoDrive && (
                       <div style={{ marginTop: 6 }}>
-                        Google Drive não conectado: a cópia adicional no Drive ficará pendente. Isso <strong>não</strong>{' '}
-                        impede o encerramento.
+                        Google Drive não conectado: o período será arquivado <strong>somente</strong> na VPS. Isso não
+                        impede o encerramento — mas depois dele não há como enviar estes TCCs ao Drive.
                       </div>
                     )}
                     {previa.conectadoAoDrive && previa.pendenciasSincronizacao > 0 && (

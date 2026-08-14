@@ -15,7 +15,7 @@ import { DriveSyncService } from '../drive/drive-sync.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
 import { sanitizarNotasTcc, ocultarRascunho, FASES_NOTAS_LIBERADAS } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo, FORMATO_SEMESTRE } from '../comum/semestre';
-import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
+import { buscarTccAtivoOuFalhar, exigirPeriodoAberto } from '../comum/tcc-ativo';
 import { conteudoCompativel } from '../comum/assinatura-arquivo';
 import { FASES, ROTULO_FASE, arquivoPermitidoParaTipo, formatoDoTipoDoc, PESO_NF1, PESO_NF2, aprovadoFase1, aprovadoFinal, CRITERIOS_FASE1, CRITERIOS_FASE2, colunaNota } from '@tcc/compartilhado';
 import type { DadosAbrirTcc, DadosEditarTcc, DadosEditarDocumento } from '@tcc/compartilhado';
@@ -622,6 +622,10 @@ export class TccsService {
 
   async abrir(alunoId: string, dados: DadosAbrirTcc) {
     const semestre = await resolverSemestreAtivo(this.prisma);
+    // Abertura NÃO passa por buscarTccAtivoOuFalhar (não existe TCC ainda), então a trava de
+    // encerramento entra explicitamente aqui: senão um TCC novo nasceria no meio do
+    // arquivamento e seria apagado sem ter sido arquivado.
+    await exigirPeriodoAberto(this.prisma, semestre);
 
     const jaTem = await this.prisma.tcc.findUnique({
       where: { alunoId_semestre: { alunoId, semestre } },
