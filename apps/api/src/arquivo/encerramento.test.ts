@@ -60,7 +60,15 @@ function prismaFalso(over: Record<string, any> = {}) {
       deleteMany: vi.fn(async () => ({ count: 1 })),
     },
     membroBanca: { count: vi.fn(async () => 0) },
-    syncDrive: { count: vi.fn(async () => 0) },
+    // Fila do Drive: `_statusNaFila` simula o que existe pendente, e o count respeita o
+    // filtro de status recebido — é isso que faz o teste enxergar PROCESSANDO.
+    _statusNaFila: [] as string[],
+    syncDrive: {
+      count: vi.fn(async ({ where }: any = {}) => {
+        const filtro: string[] = where?.status?.in ?? [];
+        return p._statusNaFila.filter((s: string) => filtro.includes(s)).length;
+      }),
+    },
     documentoTcc: {
       // Documento preservável padrão: versão final APROVADA.
       findMany: vi.fn(async () => [
@@ -159,10 +167,31 @@ describe('Travas antes de apagar', () => {
   });
 
   it('pendência na fila bloqueia o encerramento', async () => {
-    const p = prismaFalso({ syncDrive: { count: vi.fn(async () => 3) } });
+    const p = prismaFalso();
+    p._statusNaFila = ['PENDENTE', 'ERRO', 'PENDENTE'];
     const s = new EncerramentoService(p, driveFalso(), syncFalso());
     await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
+  });
+
+  // Um upload em curso não garante que o arquivo esteja completo no Drive: enquanto houver
+  // PROCESSANDO, nada pode ser apagado e a tela não pode dizer que dá para encerrar.
+  it('item PROCESSANDO bloqueia o encerramento e NÃO apaga nada', async () => {
+    const p = prismaFalso();
+    p._statusNaFila = ['PROCESSANDO'];
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).rejects.toMatchObject({ status: 400 });
+    expect(p.tcc.deleteMany).not.toHaveBeenCalled(); // nenhum TCC apagado
+    expect(p.usuario.delete).not.toHaveBeenCalled(); // nenhuma conta apagada
+    expect(p.tccArquivado.upsert).not.toHaveBeenCalled(); // nem chegou a arquivar
+  });
+
+  it('fila vazia libera o encerramento', async () => {
+    const p = prismaFalso();
+    p._statusNaFila = [];
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    await expect(s.encerrar('c1', 'senha-certa', 'ENCERRAR')).resolves.toMatchObject({ tccsApagados: 1 });
   });
 });
 
@@ -353,6 +382,35 @@ describe('Prévia de impacto (não muda nada)', () => {
     expect(p.tcc.deleteMany).not.toHaveBeenCalled();
     expect(p.tccArquivado.upsert).not.toHaveBeenCalled();
     expect(p.usuario.delete).not.toHaveBeenCalled();
+  });
+
+  it('com item PROCESSANDO, a prévia diz que NÃO dá para encerrar', async () => {
+    const p = prismaFalso();
+    p._statusNaFila = ['PROCESSANDO'];
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    const r = await s.previa();
+
+    expect(r.pendenciasSincronizacao).toBe(1);
+    expect(r.podeEncerrar).toBe(false);
+  });
+
+  it('com a fila limpa e o Drive conectado, a prévia libera o encerramento', async () => {
+    const p = prismaFalso();
+    p._statusNaFila = [];
+    const s = new EncerramentoService(p, driveFalso(), syncFalso());
+    const r = await s.previa();
+
+    expect(r.pendenciasSincronizacao).toBe(0);
+    expect(r.podeEncerrar).toBe(true);
+  });
+
+  it('cada estado pendente da fila (inclusive PROCESSANDO) trava a prévia', async () => {
+    for (const estado of ['PENDENTE', 'PROCESSANDO', 'ERRO']) {
+      const p = prismaFalso();
+      p._statusNaFila = [estado];
+      const r = await new EncerramentoService(p, driveFalso(), syncFalso()).previa();
+      expect(r.podeEncerrar, `estado ${estado} deveria travar`).toBe(false);
+    }
   });
 });
 

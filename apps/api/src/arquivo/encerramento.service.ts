@@ -15,6 +15,12 @@ const PAPEIS_APAGAVEIS = ['ALUNO', 'AVALIADOR'];
 // ficam de fora: arquivar uma versão recusada como "a" versão do TCC seria um erro grave.
 const STATUS_PRESERVAVEIS = ['APROVADO', 'PENDENTE', 'EM_ANALISE'];
 
+// Estados da fila do Drive que contam como pendência e IMPEDEM encerrar o período.
+// PROCESSANDO entra aqui de propósito: um upload em curso ainda não terminou, então o
+// arquivo pode não estar completo no Drive — apagar agora arriscaria perder o documento.
+// Constante única para os dois pontos (prévia e encerramento) nunca divergirem.
+const STATUS_SYNC_PENDENTE = ['PENDENTE', 'PROCESSANDO', 'ERRO'];
+
 // "Encerrar e arquivar período": arquiva no Drive + cria o histórico independente e só
 // então apaga TCCs, arquivos locais e contas de aluno/avaliador externo daquele período.
 //
@@ -44,7 +50,7 @@ export class EncerramentoService {
     });
 
     const pendencias = await this.prisma.syncDrive.count({
-      where: { status: { in: ['PENDENTE', 'ERRO'] }, tcc: { semestre } },
+      where: { status: { in: STATUS_SYNC_PENDENTE }, tcc: { semestre } },
     });
 
     const { apagaveis, preservadas } = await this.classificarContas(tccs, semestre);
@@ -145,7 +151,7 @@ export class EncerramentoService {
 
     // 2) Só depois da sincronização conferimos a fila: nada pode ficar pendente.
     const pendencias = await this.prisma.syncDrive.count({
-      where: { status: { in: ['PENDENTE', 'ERRO'] }, tcc: { semestre } },
+      where: { status: { in: STATUS_SYNC_PENDENTE }, tcc: { semestre } },
     });
     if (pendencias > 0) {
       throw new BadRequestException({
