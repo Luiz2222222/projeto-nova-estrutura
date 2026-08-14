@@ -155,7 +155,14 @@ export class EmailService {
     smtpSecure?: boolean;
     smtpRemetente?: string | null;
     smtpUsuario?: string | null; // e-mail remetente (único campo de identidade editável)
-    smtpSenha?: string; // texto puro do form; vazio/ausente = mantém a senha atual
+    smtpSenha?: string; // texto puro do form; só usado quando a ação é SUBSTITUIR
+    // Ação EXPLÍCITA sobre a senha. Existe porque "campo vazio" é ambíguo: pode ser
+    // "não mexi" ou "apaguei de propósito". Nunca inferimos pela máscara de pontos da
+    // tela — ela é enfeite visual e jamais chega aqui.
+    //   MANTER (padrão) → não toca na senha guardada
+    //   SUBSTITUIR      → grava a nova senha (exige smtpSenha preenchida)
+    //   REMOVER         → apaga a senha guardada
+    acaoSenha?: 'MANTER' | 'SUBSTITUIR' | 'REMOVER';
   }) {
     const atual = await this.obterConfig(); // garante a linha
     const data: Record<string, unknown> = {};
@@ -186,17 +193,30 @@ export class EmailService {
             erros: [{ campo: 'smtpUsuario', mensagem: 'E-mail inválido' }],
           });
         }
-        // Senha de app é obrigatória no primeiro cadastro E sempre que o e-mail muda (a senha
-        // de app é vinculada à conta: manter a antiga com outro e-mail nunca autenticaria).
-        const trocouEmail = (atual.smtpUsuario ?? '') !== email;
-        const precisaSenha = trocouEmail || !atual.smtpSenhaCriptografada;
-        if (precisaSenha && !senha) {
-          throw new BadRequestException({
-            mensagem: trocouEmail
-              ? 'Ao trocar o e-mail remetente, informe a senha de app da nova conta.'
-              : 'Informe a senha de app para ativar o envio de e-mails.',
-            erros: [{ campo: 'smtpSenha', mensagem: 'Senha de app obrigatória' }],
-          });
+        const acao = dados.acaoSenha ?? 'MANTER';
+        if (acao === 'REMOVER') {
+          // Remoção deliberada: apaga a senha guardada e não exige nova.
+          data.smtpSenhaCriptografada = null;
+        } else {
+          if (acao === 'SUBSTITUIR' && !senha) {
+            throw new BadRequestException({
+              mensagem: 'Informe a nova senha de app.',
+              erros: [{ campo: 'smtpSenha', mensagem: 'Senha de app obrigatória' }],
+            });
+          }
+          // Senha de app é obrigatória no primeiro cadastro E sempre que o e-mail muda (a
+          // senha de app é vinculada à conta: manter a antiga com outro e-mail nunca
+          // autenticaria).
+          const trocouEmail = (atual.smtpUsuario ?? '') !== email;
+          const precisaSenha = trocouEmail || !atual.smtpSenhaCriptografada;
+          if (precisaSenha && !senha) {
+            throw new BadRequestException({
+              mensagem: trocouEmail
+                ? 'Ao trocar o e-mail remetente, informe a senha de app da nova conta.'
+                : 'Informe a senha de app para ativar o envio de e-mails.',
+              erros: [{ campo: 'smtpSenha', mensagem: 'Senha de app obrigatória' }],
+            });
+          }
         }
         data.smtpUsuario = email;
         data.smtpRemetente = email; // remetente = o próprio e-mail informado
@@ -206,9 +226,10 @@ export class EmailService {
       }
     }
 
-    // Senha: só atualiza se vier preenchida; vazia/ausente → mantém a atual. Se o e-mail foi
-    // apagado (desligou), a senha já foi zerada acima e não deve ser regravada.
-    if (!desligou && typeof dados.smtpSenha === 'string' && dados.smtpSenha.length > 0) {
+    // Grava a nova senha SÓ quando a ação foi SUBSTITUIR. Se o e-mail foi apagado
+    // (desligou) ou a ação foi REMOVER, a senha já virou null acima e não é regravada.
+    const querSubstituir = dados.acaoSenha === 'SUBSTITUIR' || (dados.acaoSenha === undefined && !!dados.smtpSenha);
+    if (!desligou && data.smtpSenhaCriptografada !== null && querSubstituir && dados.smtpSenha) {
       data.smtpSenhaCriptografada = this.criptografar(dados.smtpSenha);
     }
     await this.prisma.configuracaoEmail.update({ where: { id: 'global' }, data });

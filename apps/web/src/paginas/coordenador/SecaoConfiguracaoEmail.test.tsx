@@ -78,21 +78,105 @@ describe('Campos visíveis', () => {
   });
 });
 
-describe('Envio ao backend', () => {
-  it('manda SÓ smtpUsuario e smtpSenha', async () => {
+const MASCARA = '••••••••••••';
+const salvar = () => fireEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }));
+const corpoEnviado = () => apiPut.mock.calls[0][1] as Record<string, unknown>;
+
+describe('Campo mascarado: manter, substituir ou remover', () => {
+  it('com senha salva, o campo aparece mascarado (nunca vazio)', async () => {
+    await montar();
+    expect(campoSenha()).toHaveValue(MASCARA);
+  });
+
+  it('sem senha salva, o campo fica realmente vazio', async () => {
+    await montar({ ...config, temSenha: false });
+    expect(campoSenha()).toHaveValue('');
+  });
+
+  it('não tocar no campo = MANTER, e a máscara NÃO é enviada', async () => {
     await montar();
     fireEvent.change(screen.getByLabelText('E-mail remetente'), { target: { value: 'novo@ufpe.br' } });
-    fireEvent.change(campoSenha(), { target: { value: 'senha-app-ficticia' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }));
+    salvar();
 
     await waitFor(() => expect(apiPut).toHaveBeenCalled());
-    const [rota, corpo] = apiPut.mock.calls[0];
-    expect(rota).toBe('/email-config');
-    expect(Object.keys(corpo as object).sort()).toEqual(['smtpSenha', 'smtpUsuario']);
-    expect(corpo).not.toHaveProperty('smtpHost');
-    expect(corpo).not.toHaveProperty('smtpPort');
-    expect(corpo).not.toHaveProperty('smtpSecure');
-    expect(corpo).not.toHaveProperty('smtpRemetente');
+    const corpo = corpoEnviado();
+    expect(corpo).toEqual({ smtpUsuario: 'novo@ufpe.br', acaoSenha: 'MANTER' });
+    expect(corpo).not.toHaveProperty('smtpSenha');
+    expect(JSON.stringify(corpo)).not.toContain('•');
+  });
+
+  it('focar limpa a máscara para digitar por cima', async () => {
+    await montar();
+    fireEvent.focus(campoSenha());
+    expect(campoSenha()).toHaveValue('');
+  });
+
+  it('só focar e sair (sem digitar) volta a máscara e mantém a senha', async () => {
+    await montar();
+    fireEvent.focus(campoSenha());
+    fireEvent.blur(campoSenha());
+    expect(campoSenha()).toHaveValue(MASCARA);
+
+    salvar();
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado().acaoSenha).toBe('MANTER');
+  });
+
+  it('digitar uma senha nova envia SUBSTITUIR com a senha', async () => {
+    await montar();
+    fireEvent.focus(campoSenha());
+    fireEvent.change(campoSenha(), { target: { value: 'senha-app-ficticia' } });
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado()).toEqual({
+      smtpUsuario: 'coordenacaodee@ufpe.br',
+      acaoSenha: 'SUBSTITUIR',
+      smtpSenha: 'senha-app-ficticia',
+    });
+  });
+
+  it('apagar o conteúdo e salvar envia REMOVER, sem senha', async () => {
+    await montar();
+    fireEvent.focus(campoSenha());
+    fireEvent.change(campoSenha(), { target: { value: 'algo' } });
+    fireEvent.change(campoSenha(), { target: { value: '' } }); // apagou de propósito
+    salvar();
+
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    expect(corpoEnviado()).toEqual({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'REMOVER' });
+    expect(corpoEnviado()).not.toHaveProperty('smtpSenha');
+  });
+
+  it('depois de salvar, o campo volta a ficar mascarado — não vazio', async () => {
+    await montar();
+    fireEvent.focus(campoSenha());
+    fireEvent.change(campoSenha(), { target: { value: 'senha-app-ficticia' } });
+    salvar();
+
+    await waitFor(() => expect(campoSenha()).toHaveValue(MASCARA));
+  });
+
+  it('após remover, a resposta sem senha deixa o campo vazio', async () => {
+    await montar();
+    apiPut.mockResolvedValue({ ...config, temSenha: false }); // backend confirmou a remoção
+    fireEvent.focus(campoSenha());
+    fireEvent.change(campoSenha(), { target: { value: 'x' } });
+    fireEvent.change(campoSenha(), { target: { value: '' } });
+    salvar();
+
+    await waitFor(() => expect(campoSenha()).toHaveValue(''));
+    expect(screen.queryByRole('button', { name: /Mostrar senha/i })).not.toBeInTheDocument();
+  });
+
+  it('nunca envia host, porta, TLS ou remetente', async () => {
+    await montar();
+    salvar();
+    await waitFor(() => expect(apiPut).toHaveBeenCalled());
+    const corpo = corpoEnviado();
+    for (const proibido of ['smtpHost', 'smtpPort', 'smtpSecure', 'smtpRemetente']) {
+      expect(corpo).not.toHaveProperty(proibido);
+    }
   });
 });
 
@@ -109,8 +193,8 @@ describe('Revelar a senha de app (reautenticada)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
 
     expect(await screen.findByLabelText('Sua senha')).toBeInTheDocument();
-    // O formulário principal continua vazio: a senha salva nunca é preenchida ali.
-    expect(campoSenha()).toHaveValue('');
+    // O formulário principal segue com a MÁSCARA: a senha real nunca é preenchida ali.
+    expect(campoSenha()).toHaveValue(MASCARA);
   });
 
   it('digitando, o MESMO olho vira mostrar/ocultar local', async () => {
@@ -182,18 +266,17 @@ describe('Revelar a senha de app (reautenticada)', () => {
 });
 
 describe('Senha nunca reaparece', () => {
-  it('o campo de senha começa vazio mesmo com senha salva', async () => {
+  it('a senha REAL nunca aparece no campo — só a máscara', async () => {
     await montar();
-    expect(campoSenha()).toHaveValue('');
-    expect(campoSenha()).toHaveAttribute('placeholder', 'Digite uma nova senha para substituir');
+    expect(campoSenha()).toHaveValue(MASCARA);
+    // A máscara é enfeite: o GET não trouxe senha nenhuma para preencher isso.
+    expect(apiGet.mock.results[0]).toBeDefined();
+    expect(JSON.stringify(config)).not.toContain('smtpSenha');
   });
 
-  it('após salvar, o campo de senha é limpo de novo', async () => {
+  it('o campo mascarado orienta como trocar ou remover', async () => {
     await montar();
-    fireEvent.change(campoSenha(), { target: { value: 'senha-app-ficticia' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Salvar configuração' }));
-
-    await waitFor(() => expect(campoSenha()).toHaveValue(''));
+    expect(campoSenha()).toHaveAttribute('placeholder', 'Digite a nova senha ou apague para remover');
   });
 
   it('sem senha salva, o placeholder orienta a usar senha de app do Google', async () => {

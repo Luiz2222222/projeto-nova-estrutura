@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, type ErroApi } from '../../api';
 import { Modal } from '../../componentes/Modal';
 
+const MASCARA = '••••••••••••'; // enfeite visual: nunca sai daqui para o backend
+
 const icoOlho = (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" width="18" height="18" strokeLinecap="round" strokeLinejoin="round">
     <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" /><circle cx="12" cy="12" r="3" />
@@ -23,7 +25,14 @@ export function SecaoConfiguracaoEmail() {
 
   // Form da conta remetente (separado; salva com botão).
   const [usuario, setUsuario] = useState('');
-  const [senha, setSenha] = useState(''); // vazio = manter a atual
+  // A senha guardada NUNCA chega aqui. O campo mostra uma máscara puramente visual e o que
+  // vale para o backend é a AÇÃO explícita:
+  //   não tocou           -> MANTER
+  //   digitou algo        -> SUBSTITUIR (manda a senha nova)
+  //   apagou o conteúdo   -> REMOVER
+  const [senha, setSenha] = useState(''); // o que o coordenador digitou agora
+  const [editandoSenha, setEditandoSenha] = useState(false); // máscara saiu do campo
+  const [alterouSenha, setAlterouSenha] = useState(false); // realmente digitou/apagou
   const [salvandoSmtp, setSalvandoSmtp] = useState(false);
   const [msg, setMsg] = useState('');
   const [erro, setErro] = useState('');
@@ -74,9 +83,11 @@ export function SecaoConfiguracaoEmail() {
   function aplicar(c: any) {
     setCfg(c);
     setUsuario(c.smtpUsuario ?? '');
+    // Volta ao estado "mascarado e intocado": com senha salva o campo reaparece cheio de
+    // pontos (nunca vazio); sem senha salva, vazio de verdade.
     setSenha('');
-    // Volta o olho para "oculto": depois de salvar, o campo está vazio de novo e não pode
-    // parecer que há algo revelado ali.
+    setEditandoSenha(false);
+    setAlterouSenha(false);
     setMostrarSenha(false);
   }
 
@@ -99,15 +110,22 @@ export function SecaoConfiguracaoEmail() {
     }
   }
 
+  // Está digitando uma senha nova? Só aí o olho vira mostrar/ocultar local; com a máscara
+  // no campo, ele abre o modal reautenticado.
+  const digitando = editandoSenha && senha.length > 0;
+
   async function salvarSmtp() {
     setMsg('');
     setErro('');
     setSalvandoSmtp(true);
     try {
-      // Só e-mail e senha: host/porta/TLS/remetente são definidos pelo backend.
+      // Só e-mail + AÇÃO: host/porta/TLS/remetente são definidos pelo backend. A máscara de
+      // pontos jamais é enviada — quando a ação não é SUBSTITUIR, nem existe campo de senha.
+      const acaoSenha = !alterouSenha ? 'MANTER' : senha ? 'SUBSTITUIR' : 'REMOVER';
       const c = await apiPut('/email-config', {
         smtpUsuario: usuario,
-        smtpSenha: senha, // vazio = mantém a atual
+        acaoSenha,
+        ...(acaoSenha === 'SUBSTITUIR' ? { smtpSenha: senha } : {}),
       });
       aplicar(c); // recarrega (atualiza temSenha e limpa o campo de senha)
       setMsg('Configuração de e-mail salva.');
@@ -180,12 +198,28 @@ export function SecaoConfiguracaoEmail() {
                 <span>Senha de app</span>
                 <span className="campo-com-acao">
                   <input
-                    type={mostrarSenha ? 'text' : 'password'}
-                    value={senha}
-                    onChange={(e) => setSenha(e.target.value)}
-                    placeholder={cfg.temSenha ? 'Digite uma nova senha para substituir' : 'Senha de app do Google'}
-                    // Sem autopreenchimento: senão o navegador reenche o campo depois de
-                    // salvar e ele volta a PARECER preenchido.
+                    type={mostrarSenha && editandoSenha ? 'text' : 'password'}
+                    value={editandoSenha ? senha : cfg.temSenha ? MASCARA : ''}
+                    // Focar limpa a máscara para o coordenador digitar por cima.
+                    onFocus={() => {
+                      if (!editandoSenha && cfg.temSenha) {
+                        setEditandoSenha(true);
+                        setSenha('');
+                      }
+                    }}
+                    onChange={(e) => {
+                      setEditandoSenha(true);
+                      setAlterouSenha(true); // agora o vazio significa "remover", não "manter"
+                      setSenha(e.target.value);
+                    }}
+                    // Saiu sem digitar nada: volta a máscara e o estado "não tocado" — só
+                    // focar no campo não pode virar remoção da senha.
+                    onBlur={() => {
+                      if (editandoSenha && !alterouSenha) setEditandoSenha(false);
+                    }}
+                    placeholder={cfg.temSenha ? 'Digite a nova senha ou apague para remover' : 'Senha de app do Google'}
+                    // Sem autopreenchimento: senão o navegador reenche o campo e ele passa a
+                    // mostrar algo que não é a senha guardada.
                     autoComplete="new-password"
                     name="senha-de-app-tcc"
                   />
@@ -193,21 +227,21 @@ export function SecaoConfiguracaoEmail() {
                       local do que está no campo. Com o campo vazio e senha já salva, abre o
                       modal seguro (senha do coordenador + confirmação) — nunca preenche o
                       formulário com a senha salva. */}
-                  {(senha.length > 0 || cfg.temSenha) && (
+                  {(digitando || cfg.temSenha) && (
                     <button
                       type="button"
                       className="campo-acao"
-                      onClick={() => (senha.length > 0 ? setMostrarSenha((v) => !v) : abrirRevelacao())}
-                      title={senha.length > 0 ? (mostrarSenha ? 'Ocultar' : 'Mostrar') : 'Mostrar senha de app salva'}
+                      onClick={() => (digitando ? setMostrarSenha((v) => !v) : abrirRevelacao())}
+                      title={digitando ? (mostrarSenha ? 'Ocultar' : 'Mostrar') : 'Mostrar senha de app salva'}
                       aria-label={
-                        senha.length > 0
+                        digitando
                           ? mostrarSenha
                             ? 'Ocultar senha digitada'
                             : 'Mostrar senha digitada'
                           : 'Mostrar senha de app salva'
                       }
                     >
-                      {senha.length > 0 && mostrarSenha ? icoOlhoFechado : icoOlho}
+                      {digitando && mostrarSenha ? icoOlhoFechado : icoOlho}
                     </button>
                   )}
                 </span>

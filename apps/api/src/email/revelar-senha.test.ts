@@ -144,3 +144,92 @@ describe('O GET normal continua sem a senha', () => {
     await expect(servico.revelarSenhaApp()).resolves.toBe(SENHA_APP);
   });
 });
+
+// "Campo vazio" é ambíguo (não mexi x apaguei), então a ação vem EXPLÍCITA da tela.
+describe('Ação explícita sobre a senha (MANTER / SUBSTITUIR / REMOVER)', () => {
+  async function comSenha() {
+    const p = prismaFalso();
+    const servico = new EmailService(p);
+    await servico.atualizarConfig({
+      smtpUsuario: 'coordenacaodee@ufpe.br',
+      acaoSenha: 'SUBSTITUIR',
+      smtpSenha: SENHA_APP,
+    });
+    return { p, servico };
+  }
+
+  it('MANTER não toca na senha guardada', async () => {
+    const { p, servico } = await comSenha();
+    const antes = p._linha.smtpSenhaCriptografada;
+
+    await servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'MANTER' });
+
+    expect(p._linha.smtpSenhaCriptografada).toBe(antes);
+    expect((await servico.obterConfigSegura()).temSenha).toBe(true);
+  });
+
+  it('SUBSTITUIR troca a senha guardada', async () => {
+    const { p, servico } = await comSenha();
+    const antes = p._linha.smtpSenhaCriptografada;
+
+    await servico.atualizarConfig({
+      smtpUsuario: 'coordenacaodee@ufpe.br',
+      acaoSenha: 'SUBSTITUIR',
+      smtpSenha: 'outra-senha-ficticia',
+    });
+
+    expect(p._linha.smtpSenhaCriptografada).not.toBe(antes);
+    await expect(servico.revelarSenhaApp()).resolves.toBe('outra-senha-ficticia');
+  });
+
+  it('SUBSTITUIR sem senha é recusado', async () => {
+    const { servico } = await comSenha();
+    await expect(
+      servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'SUBSTITUIR', smtpSenha: '' }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('REMOVER apaga a senha e temSenha vira falso', async () => {
+    const { p, servico } = await comSenha();
+
+    const r: any = await servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'REMOVER' });
+
+    expect(p._linha.smtpSenhaCriptografada).toBeNull();
+    expect(r.temSenha).toBe(false);
+    // E não sobra nada para revelar.
+    await expect(servico.revelarSenhaApp()).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('REMOVER não exige senha nova nem reclama de "senha obrigatória"', async () => {
+    const { servico } = await comSenha();
+    await expect(
+      servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'REMOVER' }),
+    ).resolves.toBeTruthy();
+  });
+
+  it('o e-mail e o SMTP fixo do Google continuam intactos após REMOVER', async () => {
+    const { p, servico } = await comSenha();
+    await servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'REMOVER' });
+
+    expect(p._linha.smtpUsuario).toBe('coordenacaodee@ufpe.br');
+    expect(p._linha.smtpHost).toBe('smtp.gmail.com');
+    expect(p._linha.smtpPort).toBe(587);
+  });
+
+  it('trocar o e-mail com MANTER continua exigindo a senha da nova conta', async () => {
+    const { servico } = await comSenha();
+    await expect(
+      servico.atualizarConfig({ smtpUsuario: 'outro@ufpe.br', acaoSenha: 'MANTER' }),
+    ).rejects.toMatchObject({ status: 400 });
+  });
+
+  it('a máscara de pontos nunca chega ao banco como senha', async () => {
+    const { p, servico } = await comSenha();
+    // A tela manda MANTER e nenhum campo de senha — nada de "••••" virar segredo.
+    await servico.atualizarConfig({ smtpUsuario: 'coordenacaodee@ufpe.br', acaoSenha: 'MANTER' });
+
+    const cifrada = String(p._linha.smtpSenhaCriptografada);
+    await expect(servico.revelarSenhaApp()).resolves.toBe(SENHA_APP);
+    expect(cifrada).not.toContain('•');
+  });
+});
