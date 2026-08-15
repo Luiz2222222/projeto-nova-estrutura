@@ -31,7 +31,11 @@ const rotuloStatusDoc = (s: string) =>
 
 const ROTULO_TIPO_DOC: Record<string, string> = { PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento', TERMO_ACEITE: 'Termo de aceite', MONOGRAFIA: 'Monografia', VERSAO_FINAL: 'Versão final' };
 
+// TCC de período encerrado não tem mais registro vivo: o arquivo vem do arquivo permanente,
+// pela rota própria que o backend já devolve em cada documento. Mesmos botões, mesmo visual.
 function ItemDoc({ d }: { d: any }) {
+  const ver = d.urlVisualizar ?? `/tccs/documentos/${d.id}/visualizar`;
+  const baixar = d.urlBaixar ?? `/tccs/documentos/${d.id}/baixar`;
   return (
     <div className="item-arquivo">
       <div className="item-arquivo-info">
@@ -42,8 +46,8 @@ function ItemDoc({ d }: { d: any }) {
         </div>
       </div>
       <span className="acoes-doc">
-        <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
-        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+        <a className="botao-icone" title="Visualizar" href={`${URL_API}${ver}`} target="_blank" rel="noreferrer">{icoOlho}</a>
+        <a className="botao-icone" title="Baixar" href={`${URL_API}${baixar}`} target="_blank" rel="noreferrer">{icoBaixar}</a>
       </span>
     </div>
   );

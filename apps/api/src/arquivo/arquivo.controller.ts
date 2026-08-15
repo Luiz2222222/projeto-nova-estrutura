@@ -60,4 +60,16 @@ export class ArquivoController {
     res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(nome)}"`);
     res.send(conteudo);
   }
+
+  // Mesmo conteúdo do baixar, só que inline — o botão de "olho" do histórico precisa se
+  // comportar igual para TCC vivo e para TCC de período encerrado.
+  @Get('historico-arquivado/:id/visualizar')
+  @UseGuards(GuardaJwt, GuardaPapeis)
+  @Papeis('COORDENADOR', 'PROFESSOR')
+  async visualizar(@Param('id') id: string, @Query('documento') documentoId: string | undefined, @Req() req: Req, @Res() res: Response) {
+    const { conteudo, nome } = await this.historico.baixar(id, req.usuario.sub, req.usuario.papel, documentoId);
+    res.setHeader('Content-Type', nome.toLowerCase().endsWith('.pdf') ? 'application/pdf' : 'application/octet-stream');
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(nome)}"`);
+    res.send(conteudo);
+  }
 }

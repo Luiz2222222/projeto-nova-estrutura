@@ -31,7 +31,6 @@ const AvisosCoordenador = lazy(() => import('./paginas/coordenador/AvisosCoorden
 const Relatorios = lazy(() => import('./paginas/coordenador/Relatorios').then((m) => ({ default: m.Relatorios })));
 const Usuarios = lazy(() => import('./paginas/coordenador/Usuarios').then((m) => ({ default: m.Usuarios })));
 const ListaDoPeriodo = lazy(() => import('./paginas/coordenador/ListaDoPeriodo').then((m) => ({ default: m.ListaDoPeriodo })));
-const HistoricoArquivado = lazy(() => import('./paginas/HistoricoArquivado').then((m) => ({ default: m.HistoricoArquivado })));
 const DashboardProfessor = lazy(() => import('./paginas/professor/DashboardProfessor').then((m) => ({ default: m.DashboardProfessor })));
 const MeusOrientandos = lazy(() => import('./paginas/professor/MeusOrientandos').then((m) => ({ default: m.MeusOrientandos })));
 const DetalheOrientando = lazy(() => import('./paginas/professor/DetalheOrientando').then((m) => ({ default: m.DetalheOrientando })));
@@ -57,6 +56,12 @@ export function ExigePapel({ papeis }: { papeis: Papel[] }) {
   const { usuario } = useAuth();
   if (usuario && !papeis.includes(usuario.papel)) return <Navigate to="/" replace />;
   return <Outlet />;
+}
+
+// Links antigos para o "Histórico arquivado" caem no Histórico do próprio papel.
+export function RedirecionaHistorico() {
+  const { usuario } = useAuth();
+  return <Navigate to={usuario?.papel === 'COORDENADOR' ? '/coordenador/historico' : '/professor/historico'} replace />;
 }
 
 export function App() {
@@ -89,10 +94,11 @@ export function App() {
               <Route path="/aluno/abrir" element={<AbrirTcc />} />
             </Route>
 
-            {/* Períodos encerrados: coordenador vê tudo, professor vê onde participou. Rota
-                própria — os TCCs ativos correspondentes já não existem mais. */}
+            {/* Compatibilidade: o "Histórico arquivado" deixou de existir como página. Os
+                períodos encerrados aparecem no Histórico normal, então links antigos apenas
+                redirecionam para o histórico do papel de quem acessa. */}
             <Route element={<ExigePapel papeis={['COORDENADOR', 'PROFESSOR']} />}>
-              <Route path="/historico-arquivado" element={<HistoricoArquivado />} />
+              <Route path="/historico-arquivado" element={<RedirecionaHistorico />} />
             </Route>
 
             {/* Rotas do coordenador (estrutura espelha o projeto original) */}

@@ -30,7 +30,11 @@ const rotuloStatusDoc = (s: string) =>
   ({ PENDENTE: 'Aguardando avaliação', EM_ANALISE: 'Em análise', APROVADO: 'Aprovada', REJEITADO: 'Ajustes solicitados', SUBSTITUIDA: 'Substituída', CONCLUIDO: 'Concluída' } as Record<string, string>)[s] ?? s;
 const ROTULO_TIPO_DOC: Record<string, string> = { PLANO_DESENVOLVIMENTO: 'Plano de desenvolvimento', TERMO_ACEITE: 'Termo de aceite', MONOGRAFIA: 'Monografia', VERSAO_FINAL: 'Versão final', AVALIACAO_BANCA: 'Documento da banca' };
 
+// TCC de período encerrado não tem mais registro vivo: o arquivo vem do arquivo permanente,
+// pela rota própria que o backend já devolve em cada documento. Mesmos botões, mesmo visual.
 function ItemDoc({ d }: { d: any }) {
+  const ver = d.urlVisualizar ?? `/tccs/documentos/${d.id}/visualizar`;
+  const baixar = d.urlBaixar ?? `/tccs/documentos/${d.id}/baixar`;
   return (
     <div className="item-arquivo">
       <div className="item-arquivo-info">
@@ -41,8 +45,8 @@ function ItemDoc({ d }: { d: any }) {
         </div>
       </div>
       <span className="acoes-doc">
-        <a className="botao-icone" title="Visualizar" href={`${URL_API}/tccs/documentos/${d.id}/visualizar`} target="_blank" rel="noreferrer">{icoOlho}</a>
-        <a className="botao-icone" title="Baixar" href={`${URL_API}/tccs/documentos/${d.id}/baixar`} target="_blank" rel="noreferrer">{icoBaixar}</a>
+        <a className="botao-icone" title="Visualizar" href={`${URL_API}${ver}`} target="_blank" rel="noreferrer">{icoOlho}</a>
+        <a className="botao-icone" title="Baixar" href={`${URL_API}${baixar}`} target="_blank" rel="noreferrer">{icoBaixar}</a>
       </span>
     </div>
   );
@@ -94,10 +98,14 @@ export function DetalheHistoricoCoordenador() {
             </div>
           </div>
           {/* Correção administrativa de um TCC histórico: abre o detalhe interno completo
-              (edição, correção de fluxo, banca) SEM mudar o semestre ativo do sistema. */}
-          <button className="botao botao-secundario" style={{ flexShrink: 0 }} onClick={() => navigate(`/coordenador/tccs/${tcc.id}`)}>
-            Correção administrativa
-          </button>
+              (edição, correção de fluxo, banca) SEM mudar o semestre ativo do sistema.
+              Só existe enquanto o registro vivo existir — em período encerrado o TCC virou
+              registro permanente e não há mais o que corrigir. */}
+          {!tcc.arquivado && (
+            <button className="botao botao-secundario" style={{ flexShrink: 0 }} onClick={() => navigate(`/coordenador/tccs/${tcc.id}`)}>
+              Correção administrativa
+            </button>
+          )}
         </div>
       </div>
 

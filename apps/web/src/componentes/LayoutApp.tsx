@@ -151,12 +151,6 @@ export function LayoutApp() {
                   <span>Histórico</span>
                 </button>
               )}
-              {(usuario.papel === 'PROFESSOR' || usuario.papel === 'COORDENADOR') && (
-                <button role="menuitem" onClick={() => { setMenuAberto(false); navegar('/historico-arquivado'); }}>
-                  {icoHistorico}
-                  <span>Histórico arquivado</span>
-                </button>
-              )}
               <button role="menuitem" className="item-sair" onClick={() => { setMenuAberto(false); sair(); }}>
                 {icoSair}
                 <span>Sair</span>

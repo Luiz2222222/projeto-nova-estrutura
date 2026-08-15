@@ -12,7 +12,7 @@ vi.mock('./autenticacao/contexto', () => ({
   ProvedorAuth: ({ children }: { children: unknown }) => children,
 }));
 
-import { ExigePapel, Protegido } from './App';
+import { ExigePapel, Protegido, RedirecionaHistorico } from './App';
 
 function renderComGuardaPapel(papel: string | null) {
   estado.usuario = papel ? { papel } : null;
@@ -39,6 +39,34 @@ describe('ExigePapel (guard de papel)', () => {
     renderComGuardaPapel('PROFESSOR');
     expect(screen.queryByText('conteúdo do aluno')).toBeNull();
     expect(screen.getByText('home neutra')).toBeInTheDocument();
+  });
+});
+
+// A página "Histórico arquivado" deixou de existir: período encerrado aparece no Histórico
+// normal. Links antigos não podem dar 404 nem reabrir a tela antiga.
+describe('/historico-arquivado (rota de compatibilidade)', () => {
+  function renderRedirect(papel: string) {
+    estado.usuario = { papel };
+    estado.carregando = false;
+    return render(
+      <MemoryRouter initialEntries={['/historico-arquivado']}>
+        <Routes>
+          <Route path="/historico-arquivado" element={<RedirecionaHistorico />} />
+          <Route path="/coordenador/historico" element={<p>histórico do coordenador</p>} />
+          <Route path="/professor/historico" element={<p>histórico do professor</p>} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  it('coordenador cai no Histórico da coordenação', () => {
+    renderRedirect('COORDENADOR');
+    expect(screen.getByText('histórico do coordenador')).toBeInTheDocument();
+  });
+
+  it('professor cai no Histórico dele', () => {
+    renderRedirect('PROFESSOR');
+    expect(screen.getByText('histórico do professor')).toBeInTheDocument();
   });
 });
 

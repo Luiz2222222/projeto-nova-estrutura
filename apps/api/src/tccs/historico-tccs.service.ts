@@ -4,6 +4,12 @@ import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
 import { resolverSemestreAtivo } from '../comum/semestre';
 import { PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 
+// TCC de período encerrado entra na MESMA lista do histórico vivo; o prefixo no id só evita
+// colisão com um id de TCC vivo e diz de onde o registro veio (não é categoria de tela).
+const PREFIXO_ARQUIVADO = 'arq_';
+const ehArquivado = (id: string) => id.startsWith(PREFIXO_ARQUIVADO);
+const idArquivado = (id: string) => id.slice(PREFIXO_ARQUIVADO.length);
+
 // Histórico de períodos ANTERIORES + ocultação individual — extraído do TccsService por
 // coesão: aqui vivem só consultas de leitura (histórico do professor/coordenador) e a
 // preferência HistoricoTccOculto. O fluxo do TCC segue no TccsService; nada de regra,
@@ -12,9 +18,157 @@ import { PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 export class HistoricoTccsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // Histórico do professor: TCCs de períodos ANTERIORES (semestre != atual) em que ele teve
-  // vínculo real — orientador, coorientador OU membro de banca (avaliador). Só leitura.
-  // Usa SEMPRE o id do JWT (nunca aceita id do front). Exclui TCCs com soft delete.
+  // Rótulo do critério (como fica no snapshot) -> coluna de nota do MembroBanca. Serve para
+  // devolver o TCC arquivado no MESMO formato do histórico vivo, e não numa forma paralela.
+  private static readonly COLUNA_POR_CRITERIO: Record<string, string> = {
+    Resumo: 'notaResumo',
+    Introdução: 'notaIntroducao',
+    Revisão: 'notaRevisao',
+    Desenvolvimento: 'notaDesenvolvimento',
+    Conclusões: 'notaConclusoes',
+    Coerência: 'notaCoerencia',
+    Qualidade: 'notaQualidade',
+    Domínio: 'notaDominio',
+    Clareza: 'notaClareza',
+    Observância: 'notaObservancia',
+  };
+
+  // TCCs de períodos ENCERRADOS, cujas contas de aluno/avaliador já não existem. Para o
+  // usuário são registros históricos como quaisquer outros: mesma lista, mesmo detalhe.
+  // O id ganha o prefixo `arq_` só para não colidir com o id de um TCC vivo — as telas
+  // acham por id na própria lista, então detalhe e navegação funcionam sem rota nova.
+  // `profId` presente = listagem do professor: acrescenta os vínculos dele (as mesmas pílulas
+  // e o mesmo filtro do histórico vivo) e aplica o duplo-cego da Fase I reprovada.
+  private async arquivadosComoHistorico(where: Record<string, unknown>, ocultos: string[] = [], profId?: string) {
+    const itens = await this.prisma.tccArquivado.findMany({
+      where,
+      include: {
+        documentos: { orderBy: [{ tipo: 'asc' }, { versao: 'asc' }] },
+        participantes: { select: { usuarioId: true, papel: true } },
+      },
+      orderBy: [{ semestre: 'desc' }, { alunoNome: 'asc' }],
+    });
+
+    // "Ocultar do meu histórico" vale igual aqui: a preferência é gravada com o id prefixado.
+    const escondidos = new Set(ocultos);
+    return itens
+      .filter((a) => !escondidos.has(`${PREFIXO_ARQUIVADO}${a.id}`))
+      .map((a) => {
+        // Snapshot ilegível não pode derrubar o histórico inteiro: cai para vazio e o
+        // registro ainda aparece com o que está nas colunas da tabela.
+        let snap: any;
+        try {
+          snap = JSON.parse(a.dadosJson) ?? {};
+        } catch {
+          snap = {};
+        }
+        const datas = snap.datas ?? {};
+        const defesa = snap.defesa ?? {};
+        const notas = snap.notas ?? {};
+        // O orientador da Fase II é rotulado por comparação de id; o vínculo sobreviveu na
+        // tabela de participantes (a conta de professor não é apagada no encerramento).
+        const orientadorId = a.participantes.find((p) => p.papel === 'ORIENTADOR')?.usuarioId ?? null;
+        const coorientadorId = a.participantes.find((p) => p.papel === 'COORIENTADOR')?.usuarioId ?? null;
+        const vinculos: string[] = [];
+        if (profId) {
+          if (orientadorId === profId) vinculos.push('ORIENTADOR');
+          if (coorientadorId === profId) vinculos.push('COORIENTADOR');
+          const naBanca = (snap.bancas ?? []).some((b: any) =>
+            (b.membros ?? []).some((m: any) => m.avaliadorId === profId),
+          );
+          if (naBanca) vinculos.push('AVALIADOR');
+        }
+        const item: any = {
+          id: `${PREFIXO_ARQUIVADO}${a.id}`,
+          arquivado: true, // uso interno (download/ações); a tela não mostra isso como categoria
+          titulo: a.titulo,
+          semestre: a.semestre,
+          faseAtual: a.faseFinal ?? 'CONCLUIDO',
+          nf1: a.nf1,
+          nf2: a.nf2,
+          nf: a.nf,
+          resultado: a.resultado,
+          criadoEm: snap.tcc?.criadoEm ?? a.arquivadoEm,
+          // Datas do fluxo: a timeline do detalhe é a mesma do TCC vivo.
+          monografiaAprovada: snap.tcc?.monografiaAprovada ?? null,
+          monografiaAprovadaEm: datas.monografiaAprovadaEm ?? null,
+          continuidadeConfirmada: snap.tcc?.continuidadeConfirmada ?? null,
+          continuidadeAvaliadaEm: datas.continuidadeAvaliadaEm ?? null,
+          fase1ValidadaEm: datas.fase1ValidadaEm ?? null,
+          fase2ValidadaEm: datas.fase2ValidadaEm ?? null,
+          versaoFinalValidadaEm: datas.versaoFinalValidadaEm ?? null,
+          concluidoEm: datas.concluidoEm ?? a.concluidoEm,
+          defesaAgendadaPara: defesa.agendadaPara ?? a.defesaAgendadaPara,
+          defesaLocal: defesa.local ?? a.defesaLocal,
+          // Pessoas cujas contas foram apagadas: sobrevivem como texto no arquivo.
+          aluno: { id: null, nomeCompleto: a.alunoNome, email: a.alunoEmail, curso: a.alunoCurso },
+          orientadorId,
+          orientador: a.orientadorNome
+            ? { id: orientadorId, nomeCompleto: a.orientadorNome, tratamento: snap.orientador?.tratamento ?? null }
+            : null,
+          coorientador: null,
+          coorientadorNome: a.coorientadorNome,
+          coorientadorTitulacao: snap.coorientador?.titulacao ?? null,
+          coorientadorAfiliacao: snap.coorientador?.afiliacao ?? null,
+          documentos: a.documentos.map((d) => ({
+            id: d.id,
+            tipo: d.tipo,
+            nomeArquivo: d.nomeArquivo,
+            versao: d.versao,
+            status: d.status,
+            tamanho: d.tamanho,
+            criadoEm: d.criadoEm,
+            // Download pelo arquivo permanente da VPS, sempre autenticado.
+            urlBaixar: `/historico-arquivado/${a.id}/baixar?documento=${d.id}`,
+            urlVisualizar: `/historico-arquivado/${a.id}/visualizar?documento=${d.id}`,
+          })),
+          // O snapshot não guarda ids de banca/membro (as linhas foram apagadas): as telas
+          // usam id só como chave de render e para casar membro com papel, então geramos um
+          // id estável a partir da posição.
+          bancas: (snap.bancas ?? []).map((b: any, ib: number) => ({
+            id: `${PREFIXO_ARQUIVADO}${a.id}_b${ib}`,
+            fase: b.fase,
+            criadoEm: b.criadoEm,
+            membros: (b.membros ?? []).map((m: any, im: number) => {
+              const colunas: Record<string, number | null> = {};
+              for (const [rotulo, valor] of Object.entries(m.notasPorCriterio ?? {})) {
+                const coluna = HistoricoTccsService.COLUNA_POR_CRITERIO[rotulo];
+                if (coluna) colunas[coluna] = valor as number | null;
+              }
+              return {
+                id: `${PREFIXO_ARQUIVADO}${a.id}_b${ib}m${im}`,
+                status: m.status,
+                nota: m.notaTotal ?? null,
+                parecer: m.parecer ?? null,
+                avaliadoEm: m.avaliadoEm ?? null,
+                avaliadorId: m.avaliadorId ?? null,
+                avaliador: { id: m.avaliadorId ?? null, nomeCompleto: m.nome, tratamento: m.tratamento ?? null },
+                ...colunas,
+              };
+            }),
+          })),
+          solicitacoes: snap.solicitacoes ?? [],
+          pesos: null, // pesos por critério do calendário não são arquivados; usa-se o padrão
+          pesoFase1: notas.pesoFase1 ?? PESO_NF1,
+          pesoFase2: notas.pesoFase2 ?? PESO_NF2,
+          ...(profId ? { vinculos } : {}),
+        };
+
+        // MESMO duplo-cego do histórico vivo: quem só participou como avaliador da Fase I de
+        // um TCC reprovado nela continua sem saber quem era o aluno/orientador.
+        if (profId && vinculos.length === 1 && vinculos[0] === 'AVALIADOR' && item.faseAtual === 'REPROVADO_FASE_1') {
+          item.aluno = null;
+          item.orientador = null;
+          item.orientadorId = null;
+          item.coorientadorNome = null;
+          item.coorientadorTitulacao = null;
+          item.coorientadorAfiliacao = null;
+          item.documentos = []; // nomes de arquivo entregariam o aluno
+        }
+        return item;
+      });
+  }
+
   async historicoProfessor(profId: string) {
     const semestre = await resolverSemestreAtivo(this.prisma);
     const ocultos = await this.tccsOcultosDoUsuario(profId); // ocultações individuais do professor
@@ -48,7 +202,7 @@ export class HistoricoTccsService {
     const calPorSemestre = new Map<string, any>(cals.map((c) => [c.semestre, c]));
     // Anota o(s) vínculo(s) do professor com cada TCC (para o filtro no front) e sanitiza:
     // esconde notas/parecer até a liberação (nf) e nunca expõe o rascunho privado do avaliador.
-    return tccs.map((t) => {
+    const vivos = tccs.map((t) => {
       const vinculos: string[] = [];
       if (t.orientadorId === profId) vinculos.push('ORIENTADOR');
       if (t.coorientadorId === profId) vinculos.push('COORIENTADOR');
@@ -78,6 +232,15 @@ export class HistoricoTccsService {
       }
       return base;
     });
+
+    // Junta os TCCs de períodos encerrados em que ESTE professor participou (orientador,
+    // coorientador ou banca). Uma lista só: o usuário não vê duas categorias.
+    const arquivados = await this.arquivadosComoHistorico(
+      { participantes: { some: { usuarioId: profId } } },
+      ocultos,
+      profId,
+    );
+    return [...vivos, ...arquivados].sort((a: any, b: any) => String(b.semestre).localeCompare(String(a.semestre)));
   }
 
   // ----- Ocultação INDIVIDUAL do histórico (preferência por usuário) -----
@@ -96,6 +259,20 @@ export class HistoricoTccsService {
   // atual). Coordenador pode ocultar qualquer TCC histórico; professor só os que tem vínculo
   // (orientador, coorientador ou membro de banca). Idempotente (se já oculto, retorna ok).
   async ocultarDoHistorico(usuario: { sub: string; papel: string }, tccId: string) {
+    // Registro de período encerrado: mesma preferência, mesma checagem de vínculo — o que
+    // muda é só de qual tabela vem a prova de que o TCC aparece no histórico deste usuário.
+    if (ehArquivado(tccId)) {
+      const whereArq: any = { id: idArquivado(tccId) };
+      if (usuario.papel !== 'COORDENADOR') whereArq.participantes = { some: { usuarioId: usuario.sub } };
+      const arq = await this.prisma.tccArquivado.findFirst({ where: whereArq, select: { id: true } });
+      if (!arq) throw new NotFoundException({ mensagem: 'TCC não encontrado no histórico.' });
+      await this.prisma.historicoTccOculto.upsert({
+        where: { usuarioId_tccId: { usuarioId: usuario.sub, tccId } },
+        update: {},
+        create: { usuarioId: usuario.sub, tccId },
+      });
+      return { ok: true };
+    }
     const semestre = await resolverSemestreAtivo(this.prisma);
     const where: any = { id: tccId, excluidoEm: null, semestre: { not: semestre } };
     if (usuario.papel !== 'COORDENADOR') {
@@ -130,12 +307,29 @@ export class HistoricoTccsService {
       orderBy: { criadoEm: 'desc' },
     });
     if (ocultos.length === 0) return [];
+    const ids = ocultos.map((o) => o.tccId);
     const tccs = await this.prisma.tcc.findMany({
-      where: { id: { in: ocultos.map((o) => o.tccId) } },
+      where: { id: { in: ids.filter((i) => !ehArquivado(i)) } },
       select: { id: true, titulo: true, semestre: true, faseAtual: true, aluno: { select: { nomeCompleto: true } } },
       orderBy: [{ semestre: 'desc' }, { criadoEm: 'desc' }],
     });
-    return tccs;
+    // Ocultados de períodos encerrados aparecem na MESMA lista, senão "Reexibir" sumiria só
+    // para eles e a ocultação viraria um beco sem saída.
+    const arquivados = await this.prisma.tccArquivado.findMany({
+      where: { id: { in: ids.filter(ehArquivado).map(idArquivado) } },
+      select: { id: true, titulo: true, semestre: true, faseFinal: true, alunoNome: true },
+      orderBy: [{ semestre: 'desc' }, { arquivadoEm: 'desc' }],
+    });
+    return [
+      ...tccs,
+      ...arquivados.map((a) => ({
+        id: `${PREFIXO_ARQUIVADO}${a.id}`,
+        titulo: a.titulo,
+        semestre: a.semestre,
+        faseAtual: a.faseFinal ?? 'CONCLUIDO',
+        aluno: { nomeCompleto: a.alunoNome },
+      })),
+    ].sort((a: any, b: any) => String(b.semestre).localeCompare(String(a.semestre)));
   }
 
   // Histórico do COORDENADOR: TCCs de períodos ANTERIORES (semestre != atual). Visão
@@ -167,7 +361,7 @@ export class HistoricoTccsService {
     });
     const calPorSemestre = new Map<string, any>(cals.map((c) => [c.semestre, c]));
     // Coordenador NÃO sanitiza notas (vê tudo), mas nunca recebe o rascunho privado do avaliador.
-    return tccs.map((t) => {
+    const vivos = tccs.map((t) => {
       const cal = calPorSemestre.get(t.semestre) ?? null;
       return {
         ...ocultarRascunho(t),
@@ -176,5 +370,9 @@ export class HistoricoTccsService {
         pesoFase2: cal?.pesoFase2 ?? PESO_NF2,
       };
     });
+
+    // Coordenação vê TODOS os períodos encerrados, na mesma lista dos demais históricos.
+    const arquivados = await this.arquivadosComoHistorico({}, ocultos);
+    return [...vivos, ...arquivados].sort((a: any, b: any) => String(b.semestre).localeCompare(String(a.semestre)));
   }
 }
