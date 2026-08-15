@@ -5,7 +5,10 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 
-const cadastrar = vi.fn(async () => {});
+let enviado: Record<string, unknown> | null = null;
+const cadastrar = vi.fn(async (dados: Record<string, unknown>) => {
+  enviado = dados;
+});
 vi.mock('../autenticacao/contexto', () => ({ useAuth: () => ({ cadastrar }) }));
 
 const apiGet = vi.fn();
@@ -26,6 +29,7 @@ const preencher = (rotulo: string | RegExp, valor: string) =>
   fireEvent.change(screen.getByLabelText(rotulo), { target: { value: valor } });
 
 beforeEach(() => {
+  enviado = null;
   cadastrar.mockClear();
   apiGet.mockReset();
   // Só professor e avaliador estão protegidos por código nesta configuração.
@@ -54,7 +58,8 @@ describe('Perfil SEM código configurado', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
 
     await waitFor(() => expect(cadastrar).toHaveBeenCalled());
-    expect(cadastrar.mock.calls[0][0]).toMatchObject({ papel: 'ALUNO', email: 'fulano@exemplo.com' });
+    expect(enviado).toMatchObject({ papel: 'ALUNO', email: 'fulano@exemplo.com' });
+    expect(enviado).not.toHaveProperty('codigo');
   });
 });
 
