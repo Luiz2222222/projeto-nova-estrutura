@@ -233,90 +233,60 @@ describe('Campo mascarado: manter, substituir ou remover', () => {
   });
 });
 
-describe('Revelar a senha de app (reautenticada)', () => {
-  // Uma entrada só: o olho do campo. Nada de botão textual duplicado embaixo.
-  it('não existe botão textual "Mostrar senha de app" (só o olho)', async () => {
-    await montar();
-    expect(screen.queryByRole('button', { name: 'Mostrar senha de app' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Mostrar senha de app salva' })).toBeInTheDocument();
-  });
-
-  it('com o campo vazio, o olho abre o modal seguro em vez de revelar direto', async () => {
-    await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
-
-    expect(await screen.findByLabelText('Sua senha')).toBeInTheDocument();
-    // O formulário principal segue com a MÁSCARA: a senha real nunca é preenchida ali.
-    expect(campoSenha()).toHaveValue(MASCARA);
-  });
-
-  it('digitando, o MESMO olho vira mostrar/ocultar local', async () => {
-    await montar();
-    fireEvent.change(campoSenha(), { target: { value: 'nova' } });
-
-    const olho = screen.getByRole('button', { name: 'Mostrar senha digitada' });
-    fireEvent.click(olho);
-    expect(campoSenha()).toHaveAttribute('type', 'text'); // mostrou o que foi digitado
-    fireEvent.click(screen.getByRole('button', { name: 'Ocultar senha digitada' }));
-    expect(campoSenha()).toHaveAttribute('type', 'password');
-    // E não abriu modal nenhum.
-    expect(screen.queryByLabelText('Sua senha')).not.toBeInTheDocument();
-  });
-
-  it('sem senha salva e campo vazio, não há olho nenhum', async () => {
-    await montar({ ...config, temSenha: false });
-    expect(screen.queryByRole('button', { name: /Mostrar senha/i })).not.toBeInTheDocument();
-  });
-
-  it('o campo de senha bloqueia autopreenchimento do navegador', async () => {
-    await montar();
-    expect(campoSenha()).toHaveAttribute('autocomplete', 'new-password');
-  });
-
-  it('o modal exige senha do coordenador E confirmação antes de revelar', async () => {
-    await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
-
-    const revelar = await screen.findByRole('button', { name: 'Mostrar senha' });
-    expect(revelar).toBeDisabled();
-
-    fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
-    expect(revelar).toBeDisabled(); // falta a confirmação explícita
-
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(revelar).toBeEnabled();
-  });
-
-  it('revela pela rota protegida e limpa tudo ao fechar', async () => {
+describe('Revelar a senha de app pelo olho (sem modal)', () => {
+  it('clicar no olho mostra a senha no próprio campo, sem pedir nada', async () => {
     apiPost.mockResolvedValue({ senha: 'senha-ficticia-de-teste' });
     await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
-    fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
 
-    await waitFor(() =>
-      expect(apiPost).toHaveBeenCalledWith('/email-config/revelar-senha', { senha: 'minha-senha' }),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/email-config/revelar-senha', {}));
     expect(await screen.findByDisplayValue('senha-ficticia-de-teste')).toBeInTheDocument();
-
-    // O Modal já tem seu próprio "Fechar" (X); o do rodapé é o último.
-    const fechar = screen.getAllByRole('button', { name: 'Fechar' });
-    fireEvent.click(fechar[fechar.length - 1]);
-    await waitFor(() => expect(screen.queryByDisplayValue('senha-ficticia-de-teste')).not.toBeInTheDocument());
+    expect(campoSenha()).toHaveAttribute('type', 'text');
+    // Nada de modal nem de senha do coordenador.
+    expect(screen.queryByLabelText('Sua senha')).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
   });
 
-  it('senha do coordenador errada mostra o erro e não revela', async () => {
-    apiPost.mockRejectedValue({ status: 400, mensagem: 'Senha incorreta.' });
+  it('clicar de novo oculta e volta para a máscara', async () => {
+    apiPost.mockResolvedValue({ senha: 'senha-ficticia-de-teste' });
     await montar();
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app salva' }));
-    fireEvent.change(await screen.findByLabelText('Sua senha'), { target: { value: 'errada' } });
-    fireEvent.click(screen.getByRole('checkbox'));
-    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    await screen.findByDisplayValue('senha-ficticia-de-teste');
 
-    expect(await screen.findByText('Senha incorreta.')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Ocultar senha de app' }));
+
+    expect(campoSenha()).toHaveValue(MASCARA);
+    expect(campoSenha()).toHaveAttribute('type', 'password');
+  });
+
+  it('o corpo do pedido não leva senha do coordenador', async () => {
+    apiPost.mockResolvedValue({ senha: 'x' });
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalled());
+    expect(apiPost.mock.calls[0][1]).toEqual({});
+  });
+
+  it('sem senha salva, não há olho', async () => {
+    await montar({ ...config, temSenha: false });
+    expect(screen.queryByRole('button', { name: /senha de app/i })).not.toBeInTheDocument();
+  });
+
+  it('focar para editar descarta a senha revelada', async () => {
+    apiPost.mockResolvedValue({ senha: 'senha-ficticia-de-teste' });
+    await montar();
+    fireEvent.click(screen.getByRole('button', { name: 'Mostrar senha de app' }));
+    await screen.findByDisplayValue('senha-ficticia-de-teste');
+
+    fireEvent.focus(campoSenha());
+
+    expect(screen.queryByDisplayValue('senha-ficticia-de-teste')).not.toBeInTheDocument();
+    expect(campoSenha()).toHaveValue(MASCARA);
   });
 });
+
 
 describe('Senha nunca reaparece', () => {
   it('a senha REAL nunca aparece no campo — só a máscara', async () => {

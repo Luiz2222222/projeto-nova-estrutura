@@ -62,27 +62,24 @@ describe('POST /email-config/revelar-senha', () => {
     return { p, servico, controller: new EmailController(p, servico) };
   }
 
-  it('senha do coordenador correta revela a senha de app', async () => {
+  // Autorização = sessão válida de COORDENADOR (guards da rota). A configuração é global e
+  // qualquer coordenador já pode trocá-la ou removê-la, então não há segunda barreira.
+  it('coordenador autenticado revela a senha, sem informar senha nenhuma', async () => {
     const { controller } = await comSenhaSalva();
     const res = resFalso();
 
-    await controller.revelarSenha(req, { senha: 'senha-do-coordenador' }, res as any);
+    await controller.revelarSenha(req, res as any);
 
     expect(res.corpo).toEqual({ senha: SENHA_APP });
   });
 
-  it('senha do coordenador incorreta é recusada (400) e não revela nada', async () => {
-    const { controller } = await comSenhaSalva();
+  it('sessão inválida (usuário inexistente) é recusada', async () => {
+    const { p, servico } = await comSenhaSalva();
+    p.usuario.findUnique = vi.fn(async () => null);
+    const controller = new EmailController(p, servico);
     const res = resFalso();
 
-    await expect(controller.revelarSenha(req, { senha: 'errada' }, res as any)).rejects.toMatchObject({ status: 400 });
-    expect(res.corpo).toBeNull();
-  });
-
-  it('sem senha informada é recusado', async () => {
-    const { controller } = await comSenhaSalva();
-    const res = resFalso();
-    await expect(controller.revelarSenha(req, {}, res as any)).rejects.toMatchObject({ status: 400 });
+    await expect(controller.revelarSenha(req, res as any)).rejects.toMatchObject({ status: 401 });
     expect(res.corpo).toBeNull();
   });
 
@@ -90,7 +87,7 @@ describe('POST /email-config/revelar-senha', () => {
     const { controller } = await comSenhaSalva();
     const res = resFalso();
 
-    await controller.revelarSenha(req, { senha: 'senha-do-coordenador' }, res as any);
+    await controller.revelarSenha(req, res as any);
 
     expect(res.headers['Cache-Control']).toMatch(/no-store/);
     expect(res.headers['Pragma']).toBe('no-cache');
@@ -102,9 +99,7 @@ describe('POST /email-config/revelar-senha', () => {
     const controller = new EmailController(p, servico);
     const res = resFalso();
 
-    await expect(controller.revelarSenha(req, { senha: 'senha-do-coordenador' }, res as any)).rejects.toMatchObject({
-      status: 400,
-    });
+    await expect(controller.revelarSenha(req, res as any)).rejects.toMatchObject({ status: 400 });
   });
 });
 

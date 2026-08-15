@@ -68,12 +68,12 @@ export function EncerrarPeriodo() {
   return (
     <>
       <button className="botao botao-perigo" onClick={abrir}>
-        Encerrar e arquivar período
+        Encerrar período
       </button>
 
       {aberto && (
         <Modal
-          titulo="Encerrar e arquivar período"
+          titulo="Encerrar período"
           subtitulo="Arquiva os TCCs no arquivo permanente da VPS (dados, notas, pareceres e documentos) e no histórico. Só depois de a cópia ser validada os TCCs saem do fluxo ativo e as contas de alunos e avaliadores externos são apagadas. Professores e coordenadores nunca são apagados."
           aoFechar={fechar}
         >
@@ -159,7 +159,7 @@ export function EncerrarPeriodo() {
                     disabled={encerrando || !previa.podeEncerrar || confirmacao !== 'ENCERRAR' || !senha}
                     onClick={encerrar}
                   >
-                    {encerrando ? 'Encerrando…' : 'Encerrar e arquivar período'}
+                    {encerrando ? 'Encerrando…' : 'Encerrar período'}
                   </button>
                 </div>
               </>

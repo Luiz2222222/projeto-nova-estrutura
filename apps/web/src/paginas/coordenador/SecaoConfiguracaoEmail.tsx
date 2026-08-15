@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { apiGet, apiPost, apiPut, type ErroApi } from '../../api';
-import { Modal } from '../../componentes/Modal';
 
 const MASCARA = '••••••••••••'; // enfeite visual: nunca sai daqui para o backend
 
@@ -37,48 +36,33 @@ export function SecaoConfiguracaoEmail() {
   const [msg, setMsg] = useState('');
   const [erro, setErro] = useState('');
 
-  // Revelação da senha de app: tudo vive SÓ aqui e é zerado ao fechar o modal — nada de
-  // localStorage/sessionStorage, e a senha nunca volta no GET normal da configuração.
-  const [modalRevelar, setModalRevelar] = useState(false);
-  const [senhaCoordenador, setSenhaCoordenador] = useState('');
-  const [confirmou, setConfirmou] = useState(false);
+  // Senha de app revelada: vive SÓ no estado deste componente enquanto estiver visível.
+  // Some ao ocultar e ao desmontar a tela — nada de localStorage/sessionStorage, e o GET
+  // normal da configuração continua sem trazer senha nenhuma.
   const [senhaRevelada, setSenhaRevelada] = useState('');
-  const [verRevelada, setVerRevelada] = useState(false);
   const [revelando, setRevelando] = useState(false);
-  const [erroRevelar, setErroRevelar] = useState('');
 
-  function abrirRevelacao() {
-    setSenhaCoordenador('');
-    setConfirmou(false);
-    setSenhaRevelada('');
-    setVerRevelada(false);
-    setErroRevelar('');
-    setModalRevelar(true);
-  }
-
-  // Fechar SEMPRE limpa a senha revelada da memória do componente.
-  function fecharRevelacao() {
-    setModalRevelar(false);
-    setSenhaCoordenador('');
-    setSenhaRevelada('');
-    setVerRevelada(false);
-    setConfirmou(false);
-    setErroRevelar('');
-  }
-
+  // Mostra a senha salva direto no campo. Autorização = sessão de COORDENADOR (a
+  // configuração é global e qualquer coordenador já pode trocá-la ou removê-la).
   async function revelar() {
-    setErroRevelar('');
+    setErro('');
     setRevelando(true);
     try {
-      const r = await apiPost<{ senha: string }>('/email-config/revelar-senha', { senha: senhaCoordenador });
+      const r = await apiPost<{ senha: string }>('/email-config/revelar-senha', {});
       setSenhaRevelada(r.senha);
-      setSenhaCoordenador(''); // a senha do coordenador não precisa mais ficar em memória
     } catch (e) {
-      setErroRevelar((e as ErroApi).mensagem || 'Não foi possível revelar a senha.');
+      setErro((e as ErroApi).mensagem || 'Não foi possível mostrar a senha.');
     } finally {
       setRevelando(false);
     }
   }
+
+  function ocultarRevelada() {
+    setSenhaRevelada(''); // volta à máscara e tira o valor real da memória
+  }
+
+  // Rede de segurança: sair da tela também descarta a senha revelada.
+  useEffect(() => () => setSenhaRevelada(''), []);
 
   function aplicar(c: any) {
     setCfg(c);
@@ -89,6 +73,7 @@ export function SecaoConfiguracaoEmail() {
     setEditandoSenha(false);
     setAlterouSenha(false);
     setMostrarSenha(false);
+    setSenhaRevelada(''); // salvou: o valor revelado nao vale mais
   }
 
   useEffect(() => {
@@ -111,7 +96,7 @@ export function SecaoConfiguracaoEmail() {
   }
 
   // Está digitando uma senha NOVA? Só aí o olho vira mostrar/ocultar local; enquanto o campo
-  // tiver a máscara (mesmo focada/selecionada), o olho abre o modal reautenticado.
+  // tiver a máscara (mesmo focada/selecionada), o olho revela/oculta a senha salva.
   const digitando = editandoSenha && alterouSenha && senha.length > 0 && senha !== MASCARA;
 
   async function salvarSmtp() {
@@ -200,13 +185,14 @@ export function SecaoConfiguracaoEmail() {
                 <span>Senha de app</span>
                 <span className="campo-com-acao">
                   <input
-                    type={mostrarSenha && editandoSenha ? 'text' : 'password'}
-                    value={editandoSenha ? senha : cfg.temSenha ? MASCARA : ''}
+                    type={(mostrarSenha && editandoSenha) || senhaRevelada ? 'text' : 'password'}
+                    value={editandoSenha ? senha : senhaRevelada || (cfg.temSenha ? MASCARA : '')}
                     // Focar mantém a máscara no campo e a deixa SELECIONADA. É isso que faz o
                     // caminho natural funcionar: digitar substitui a seleção (SUBSTITUIR) e
                     // Delete/Backspace apaga a seleção gerando onChange com vazio (REMOVER).
                     // Limpar o campo no foco quebrava isso — o Delete não gerava evento nenhum.
                     onFocus={(e) => {
+                      setSenhaRevelada(''); // ao entrar em edição, o valor real sai da memória
                       if (!editandoSenha && cfg.temSenha) {
                         setEditandoSenha(true);
                         setSenha(MASCARA);
@@ -237,17 +223,22 @@ export function SecaoConfiguracaoEmail() {
                     <button
                       type="button"
                       className="campo-acao"
-                      onClick={() => (digitando ? setMostrarSenha((v) => !v) : abrirRevelacao())}
-                      title={digitando ? (mostrarSenha ? 'Ocultar' : 'Mostrar') : 'Mostrar senha de app salva'}
+                      disabled={revelando}
+                      onClick={() => {
+                        if (digitando) return setMostrarSenha((v) => !v); // só o que foi digitado
+                        return senhaRevelada ? ocultarRevelada() : revelar();
+                      }}
                       aria-label={
                         digitando
                           ? mostrarSenha
                             ? 'Ocultar senha digitada'
                             : 'Mostrar senha digitada'
-                          : 'Mostrar senha de app salva'
+                          : senhaRevelada
+                            ? 'Ocultar senha de app'
+                            : 'Mostrar senha de app'
                       }
                     >
-                      {digitando && mostrarSenha ? icoOlhoFechado : icoOlho}
+                      {(digitando && mostrarSenha) || senhaRevelada ? icoOlhoFechado : icoOlho}
                     </button>
                   )}
                 </span>
@@ -261,56 +252,6 @@ export function SecaoConfiguracaoEmail() {
             <div className="acoes" style={{ justifyContent: 'flex-start' }}>
               <button className="botao" disabled={salvandoSmtp} onClick={salvarSmtp}>{salvandoSmtp ? 'Salvando…' : 'Salvar configuração'}</button>
             </div>
-
-            {modalRevelar && (
-              <Modal
-                titulo="Mostrar senha de app"
-                subtitulo="A configuração de e-mail é compartilhada por toda a coordenação. Confirme sua senha para ver a senha de app salva."
-                aoFechar={() => !revelando && fecharRevelacao()}
-              >
-                {erroRevelar && <div className="erro-geral">{erroRevelar}</div>}
-
-                {!senhaRevelada ? (
-                  <>
-                    <label className="campo">
-                      <span>Sua senha</span>
-                      <input
-                        type="password"
-                        value={senhaCoordenador}
-                        onChange={(e) => setSenhaCoordenador(e.target.value)}
-                        placeholder="Senha da sua conta de coordenador"
-                      />
-                    </label>
-                    <label className="campo-checkbox" style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-                      <input type="checkbox" checked={confirmou} onChange={(e) => setConfirmou(e.target.checked)} />
-                      <span>Confirmo que quero exibir a senha de app na tela agora.</span>
-                    </label>
-                    <div className="acoes">
-                      <button className="botao botao-secundario" disabled={revelando} onClick={fecharRevelacao}>Cancelar</button>
-                      <button className="botao" disabled={revelando || !confirmou || !senhaCoordenador} onClick={revelar}>
-                        {revelando ? 'Verificando…' : 'Mostrar senha'}
-                      </button>
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <label className="campo">
-                      <span>Senha de app</span>
-                      <span className="campo-com-acao">
-                        <input type={verRevelada ? 'text' : 'password'} value={senhaRevelada} readOnly />
-                        <button type="button" className="campo-acao" onClick={() => setVerRevelada((v) => !v)} aria-label={verRevelada ? 'Ocultar senha' : 'Mostrar senha'}>
-                          {verRevelada ? icoOlhoFechado : icoOlho}
-                        </button>
-                      </span>
-                      <small className="legenda">Ela some desta tela ao fechar o modal.</small>
-                    </label>
-                    <div className="acoes">
-                      <button className="botao" onClick={fecharRevelacao}>Fechar</button>
-                    </div>
-                  </>
-                )}
-              </Modal>
-            )}
           </div>
         </>
       )}

@@ -1,6 +1,5 @@
-import { BadRequestException, Body, Controller, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Controller, Post, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import type { Response } from 'express';
-import * as bcrypt from 'bcryptjs';
 import { PrismaService } from '../prisma/prisma.service';
 import { GuardaJwt } from '../autenticacao/guarda-jwt';
 import { GuardaPapeis } from '../comum/guarda-papeis';
@@ -22,18 +21,11 @@ export class EmailController {
   @Post('revelar-senha')
   @UseGuards(GuardaJwt, GuardaPapeis)
   @Papeis('COORDENADOR')
-  async revelarSenha(@Req() req: Req, @Body() body: { senha?: string }, @Res() res: Response) {
+  async revelarSenha(@Req() req: Req, @Res() res: Response) {
+    // Sessão válida de COORDENADOR é a autorização — a configuração é global e qualquer
+    // coordenador já pode sobrescrever ou remover a senha pela própria tela.
     const u = await this.prisma.usuario.findUnique({ where: { id: req.usuario.sub } });
     if (!u) throw new UnauthorizedException();
-
-    // Reautenticação: a senha DO COORDENADOR (não a de app). Mensagem genérica e sem log.
-    const ok = await bcrypt.compare(body?.senha || '', u.senhaHash);
-    if (!ok) {
-      throw new BadRequestException({
-        mensagem: 'Senha incorreta.',
-        erros: [{ campo: 'senha', mensagem: 'Senha incorreta' }],
-      });
-    }
 
     const senhaApp = await this.email.revelarSenhaApp();
     // Sem cache em lugar nenhum: nem navegador, nem proxy, nem histórico de página.

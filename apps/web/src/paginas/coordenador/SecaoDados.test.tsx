@@ -39,7 +39,7 @@ describe('Ações do card', () => {
   it('tem os dois botões no mesmo card, backup e encerramento', async () => {
     render(<SecaoDados />);
     expect(await screen.findByRole('button', { name: 'Baixar dados' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Encerrar e arquivar período' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Encerrar período' })).toBeInTheDocument();
   });
 
   it('ficam na mesma linha, nas pontas (space-between) e podem empilhar', async () => {
@@ -52,7 +52,7 @@ describe('Ações do card', () => {
     // Baixar à esquerda, encerrar à direita: ordem no DOM.
     const botoes = Array.from(linha.querySelectorAll('button')).map((b) => b.textContent);
     expect(botoes[0]).toBe('Baixar dados');
-    expect(botoes[botoes.length - 1]).toBe('Encerrar e arquivar período');
+    expect(botoes[botoes.length - 1]).toBe('Encerrar período');
   });
 
   it('não instrui mais a ir na seção do Google Drive para encerrar', async () => {
@@ -72,7 +72,7 @@ describe('Ações do card', () => {
 describe('Encerramento sempre passa pela confirmação', () => {
   it('clicar no botão abre a prévia — não encerra direto', async () => {
     render(<SecaoDados />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar e arquivar período' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar período' }));
 
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/periodo/encerrar/previa'));
     expect(apiPost).not.toHaveBeenCalled(); // nada foi encerrado
@@ -81,12 +81,12 @@ describe('Encerramento sempre passa pela confirmação', () => {
 
   it('exige senha e a palavra ENCERRAR antes de habilitar', async () => {
     render(<SecaoDados />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar e arquivar período' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar período' }));
     await screen.findByText(/Contas que serão apagadas/i);
 
     // Dentro do modal, o botão de confirmar é o último com esse nome.
     const confirmar = () => {
-      const todos = screen.getAllByRole('button', { name: 'Encerrar e arquivar período' });
+      const todos = screen.getAllByRole('button', { name: 'Encerrar período' });
       return todos[todos.length - 1];
     };
     expect(confirmar()).toBeDisabled();
@@ -110,12 +110,12 @@ describe('Encerramento sempre passa pela confirmação', () => {
       snapshotEnviadoAoDrive: 0,
     });
     render(<SecaoDados />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar e arquivar período' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar período' }));
     await screen.findByText(/Contas que serão apagadas/i);
     fireEvent.change(screen.getByLabelText('Sua senha'), { target: { value: 'minha-senha' } });
     fireEvent.change(screen.getByLabelText('Digite ENCERRAR para confirmar'), { target: { value: 'ENCERRAR' } });
 
-    const todos = screen.getAllByRole('button', { name: 'Encerrar e arquivar período' });
+    const todos = screen.getAllByRole('button', { name: 'Encerrar período' });
     fireEvent.click(todos[todos.length - 1]);
 
     await waitFor(() =>
@@ -126,7 +126,7 @@ describe('Encerramento sempre passa pela confirmação', () => {
 
   it('cancelar fecha sem encerrar', async () => {
     render(<SecaoDados />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar e arquivar período' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Encerrar período' }));
     await screen.findByText(/Contas que serão apagadas/i);
 
     fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }));

@@ -13,6 +13,17 @@ interface StatusDrive {
   comErro: number;
 }
 
+// Linha informativa do painel: rótulo + valor, sem nada editável.
+function Linha({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+  return (
+    <div className="campo">
+      <dt className="legenda" style={{ marginBottom: 2 }}>{rotulo}</dt>
+      <dd style={{ margin: 0, fontWeight: 600 }}>{valor}</dd>
+      {detalhe && <dd style={{ margin: 0 }} className="legenda">{detalhe}</dd>}
+    </div>
+  );
+}
+
 const quando = (v: string | null) => {
   if (!v) return 'nunca';
   const d = new Date(v);
@@ -94,44 +105,30 @@ export function SecaoDrive() {
         </div>
       ) : (
         <>
-          <div className="grade-2">
-            <label className="campo">
-              <span>Situação</span>
-              <input value={status.conectado ? 'Conectado' : 'Não conectado'} disabled />
-            </label>
-            <label className="campo">
-              <span>Conta autorizada</span>
-              <input value={status.contaEmail ?? '—'} disabled />
-            </label>
-            <label className="campo">
-              <span>Pasta raiz</span>
-              <input value={status.pastaRaizNome ?? '—'} disabled />
-            </label>
-            <label className="campo">
-              <span>Última sincronização</span>
-              <input value={quando(status.ultimoSyncEm)} disabled />
-            </label>
-          </div>
+          {/* Painel só de leitura: nada aqui é editável, então nada tem cara de input. */}
+          <dl className="grade-2" style={{ margin: 0 }}>
+            <Linha rotulo="Situação" valor={status.conectado ? 'Conectado' : 'Não conectado'} />
+            <Linha rotulo="Conta autorizada" valor={status.contaEmail ?? '—'} />
+            <Linha rotulo="Pasta raiz" valor={status.pastaRaizNome ?? '—'} />
+            <Linha rotulo="Última sincronização" valor={quando(status.ultimoSyncEm)} />
+            <Linha
+              rotulo="Pendências"
+              valor={`${status.pendentes} na fila · ${status.comErro} com erro`}
+              detalhe={status.ultimoErro ? `Último erro: ${status.ultimoErro}` : undefined}
+            />
+          </dl>
 
-          <p className="legenda" style={{ marginTop: 6 }}>
-            Pendências: <strong>{status.pendentes}</strong> na fila · <strong>{status.comErro}</strong> com erro
-            {status.ultimoErro ? ` · último erro: ${status.ultimoErro}` : ''}
-          </p>
-
+          {/* Sem "Tentar novamente": a fila já tem retry automático e varredura diária no
+              servidor — a ação manual só duplicava o que o worker faz sozinho. */}
           <div className="acoes" style={{ justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
             {!status.conectado ? (
               <button className="botao" disabled={ocupado} onClick={conectar}>
-                Conectar conta do Google
+                Conectar Google Drive
               </button>
             ) : (
-              <>
-                <button className="botao" disabled={ocupado} onClick={() => acao('/drive/sincronizar', 'Sincronização disparada.')}>
-                  Tentar novamente
-                </button>
-                <button className="botao-secundario" disabled={ocupado} onClick={() => acao('/drive/desconectar', 'Drive desconectado.')}>
-                  Desconectar
-                </button>
-              </>
+              <button className="botao-secundario" disabled={ocupado} onClick={() => acao('/drive/desconectar', 'Drive desconectado.')}>
+                Desconectar
+              </button>
             )}
           </div>
         </>
