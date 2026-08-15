@@ -88,7 +88,10 @@ export const esquemaCadastro = z
       .refine((v) => v.split(/\s+/).filter(Boolean).length >= 2, 'Informe o nome completo'),
     email: z.string().email('E-mail inválido'),
     senha: z.string().min(6, 'A senha precisa ter ao menos 6 caracteres'),
-    codigo: z.string().min(1, 'Informe o código de cadastro'),
+    // Opcional AQUI de propósito: a coordenação pode deixar um papel sem código, e aí o
+    // cadastro é livre. Quem decide se o código é obrigatório é o backend (ver
+    // `esquemaCadastroExigindoCodigo` para a validação da tela).
+    codigo: z.string().optional(),
     curso: z.enum(CURSOS).optional(),
     tratamento: z.string().optional(),
     afiliacao: z.string().optional(),
@@ -105,6 +108,18 @@ export const esquemaCadastro = z
     }
   });
 export type DadosCadastro = z.infer<typeof esquemaCadastro>;
+
+// Validação da TELA quando já se sabe quais papéis exigem código (vem de
+// `GET /autenticacao/codigos-exigidos`, que só devolve booleanos — nunca os códigos).
+// O backend continua sendo a fonte da verdade: mexer no front não libera cadastro sem
+// código onde a coordenação configurou um.
+export function esquemaCadastroExigindoCodigo(papeisComCodigo: readonly string[]) {
+  return esquemaCadastro.superRefine((d, ctx) => {
+    if (papeisComCodigo.includes(d.papel) && !(d.codigo ?? '').trim()) {
+      ctx.addIssue({ code: 'custom', path: ['codigo'], message: 'Informe o código de cadastro' });
+    }
+  });
+}
 
 // Troca de senha (na tela "Meu perfil"): exige a senha atual e confirma a nova.
 export const esquemaTrocarSenha = z

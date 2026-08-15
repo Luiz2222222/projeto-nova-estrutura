@@ -64,6 +64,13 @@ export class AutenticacaoController {
     }
   }
 
+  // Pública de propósito: a tela de cadastro precisa saber se mostra o campo "Código de
+  // cadastro". Devolve SÓ booleanos por papel — nenhum código real trafega por aqui.
+  @Get('codigos-exigidos')
+  codigosExigidos() {
+    return this.auth.papeisQueExigemCodigo();
+  }
+
   @Post('cadastro')
   async cadastro(@Req() req: Request, @Body(new ZodValidacaoPipe(esquemaCadastro)) dados: DadosCadastro) {
     const ip = ipDaRequisicao(req);

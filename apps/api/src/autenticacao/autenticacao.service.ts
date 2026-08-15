@@ -8,6 +8,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../email/email.service';
+import { PAPEIS_CADASTRO } from '@tcc/compartilhado';
 import type { DadosCadastro, DadosCriarCoordenador, DadosLogin, UsuarioPublico } from '@tcc/compartilhado';
 
 @Injectable()
@@ -32,12 +33,27 @@ export class AutenticacaoService {
     };
   }
 
+  // Quais papéis do cadastro público EXIGEM código, olhando o banco. Só booleanos: esta
+  // resposta é pública (a tela de cadastro precisa saber se mostra o campo), então o código
+  // em si nunca sai daqui.
+  async papeisQueExigemCodigo(): Promise<Record<string, boolean>> {
+    const linhas = await this.prisma.codigoCadastro.findMany();
+    const exigidos: Record<string, boolean> = {};
+    for (const papel of PAPEIS_CADASTRO) {
+      exigidos[papel] = linhas.some((l) => l.papel === papel && (l.codigo ?? '').trim() !== '');
+    }
+    return exigidos;
+  }
+
   async cadastrar(dados: DadosCadastro): Promise<UsuarioPublico> {
-    // 1) Conferir o código de cadastro do papel.
+    // 1) Código de cadastro do papel — OPCIONAL por papel. Sem código configurado (linha
+    // ausente ou vazia), o cadastro daquele papel é livre e o que vier no corpo é ignorado.
+    // Esta checagem é a fonte da verdade: burlar a tela não libera nada.
     const cod = await this.prisma.codigoCadastro.findUnique({
       where: { papel: dados.papel },
     });
-    if (!cod || cod.codigo !== dados.codigo) {
+    const exigido = (cod?.codigo ?? '').trim();
+    if (exigido && exigido !== (dados.codigo ?? '').trim()) {
       throw new BadRequestException({
         mensagem: 'Código de cadastro inválido',
         erros: [{ campo: 'codigo', mensagem: 'Código incorreto para este tipo de usuário' }],

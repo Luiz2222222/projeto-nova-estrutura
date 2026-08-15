@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useAuth } from '../autenticacao/contexto';
 import { Modal } from './Modal';
 import {
@@ -7,11 +7,11 @@ import {
   ROTULO_CURSO,
   TRATAMENTOS,
   AFILIACOES,
-  esquemaCadastro,
+  esquemaCadastroExigindoCodigo,
   type PapelCadastro,
   type DadosCadastro,
 } from '@tcc/compartilhado';
-import type { ErroApi } from '../api';
+import { apiGet, type ErroApi } from '../api';
 
 const CATEGORIAS: { value: PapelCadastro; icone: string; descricao: string }[] = [
   { value: 'ALUNO', icone: '🎓', descricao: 'Estudante de graduação' },
@@ -38,7 +38,18 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
   const [erros, setErros] = useState<Record<string, string>>({});
   const [erroGeral, setErroGeral] = useState('');
   const [enviando, setEnviando] = useState(false);
+  // Quais papéis a coordenação protegeu com código. Vem de uma rota pública que devolve só
+  // booleanos — o código real nunca chega ao navegador. Enquanto não responde, o campo fica
+  // visível: é o comportamento antigo, e quem manda mesmo é o backend.
+  const [papeisComCodigo, setPapeisComCodigo] = useState<PapelCadastro[]>([...CATEGORIAS.map((c) => c.value)]);
 
+  useEffect(() => {
+    apiGet('/autenticacao/codigos-exigidos')
+      .then((r: any) => setPapeisComCodigo(CATEGORIAS.map((c) => c.value).filter((p) => r?.[p])))
+      .catch(() => {}); // sem resposta, mantém o campo à mostra
+  }, []);
+
+  const exigeCodigo = !!papel && papeisComCodigo.includes(papel);
   const tratamento = tratSel === 'Outros' ? tratLivre : tratSel;
   const afiliacao = afilSel === 'Outros' ? afilLivre : afilSel;
 
@@ -54,12 +65,13 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
     setErros({});
     setErroGeral('');
 
-    const dados: Record<string, unknown> = { papel, nomeCompleto, email, senha, codigo };
+    const dados: Record<string, unknown> = { papel, nomeCompleto, email, senha };
+    if (exigeCodigo) dados.codigo = codigo;
     if (papel === 'ALUNO') dados.curso = curso || undefined;
     if (papel === 'PROFESSOR' || papel === 'AVALIADOR') dados.tratamento = tratamento || undefined;
     if (papel === 'AVALIADOR') dados.afiliacao = afiliacao || undefined;
 
-    const r = esquemaCadastro.safeParse(dados);
+    const r = esquemaCadastroExigindoCodigo(papeisComCodigo).safeParse(dados);
     const m: Record<string, string> = {};
     if (!r.success) for (const i of r.error.issues) m[i.path.join('.')] = i.message;
     if (senha !== confirmarSenha) m.confirmarSenha = 'As senhas não coincidem';
@@ -79,6 +91,11 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
         const m: Record<string, string> = {};
         er.erros.forEach((x) => (m[x.campo] = x.mensagem));
         setErros(m);
+        // Se a coordenação passou a exigir código depois que a tela carregou, o backend
+        // recusa e nós revelamos o campo — em vez de deixar um erro sem onde aparecer.
+        if (m.codigo && papel && !papeisComCodigo.includes(papel)) {
+          setPapeisComCodigo((ps) => [...ps, papel]);
+        }
       }
       setErroGeral(er.mensagem || 'Não foi possível cadastrar.');
     } finally {
@@ -180,11 +197,14 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
               </label>
             )}
 
-            <label className="campo">
-              <span>Código de cadastro</span>
-              <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Fornecido pela coordenação" />
-              {erros.codigo && <small className="erro">{erros.codigo}</small>}
-            </label>
+            {/* Só aparece se a coordenação tiver configurado um código para este perfil. */}
+            {exigeCodigo && (
+              <label className="campo">
+                <span>Código de cadastro</span>
+                <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Fornecido pela coordenação" />
+                {erros.codigo && <small className="erro">{erros.codigo}</small>}
+              </label>
+            )}
 
             <label className="campo">
               <span>Senha</span>

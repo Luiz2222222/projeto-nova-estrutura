@@ -171,10 +171,13 @@ export class CoordenacaoService {
     return this.prisma.codigoCadastro.findMany({ orderBy: { papel: 'asc' } });
   }
 
+  // Código é OPCIONAL por papel: campo em branco significa "esse perfil se cadastra sem
+  // código". Nesse caso a linha é REMOVIDA em vez de guardada vazia — código vazio no banco
+  // seria ambíguo (dá para conferir contra ""?) e o backend precisa de uma resposta única.
   async salvarCodigos(dados: Record<string, string>) {
     const ops = this.PAPEIS_CODIGO.map((papel) => {
       const codigo = (dados[papel] ?? '').trim();
-      if (!codigo) throw new BadRequestException({ mensagem: `Informe o código de cadastro de ${papel}.` });
+      if (!codigo) return this.prisma.codigoCadastro.deleteMany({ where: { papel } });
       return this.prisma.codigoCadastro.upsert({
         where: { papel },
         update: { codigo },
