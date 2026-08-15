@@ -129,6 +129,29 @@ describe('Ações do card', () => {
     expect(screen.queryByRole('button', { name: 'Desconectar' })).not.toBeInTheDocument();
   });
 
+  // Os dois botões formam UM grupo à direita, com "Atualizar" imediatamente antes da ação
+  // de conectar/desconectar — nada de "Atualizar" jogado na outra ponta do card.
+  it.each([
+    ['conectado', true, 'Desconectar'],
+    ['desconectado', false, 'Conectar Google Drive'],
+  ])('%s: Atualizar fica colado à esquerda de "%s", no mesmo grupo à direita', async (_nome, conectado, acao) => {
+    responder({ ...statusBase, conectado: conectado as boolean });
+    const { container } = render(<SecaoDrive />);
+    const botaoAcao = await screen.findByRole('button', { name: acao as string });
+    const atualizar = screen.getByRole('button', { name: 'Atualizar' });
+
+    // Mesmo container, e nessa ordem (vale também quando empilham em tela estreita).
+    const grupo = container.querySelector('.acoes')!;
+    expect(atualizar.parentElement).toBe(grupo);
+    expect(botaoAcao.parentElement).toBe(grupo);
+    expect([...grupo.children].map((b) => b.textContent)).toEqual(['Atualizar', acao]);
+
+    // O grupo inteiro encosta na direita; nenhum botão é empurrado para a outra ponta.
+    expect(grupo).toHaveStyle({ flexWrap: 'wrap' });
+    expect(atualizar.style.marginRight).toBe('');
+    expect(botaoAcao.style.marginLeft).toBe('');
+  });
+
   it('"Atualizar" só relê o status — não sincroniza, não enfileira, não apaga', async () => {
     responder();
     render(<SecaoDrive />);

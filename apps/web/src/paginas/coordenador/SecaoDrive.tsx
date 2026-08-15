@@ -139,16 +139,13 @@ export function SecaoDrive() {
             <Linha rotulo="Última atualização" valor={quando(status.ultimoSyncEm)} />
           </dl>
 
-          {/* "Atualizar" só relê /drive/status: não enfileira, não sincroniza, não apaga —
+          {/* Um grupo só, encostado à direita (`.acoes` já alinha em flex-end): "Atualizar"
+              vem imediatamente antes da ação de conectar/desconectar, e em tela estreita os
+              dois empilham nessa mesma ordem.
+              "Atualizar" só relê /drive/status: não enfileira, não sincroniza, não apaga —
               a fila já tem retry automático e varredura diária no servidor. */}
           <div className="acoes" style={{ flexWrap: 'wrap', gap: 10 }}>
-            <button
-              type="button"
-              className="botao botao-secundario"
-              style={{ marginRight: 'auto' }}
-              disabled={ocupado}
-              onClick={carregar}
-            >
+            <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={carregar}>
               Atualizar
             </button>
             {!status.conectado ? (
