@@ -14,21 +14,44 @@ interface StatusDrive {
 }
 
 // Linha informativa do painel: rótulo + valor, sem nada editável.
-function Linha({ rotulo, valor, detalhe }: { rotulo: string; valor: string; detalhe?: string }) {
+function Linha({ rotulo, valor }: { rotulo: string; valor: string }) {
   return (
-    <div className="campo">
-      <dt className="legenda" style={{ marginBottom: 2 }}>{rotulo}</dt>
-      <dd style={{ margin: 0, fontWeight: 600 }}>{valor}</dd>
-      {detalhe && <dd style={{ margin: 0 }} className="legenda">{detalhe}</dd>}
+    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'baseline' }}>
+      <dt className="legenda" style={{ margin: 0 }}>{rotulo}:</dt>
+      <dd style={{ margin: 0, fontWeight: 600, wordBreak: 'break-word' }}>{valor}</dd>
     </div>
   );
 }
 
+// dd/mm/aaaa HH:mm:ss no fuso oficial do curso (America/Fortaleza), como no resto do projeto.
 const quando = (v: string | null) => {
   if (!v) return 'nunca';
   const d = new Date(v);
-  return `${d.toLocaleDateString('pt-BR')} às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+  if (Number.isNaN(d.getTime())) return 'nunca';
+  const fmt = new Intl.DateTimeFormat('pt-BR', {
+    timeZone: 'America/Fortaleza',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23',
+  });
+  const p: Record<string, string> = {};
+  for (const parte of fmt.formatToParts(d)) p[parte.type] = parte.value;
+  return `${p.day}/${p.month}/${p.year} ${p.hour}:${p.minute}:${p.second}`;
 };
+
+// Selo de situação, no mesmo padrão visual dos status de documento.
+function Selo({ conectado, configurado }: { conectado: boolean; configurado: boolean }) {
+  if (!configurado) return <span className="status-pill pilula-neutra">Não configurado</span>;
+  return conectado ? (
+    <span className="status-pill status-normal">Conectado</span>
+  ) : (
+    <span className="status-pill status-atencao">Não conectado</span>
+  );
+}
 
 // Integração com o Google Drive: situação, conta autorizada, pasta raiz e sincronização.
 // Configuração GLOBAL — todos os coordenadores veem a mesma conta conectada.
@@ -82,8 +105,11 @@ export function SecaoDrive() {
 
   return (
     <section className="cartao-secao bloco">
-      <h2>Arquivamento no Google Drive</h2>
-      <p className="legenda" style={{ marginBottom: 14 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+        <h2 style={{ marginBottom: 0 }}>Arquivamento no Google Drive</h2>
+        {status && <Selo conectado={status.conectado} configurado={status.configurado} />}
+      </div>
+      <p className="legenda" style={{ marginTop: 8, marginBottom: 14 }}>
         Configuração global compartilhada entre os coordenadores. Cada TCC aprovado ganha uma pasta no
         Drive da conta institucional com os documentos e um retrato dos dados.
       </p>
@@ -105,28 +131,44 @@ export function SecaoDrive() {
         </div>
       ) : (
         <>
-          {/* Painel só de leitura: nada aqui é editável, então nada tem cara de input. */}
-          <dl className="grade-2" style={{ margin: 0 }}>
-            <Linha rotulo="Situação" valor={status.conectado ? 'Conectado' : 'Não conectado'} />
-            <Linha rotulo="Conta autorizada" valor={status.contaEmail ?? '—'} />
-            <Linha rotulo="Pasta raiz" valor={status.pastaRaizNome ?? '—'} />
-            <Linha rotulo="Última sincronização" valor={quando(status.ultimoSyncEm)} />
-            <Linha
-              rotulo="Pendências"
-              valor={`${status.pendentes} na fila · ${status.comErro} com erro`}
-              detalhe={status.ultimoErro ? `Último erro: ${status.ultimoErro}` : undefined}
-            />
+          {/* Painel só de leitura: nada aqui é editável, então nada tem cara de input. A
+              situação virou o selo do título, então não se repete como linha. */}
+          <dl style={{ margin: 0, display: 'grid', gap: 8 }}>
+            <Linha rotulo="Conta" valor={status.contaEmail ?? '—'} />
+            <Linha rotulo="Pasta" valor={status.pastaRaizNome ?? '—'} />
+            <Linha rotulo="Última atualização" valor={quando(status.ultimoSyncEm)} />
           </dl>
 
-          {/* Sem "Tentar novamente": a fila já tem retry automático e varredura diária no
-              servidor — a ação manual só duplicava o que o worker faz sozinho. */}
-          <div className="acoes" style={{ justifyContent: 'flex-start', gap: 8, flexWrap: 'wrap' }}>
+          {/* "Atualizar" só relê /drive/status: não enfileira, não sincroniza, não apaga —
+              a fila já tem retry automático e varredura diária no servidor. */}
+          <div className="acoes" style={{ flexWrap: 'wrap', gap: 10 }}>
+            <button
+              type="button"
+              className="botao botao-secundario"
+              style={{ marginRight: 'auto' }}
+              disabled={ocupado}
+              onClick={carregar}
+            >
+              Atualizar
+            </button>
             {!status.conectado ? (
-              <button className="botao" disabled={ocupado} onClick={conectar}>
+              // Verde fixo (não a variável de tema, que clareia no escuro e perderia o
+              // contraste com o texto branco).
+              <button
+                className="botao"
+                style={{ background: '#15803d', borderColor: '#15803d', color: '#fff' }}
+                disabled={ocupado}
+                onClick={conectar}
+              >
                 Conectar Google Drive
               </button>
             ) : (
-              <button className="botao-secundario" disabled={ocupado} onClick={() => acao('/drive/desconectar', 'Drive desconectado.')}>
+              // Mesmo padrão do "Encerrar período": ação de desfazer, à direita do card.
+              <button
+                className="botao botao-perigo"
+                disabled={ocupado}
+                onClick={() => acao('/drive/desconectar', 'Drive desconectado.')}
+              >
                 Desconectar
               </button>
             )}

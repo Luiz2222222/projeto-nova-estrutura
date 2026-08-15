@@ -2,7 +2,7 @@
 // Card do Drive: SÓ integração (situação, conta, pasta raiz, sincronização, desconectar).
 // O encerramento de período saiu daqui — ele mora em "Dados do período", com teste próprio.
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import '@testing-library/jest-dom/vitest';
 import { SecaoDrive } from './SecaoDrive';
 
@@ -37,15 +37,45 @@ beforeEach(() => {
 });
 
 describe('Painel informativo (nada editável)', () => {
-  it('mostra situação, conta, pasta raiz e última sincronização como texto', async () => {
+  it('mostra conta, pasta e última atualização como texto, nessa ordem', async () => {
     responder();
-    render(<SecaoDrive />);
+    const { container } = render(<SecaoDrive />);
     expect(await screen.findByText('coordenacaodee@ufpe.br')).toBeInTheDocument();
-    expect(screen.getByText('Conectado')).toBeInTheDocument();
     expect(screen.getByText('Sistema de TCC - DEE')).toBeInTheDocument();
-    for (const rotulo of ['Situação', 'Conta autorizada', 'Pasta raiz', 'Última sincronização', 'Pendências']) {
-      expect(screen.getByText(rotulo)).toBeInTheDocument();
-    }
+
+    const rotulos = [...container.querySelectorAll('dt')].map((e) => e.textContent);
+    expect(rotulos).toEqual(['Conta:', 'Pasta:', 'Última atualização:']);
+  });
+
+  it('a data usa dd/mm/aaaa HH:mm:ss no fuso de Fortaleza', async () => {
+    // 13/08/2026 12:00 UTC = 09:00:00 em Fortaleza (UTC-3).
+    responder({ ...statusBase, ultimoSyncEm: '2026-08-13T12:00:00Z' });
+    render(<SecaoDrive />);
+
+    expect(await screen.findByText('13/08/2026 09:00:00')).toBeInTheDocument();
+  });
+
+  it('o selo de status fica ao lado do título, no padrão dos status de documento', async () => {
+    responder();
+    const { container } = render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+
+    const selo = container.querySelector('.status-pill')!;
+    expect(selo).toHaveTextContent('Conectado');
+    expect(selo.className).toContain('status-normal'); // verde
+  });
+
+  it('desconectado e não configurado têm selo próprio', async () => {
+    responder({ ...statusBase, conectado: false });
+    const { container, unmount } = render(<SecaoDrive />);
+    expect(await screen.findByText('Não conectado')).toBeInTheDocument();
+    expect(container.querySelector('.status-pill')!.className).toContain('status-atencao');
+    unmount();
+
+    responder({ ...statusBase, configurado: false, conectado: false });
+    const r2 = render(<SecaoDrive />);
+    expect(await screen.findByText('Não configurado')).toBeInTheDocument();
+    expect(r2.container.querySelector('.status-pill')!.className).toContain('pilula-neutra');
   });
 
   it('o card NÃO tem campos com aparência de formulário', async () => {
@@ -58,11 +88,14 @@ describe('Painel informativo (nada editável)', () => {
     expect(container.querySelectorAll('select')).toHaveLength(0);
   });
 
-  it('mostra as pendências da fila e o último erro', async () => {
+  it('a linha de "Pendências" não existe mais', async () => {
     responder({ ...statusBase, pendentes: 3, comErro: 2, ultimoErro: 'quota excedida' });
     render(<SecaoDrive />);
-    expect(await screen.findByText(/3 na fila · 2 com erro/)).toBeInTheDocument();
-    expect(screen.getByText(/quota excedida/)).toBeInTheDocument();
+    await screen.findByText('Conectado');
+
+    expect(screen.queryByText(/Pendências/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/na fila/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/quota excedida/)).not.toBeInTheDocument();
   });
 
   it('avisa quando o servidor não tem as credenciais configuradas, sem botões', async () => {
@@ -71,25 +104,43 @@ describe('Painel informativo (nada editável)', () => {
     expect(await screen.findByText(/não configurada no servidor/i)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Conectar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Desconectar' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Atualizar' })).not.toBeInTheDocument();
   });
 });
 
 describe('Ações do card', () => {
-  it('conectado: SOMENTE Desconectar', async () => {
+  it('conectado: Atualizar e Desconectar (nunca Conectar)', async () => {
     responder();
     render(<SecaoDrive />);
     await screen.findByText('Conectado');
 
+    expect(screen.getByRole('button', { name: 'Atualizar' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Desconectar' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Conectar Google Drive/i })).not.toBeInTheDocument();
   });
 
-  it('desconectado: SOMENTE Conectar Google Drive', async () => {
+  it('desconectado: Conectar Google Drive em verde (nunca Desconectar)', async () => {
     responder({ ...statusBase, conectado: false });
     render(<SecaoDrive />);
 
-    expect(await screen.findByRole('button', { name: 'Conectar Google Drive' })).toBeInTheDocument();
+    const conectar = await screen.findByRole('button', { name: 'Conectar Google Drive' });
+    expect(conectar).toBeInTheDocument();
+    expect(conectar).toHaveStyle({ background: '#15803d' });
     expect(screen.queryByRole('button', { name: 'Desconectar' })).not.toBeInTheDocument();
+  });
+
+  it('"Atualizar" só relê o status — não sincroniza, não enfileira, não apaga', async () => {
+    responder();
+    render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+    const antes = apiGet.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+    await waitFor(() => expect(apiGet.mock.calls.length).toBe(antes + 1));
+
+    // Recarregou o MESMO status, e nada além disso saiu da tela.
+    expect(apiGet.mock.calls.every((c) => c[0] === '/drive/status')).toBe(true);
+    expect(apiPost).not.toHaveBeenCalled();
   });
 
   // O retry manual saiu da tela; o worker do servidor continua tentando sozinho.

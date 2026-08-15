@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { sanitizarNotasTcc, ocultarRascunho } from '../comum/sanitizar-notas';
+import { ehCegoNoArquivado, podeVerDocumentoArquivado } from '../comum/visibilidade-arquivado';
 import { resolverSemestreAtivo } from '../comum/semestre';
 import { PESO_NF1, PESO_NF2 } from '@tcc/compartilhado';
 
@@ -49,6 +50,13 @@ export class HistoricoTccsService {
       orderBy: [{ semestre: 'desc' }, { alunoNome: 'asc' }],
     });
 
+    // Pesos REAIS do calendário de cada semestre arquivado: um período antigo com pesos
+    // personalizados tem que mostrar o denominador daquele período, não o padrão de hoje.
+    const cals: any[] = await this.prisma.calendario.findMany({
+      where: { semestre: { in: [...new Set(itens.map((a) => a.semestre))] } },
+    });
+    const calPorSemestre = new Map<string, any>(cals.map((c) => [c.semestre, c]));
+
     // "Ocultar do meu histórico" vale igual aqui: a preferência é gravada com o id prefixado.
     const escondidos = new Set(ocultos);
     return itens
@@ -65,6 +73,7 @@ export class HistoricoTccsService {
         const datas = snap.datas ?? {};
         const defesa = snap.defesa ?? {};
         const notas = snap.notas ?? {};
+        const cal = calPorSemestre.get(a.semestre) ?? null;
         // O orientador da Fase II é rotulado por comparação de id; o vínculo sobreviveu na
         // tabela de participantes (a conta de professor não é apagada no encerramento).
         const orientadorId = a.participantes.find((p) => p.papel === 'ORIENTADOR')?.usuarioId ?? null;
@@ -110,7 +119,11 @@ export class HistoricoTccsService {
           coorientadorNome: a.coorientadorNome,
           coorientadorTitulacao: snap.coorientador?.titulacao ?? null,
           coorientadorAfiliacao: snap.coorientador?.afiliacao ?? null,
-          documentos: a.documentos.map((d) => ({
+          // Documento da banca é interno da coordenação: o histórico vivo já o esconde do
+          // professor (`tipo != AVALIACAO_BANCA`) e aqui vale o mesmo.
+          documentos: a.documentos
+            .filter((d) => podeVerDocumentoArquivado(d.tipo, profId ? 'PROFESSOR' : 'COORDENADOR'))
+            .map((d) => ({
             id: d.id,
             tipo: d.tipo,
             nomeArquivo: d.nomeArquivo,
@@ -148,24 +161,32 @@ export class HistoricoTccsService {
             }),
           })),
           solicitacoes: snap.solicitacoes ?? [],
-          pesos: null, // pesos por critério do calendário não são arquivados; usa-se o padrão
-          pesoFase1: notas.pesoFase1 ?? PESO_NF1,
-          pesoFase2: notas.pesoFase2 ?? PESO_NF2,
+          // Calendário daquele semestre = denominador certo por critério. Sem calendário
+          // (período antigo demais), cai nos pesos gravados no snapshot e depois no padrão.
+          pesos: cal,
+          pesoFase1: cal?.pesoFase1 ?? notas.pesoFase1 ?? PESO_NF1,
+          pesoFase2: cal?.pesoFase2 ?? notas.pesoFase2 ?? PESO_NF2,
           ...(profId ? { vinculos } : {}),
         };
 
+        if (!profId) return item; // coordenação vê tudo
+
+        // MESMA condição de liberação do histórico vivo: antes da nota final confirmada (ou
+        // de uma fase terminal), o professor não recebe NF, notas por critério nem pareceres.
+        const visivel: any = ocultarRascunho(sanitizarNotasTcc(item));
+
         // MESMO duplo-cego do histórico vivo: quem só participou como avaliador da Fase I de
         // um TCC reprovado nela continua sem saber quem era o aluno/orientador.
-        if (profId && vinculos.length === 1 && vinculos[0] === 'AVALIADOR' && item.faseAtual === 'REPROVADO_FASE_1') {
-          item.aluno = null;
-          item.orientador = null;
-          item.orientadorId = null;
-          item.coorientadorNome = null;
-          item.coorientadorTitulacao = null;
-          item.coorientadorAfiliacao = null;
-          item.documentos = []; // nomes de arquivo entregariam o aluno
+        if (ehCegoNoArquivado(a.faseFinal, a.participantes, profId)) {
+          visivel.aluno = null;
+          visivel.orientador = null;
+          visivel.orientadorId = null;
+          visivel.coorientadorNome = null;
+          visivel.coorientadorTitulacao = null;
+          visivel.coorientadorAfiliacao = null;
+          visivel.documentos = []; // nomes de arquivo entregariam o aluno
         }
-        return item;
+        return visivel;
       });
   }
 
