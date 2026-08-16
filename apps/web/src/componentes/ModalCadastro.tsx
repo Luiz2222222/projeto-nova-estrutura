@@ -39,14 +39,15 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
   const [erroGeral, setErroGeral] = useState('');
   const [enviando, setEnviando] = useState(false);
   // Quais papéis a coordenação protegeu com código. Vem de uma rota pública que devolve só
-  // booleanos — o código real nunca chega ao navegador. Enquanto não responde, o campo fica
-  // visível: é o comportamento antigo, e quem manda mesmo é o backend.
+  // booleanos — o código real nunca chega ao navegador. O campo aparece SEMPRE; isto aqui
+  // decide apenas se ele é obrigatório. Sem resposta, assume obrigatório (o backend é quem
+  // manda de verdade, então errar para o lado mais restrito não bloqueia ninguém).
   const [papeisComCodigo, setPapeisComCodigo] = useState<PapelCadastro[]>([...CATEGORIAS.map((c) => c.value)]);
 
   useEffect(() => {
     apiGet('/autenticacao/codigos-exigidos')
       .then((r: any) => setPapeisComCodigo(CATEGORIAS.map((c) => c.value).filter((p) => r?.[p])))
-      .catch(() => {}); // sem resposta, mantém o campo à mostra
+      .catch(() => {});
   }, []);
 
   const exigeCodigo = !!papel && papeisComCodigo.includes(papel);
@@ -65,8 +66,8 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
     setErros({});
     setErroGeral('');
 
-    const dados: Record<string, unknown> = { papel, nomeCompleto, email, senha };
-    if (exigeCodigo) dados.codigo = codigo;
+    // O código vai sempre, mesmo vazio: quando o papel não exige, o backend ignora.
+    const dados: Record<string, unknown> = { papel, nomeCompleto, email, senha, codigo };
     if (papel === 'ALUNO') dados.curso = curso || undefined;
     if (papel === 'PROFESSOR' || papel === 'AVALIADOR') dados.tratamento = tratamento || undefined;
     if (papel === 'AVALIADOR') dados.afiliacao = afiliacao || undefined;
@@ -197,14 +198,18 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
               </label>
             )}
 
-            {/* Só aparece se a coordenação tiver configurado um código para este perfil. */}
-            {exigeCodigo && (
-              <label className="campo">
-                <span>Código de cadastro</span>
-                <input value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="Fornecido pela coordenação" />
-                {erros.codigo && <small className="erro">{erros.codigo}</small>}
-              </label>
-            )}
+            {/* O campo aparece sempre; o que muda é ser obrigatório ou não. */}
+            <label className="campo">
+              <span>Código de cadastro</span>
+              <input
+                value={codigo}
+                onChange={(e) => setCodigo(e.target.value)}
+                placeholder={exigeCodigo ? 'Fornecido pela coordenação' : 'Opcional'}
+                aria-required={exigeCodigo}
+              />
+              {!exigeCodigo && <small className="legenda">Opcional: não há código exigido para este perfil.</small>}
+              {erros.codigo && <small className="erro">{erros.codigo}</small>}
+            </label>
 
             <label className="campo">
               <span>Senha</span>

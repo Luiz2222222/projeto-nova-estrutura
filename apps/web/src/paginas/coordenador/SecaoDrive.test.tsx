@@ -152,18 +152,71 @@ describe('Ações do card', () => {
     expect(botaoAcao.style.marginLeft).toBe('');
   });
 
-  it('"Atualizar" só relê o status — não sincroniza, não enfileira, não apaga', async () => {
+  it('"Atualizar" sincroniza de verdade e depois recarrega o status', async () => {
+    responder();
+    apiPost.mockResolvedValue({ reenfileirados: 0, tccs: 2, documentos: 3, processados: 5, falhas: 0 });
+    render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+    const gets = apiGet.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/drive/sincronizar', {}));
+    // E o status é relido DEPOIS da sincronização, para refletir o resultado.
+    await waitFor(() => expect(apiGet.mock.calls.length).toBe(gets + 1));
+    expect(apiGet.mock.calls.every((c) => c[0] === '/drive/status')).toBe(true);
+    expect(await screen.findByText('5 itens enviados ao Drive.')).toBeInTheDocument();
+  });
+
+  it('avisa quando não havia nada elegível para enviar', async () => {
+    responder();
+    apiPost.mockResolvedValue({ reenfileirados: 0, tccs: 0, documentos: 0, processados: 0, falhas: 0 });
+    render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+
+    expect(
+      await screen.findByText('Não há TCCs aprovados ou documentos novos para enviar ao Drive.'),
+    ).toBeInTheDocument();
+  });
+
+  it('mostra "Atualizando..." e trava os botões enquanto envia', async () => {
+    responder();
+    let liberar!: (v: unknown) => void;
+    apiPost.mockReturnValue(new Promise((res) => { liberar = res; }));
+    render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+
+    const atualizando = await screen.findByRole('button', { name: 'Atualizando...' });
+    expect(atualizando).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Desconectar' })).toBeDisabled();
+
+    liberar({ reenfileirados: 0, tccs: 0, documentos: 0, processados: 1, falhas: 0 });
+    expect(await screen.findByRole('button', { name: 'Atualizar' })).toBeEnabled();
+  });
+
+  it('erro da sincronização aparece na tela', async () => {
+    responder();
+    apiPost.mockRejectedValue({ mensagem: 'Token do Google expirado.' });
+    render(<SecaoDrive />);
+    await screen.findByText('Conectado');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
+
+    expect(await screen.findByText('Token do Google expirado.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Atualizar' })).toBeEnabled();
+  });
+
+  it('abrir a página NÃO sincroniza — só o clique sincroniza', async () => {
     responder();
     render(<SecaoDrive />);
     await screen.findByText('Conectado');
-    const antes = apiGet.mock.calls.length;
 
-    fireEvent.click(screen.getByRole('button', { name: 'Atualizar' }));
-    await waitFor(() => expect(apiGet.mock.calls.length).toBe(antes + 1));
-
-    // Recarregou o MESMO status, e nada além disso saiu da tela.
-    expect(apiGet.mock.calls.every((c) => c[0] === '/drive/status')).toBe(true);
     expect(apiPost).not.toHaveBeenCalled();
+    expect(apiGet.mock.calls.map((c) => c[0])).toEqual(['/drive/status']);
   });
 
   // O retry manual saiu da tela; o worker do servidor continua tentando sozinho.
@@ -180,11 +233,28 @@ describe('Ações do card', () => {
     expect(screen.queryByRole('button', { name: /Tentar novamente/i })).not.toBeInTheDocument();
   });
 
-  it('a tela não dispara sincronização manual', async () => {
+  it('desconectar continua funcionando e relê o status', async () => {
     responder();
+    apiPost.mockResolvedValue({ ok: true });
     render(<SecaoDrive />);
     await screen.findByText('Conectado');
-    expect(apiPost).not.toHaveBeenCalledWith('/drive/sincronizar', expect.anything());
+    const gets = apiGet.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Desconectar' }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/drive/desconectar', {}));
+    await waitFor(() => expect(apiGet.mock.calls.length).toBe(gets + 1));
+    expect(await screen.findByText('Drive desconectado.')).toBeInTheDocument();
+  });
+
+  it('conectar continua pedindo a URL de consentimento', async () => {
+    responder({ ...statusBase, conectado: false });
+    apiPost.mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?x=1' });
+    render(<SecaoDrive />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Conectar Google Drive' }));
+
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/drive/autorizar', {}));
   });
 });
 

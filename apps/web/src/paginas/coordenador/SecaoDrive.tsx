@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import { apiGet, apiPost, mensagemErro } from '../../api';
 
+// Devolvido por POST /drive/sincronizar (reenfileira erros -> reconcilia -> processa a fila).
+interface ResultadoSync {
+  reenfileirados: number;
+  tccs: number;
+  documentos: number;
+  processados: number;
+  falhas: number;
+}
+
 interface StatusDrive {
   conectado: boolean;
   configurado: boolean;
@@ -64,9 +73,41 @@ export function SecaoDrive() {
   const [msg, setMsg] = useState('');
   const [ocupado, setOcupado] = useState(false);
 
+  const [sincronizando, setSincronizando] = useState(false);
+  // Enquanto sincroniza, o card inteiro fica travado (nada de desconectar no meio do envio).
+  const ocupadoOuSync = ocupado || sincronizando;
+
   const carregar = useCallback(() => {
     apiGet<StatusDrive>('/drive/status').then(setStatus).catch(() => setStatus(null));
   }, []);
+
+  // Envia ao Drive o que estiver pendente e recarrega o status. Só roda no clique do
+  // coordenador — abrir a página nunca dispara sincronização.
+  //
+  // Quem decide o que é elegível é o servidor: `reconciliar()` só olha TCCs que já saíram da
+  // INICIALIZACAO, então um TCC sem os documentos iniciais aprovados não ganha pasta nem tem
+  // documento enviado por causa deste botão.
+  async function sincronizar() {
+    setErro('');
+    setMsg('');
+    setSincronizando(true);
+    try {
+      const r = await apiPost<ResultadoSync>('/drive/sincronizar', {});
+      const processados = r?.processados ?? 0;
+      const falhas = r?.falhas ?? 0;
+      if (processados === 0 && falhas === 0) {
+        setMsg('Não há TCCs aprovados ou documentos novos para enviar ao Drive.');
+      } else {
+        const itens = `${processados} ${processados === 1 ? 'item enviado' : 'itens enviados'}`;
+        setMsg(falhas > 0 ? `${itens}; ${falhas} com erro (o servidor tentará de novo).` : `${itens} ao Drive.`);
+      }
+      carregar();
+    } catch (e) {
+      setErro(mensagemErro(e, 'Não foi possível sincronizar com o Google Drive.'));
+    } finally {
+      setSincronizando(false);
+    }
+  }
 
   useEffect(() => {
     carregar();
@@ -141,12 +182,10 @@ export function SecaoDrive() {
 
           {/* Um grupo só, encostado à direita (`.acoes` já alinha em flex-end): "Atualizar"
               vem imediatamente antes da ação de conectar/desconectar, e em tela estreita os
-              dois empilham nessa mesma ordem.
-              "Atualizar" só relê /drive/status: não enfileira, não sincroniza, não apaga —
-              a fila já tem retry automático e varredura diária no servidor. */}
+              dois empilham nessa mesma ordem. */}
           <div className="acoes" style={{ flexWrap: 'wrap', gap: 10 }}>
-            <button type="button" className="botao botao-secundario" disabled={ocupado} onClick={carregar}>
-              Atualizar
+            <button type="button" className="botao botao-secundario" disabled={ocupadoOuSync} onClick={sincronizar}>
+              {sincronizando ? 'Atualizando...' : 'Atualizar'}
             </button>
             {!status.conectado ? (
               // Verde fixo (não a variável de tema, que clareia no escuro e perderia o
@@ -154,7 +193,7 @@ export function SecaoDrive() {
               <button
                 className="botao"
                 style={{ background: '#15803d', borderColor: '#15803d', color: '#fff' }}
-                disabled={ocupado}
+                disabled={ocupadoOuSync}
                 onClick={conectar}
               >
                 Conectar Google Drive
@@ -163,7 +202,7 @@ export function SecaoDrive() {
               // Mesmo padrão do "Encerrar período": ação de desfazer, à direita do card.
               <button
                 className="botao botao-perigo"
-                disabled={ocupado}
+                disabled={ocupadoOuSync}
                 onClick={() => acao('/drive/desconectar', 'Drive desconectado.')}
               >
                 Desconectar
