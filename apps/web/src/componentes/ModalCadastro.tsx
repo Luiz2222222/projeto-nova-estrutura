@@ -40,9 +40,13 @@ export function ModalCadastro({ aoFechar, aoSucesso }: { aoFechar: () => void; a
   const [enviando, setEnviando] = useState(false);
   // Quais papéis a coordenação protegeu com código. Vem de uma rota pública que devolve só
   // booleanos — o código real nunca chega ao navegador. O campo aparece SEMPRE; isto aqui
-  // decide apenas se ele é obrigatório. Sem resposta, assume obrigatório (o backend é quem
-  // manda de verdade, então errar para o lado mais restrito não bloqueia ninguém).
-  const [papeisComCodigo, setPapeisComCodigo] = useState<PapelCadastro[]>([...CATEGORIAS.map((c) => c.value)]);
+  // decide apenas se ele é obrigatório na tela.
+  //
+  // Começa VAZIO (e continua vazio se a consulta falhar): enquanto o navegador não souber
+  // que existe código, ele não pode inventar uma exigência e travar um cadastro que o
+  // servidor aceitaria. Exigir de verdade é sempre do backend — se houver código, ele
+  // recusa e o erro volta para o campo.
+  const [papeisComCodigo, setPapeisComCodigo] = useState<PapelCadastro[]>([]);
 
   useEffect(() => {
     apiGet('/autenticacao/codigos-exigidos')

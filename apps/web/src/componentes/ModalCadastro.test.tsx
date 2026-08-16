@@ -149,14 +149,59 @@ describe('Perfil COM código configurado', () => {
   });
 });
 
+// A tela não pode inventar uma exigência que o servidor não tem: sem saber, trata como
+// opcional e deixa o backend recusar se realmente houver código configurado.
 describe('Sem resposta da rota de códigos', () => {
-  it('mantém o campo visível e assume obrigatório (o backend continua decidindo)', async () => {
+  it('a consulta falhou: campo visível e opcional', async () => {
     apiGet.mockRejectedValue(new Error('offline'));
     abrir();
     escolher('Aluno');
 
     const campo = await screen.findByLabelText(CODIGO);
     expect(campo).toBeInTheDocument();
-    expect(campo).toHaveAttribute('aria-required', 'true');
+    expect(campo).toHaveAttribute('aria-required', 'false');
+    expect(screen.getByText('Opcional: não há código exigido para este perfil.')).toBeInTheDocument();
+  });
+
+  it('a consulta falhou: dá para cadastrar sem código (o backend é quem barra)', async () => {
+    apiGet.mockRejectedValue(new Error('offline'));
+    abrir();
+    escolher('Aluno');
+    preencherAluno();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+
+    await waitFor(() => expect(cadastrar).toHaveBeenCalled());
+    expect(screen.queryByText('Informe o código de cadastro')).toBeNull();
+  });
+
+  it('ainda carregando: campo visível e opcional, sem travar o formulário', async () => {
+    apiGet.mockReturnValue(new Promise(() => {})); // nunca resolve
+    abrir();
+    escolher('Aluno');
+
+    expect(screen.getByLabelText(CODIGO)).toHaveAttribute('aria-required', 'false');
+
+    preencherAluno();
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+
+    await waitFor(() => expect(cadastrar).toHaveBeenCalled());
+  });
+
+  // Mesmo sem a consulta, o backend continua protegendo o que tem código.
+  it('a consulta falhou, mas havia código: o erro do backend aparece e o campo vira obrigatório', async () => {
+    apiGet.mockRejectedValue(new Error('offline'));
+    cadastrar.mockRejectedValueOnce({
+      mensagem: 'Código de cadastro inválido',
+      erros: [{ campo: 'codigo', mensagem: 'Código incorreto para este tipo de usuário' }],
+    });
+    abrir();
+    escolher('Aluno');
+    preencherAluno();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cadastrar' }));
+
+    expect(await screen.findByText('Código incorreto para este tipo de usuário')).toBeInTheDocument();
+    expect(campoCodigo()).toHaveAttribute('aria-required', 'true');
   });
 });
