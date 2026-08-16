@@ -4,6 +4,8 @@ import { criptografarDrive, descriptografarDrive } from './cripto-drive';
 import {
   ESCOPO_DRIVE,
   ErroDrive,
+  MIME_PASTA,
+  conferirRemoto,
   credenciaisDoAmbiente,
   criarPasta,
   emailDaConta,
@@ -98,10 +100,11 @@ export class DriveService {
     if (!codigo) throw new BadRequestException({ mensagem: 'O Google não devolveu o código de autorização.' });
 
     const { refreshToken, accessToken } = await trocarCodigoPorTokens(cred, codigo);
+    // O e-mail é APENAS informação de tela. Nenhuma decisão abaixo olha para ele: não
+    // existe "conta nova" x "conta antiga", existe ID acessível ou não com a conta de agora.
     const email = await emailDaConta(accessToken).catch(() => null);
-    // Pasta raiz criada pelo PRÓPRIO sistema: com escopo drive.file o app não enxerga
-    // pastas que não criou, então não há como reaproveitar uma pasta existente.
-    const pastaRaizId = await criarPasta(accessToken, NOME_PASTA_RAIZ);
+
+    const { pastaRaizId, novaRaiz } = await this.resolverRaiz(accessToken, c.pastaRaizId);
 
     await this.prisma.integracaoDrive.update({
       where: { id: 'global' },
@@ -115,20 +118,69 @@ export class DriveService {
       },
     });
     this.tokenCache = { valor: accessToken, expiraEm: Date.now() + 50 * 60 * 1000 };
-    this.logger.log(`Drive conectado na conta ${email ?? '(desconhecida)'}`);
+
+    // Raiz nova = tudo que estava mapeado aponta para dentro de uma raiz que esta conta não
+    // alcança. Os ponteiros LOCAIS são descartados para a cópia ser refeita a partir da VPS;
+    // nada é apagado no Drive antigo.
+    if (novaRaiz) await this.invalidarMapeamentos();
+
+    this.logger.log(
+      `Drive conectado na conta ${email ?? '(desconhecida)'} — raiz ${novaRaiz ? 'NOVA' : 'reaproveitada'} (${pastaRaizId}).`,
+    );
     return { contaEmail: email };
   }
 
+  // Regra única: tenta o ID salvo com a conta conectada AGORA.
+  //   acessível        -> reusa (não cria outra raiz, não mexe em mapeamento);
+  //   ausente/sem ID   -> cria uma raiz nova;
+  //   falha temporária -> NÃO cria nada; a conexão falha e o coordenador tenta de novo.
+  // Nunca procura pasta por nome: o nome não é identidade.
+  private async resolverRaiz(
+    accessToken: string,
+    raizSalva: string | null,
+  ): Promise<{ pastaRaizId: string; novaRaiz: boolean }> {
+    if (raizSalva) {
+      let estado;
+      try {
+        estado = await conferirRemoto(accessToken, raizSalva);
+      } catch {
+        throw new BadRequestException({
+          mensagem:
+            'Não foi possível confirmar a pasta do Drive agora (instabilidade do Google). ' +
+            'Nada foi alterado — tente conectar novamente em alguns minutos.',
+        });
+      }
+      if (estado.estado === 'ACESSIVEL' && estado.meta.mimeType === MIME_PASTA) {
+        return { pastaRaizId: raizSalva, novaRaiz: false };
+      }
+      this.logger.warn(
+        `Pasta raiz ${raizSalva} inacessível para a conta conectada (${estado.estado === 'AUSENTE' ? estado.motivo : 'não é pasta'}): criando uma nova.`,
+      );
+    }
+    return { pastaRaizId: await criarPasta(accessToken, NOME_PASTA_RAIZ), novaRaiz: true };
+  }
+
+  // Descarta os PONTEIROS locais dos TCCs vivos (não toca em arquivo nenhum, aqui ou no
+  // Drive). A reconciliação seguinte reconstrói a cópia inteira a partir do banco e dos
+  // arquivos da VPS, que são a fonte da verdade.
+  private async invalidarMapeamentos(): Promise<void> {
+    const vivos = await this.prisma.tcc.findMany({ where: { excluidoEm: null }, select: { id: true } });
+    const ids = vivos.map((t) => t.id);
+    if (!ids.length) return;
+    const { count } = await this.prisma.driveArquivo.deleteMany({ where: { tccId: { in: ids } } });
+    this.logger.log(`Raiz nova: ${count} mapeamento(s) local(is) descartado(s) para refazer a cópia.`);
+  }
+
+  // Tira SOMENTE a credencial e os dados de sessão. `pastaRaizId` e os mapeamentos ficam:
+  // são eles que permitem, na próxima conexão, testar se a pasta anterior continua
+  // acessível e reaproveitá-la em vez de criar uma segunda cópia. Nada é apagado no Drive.
   async desconectar(): Promise<void> {
     await this.obterConfig();
-    // Some com o token e com os ponteiros locais; NÃO apaga nada no Drive.
     await this.prisma.integracaoDrive.update({
       where: { id: 'global' },
       data: {
         refreshTokenCriptografado: null,
         contaEmail: null,
-        pastaRaizId: null,
-        pastaRaizNome: null,
         conectadoEm: null,
         oauthState: null,
         oauthStateExpiraEm: null,

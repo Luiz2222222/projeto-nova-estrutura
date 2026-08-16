@@ -387,15 +387,38 @@ describe('Sincronização imediata (conectar / tentar novamente)', () => {
       ordem.push('reconciliar');
       return reconciliar();
     });
+    // A sincronização DRENA a fila (não existe mais worker de 60s levando aos poucos):
+    // o primeiro lote processa 3, o segundo volta vazio e o laço para.
+    let lote = 0;
     vi.spyOn(sync, 'processarPendentes').mockImplementation(async () => {
       ordem.push('processar');
-      return { processados: 3, falhas: 0 };
+      return lote++ === 0 ? { processados: 3, falhas: 0 } : { processados: 0, falhas: 0 };
     });
 
     const r = await sync.sincronizarAgora();
 
-    expect(ordem).toEqual(['reenfileirar', 'reconciliar', 'processar']);
+    expect(ordem).toEqual(['reenfileirar', 'reconciliar', 'processar', 'processar']);
     expect(r).toMatchObject({ reenfileirados: 2, tccs: 1, documentos: 1, processados: 3 });
+  });
+
+  it('drena a fila em vários lotes e para quando ela esvazia', async () => {
+    const p = prismaFalso();
+    p.tcc.findMany = vi.fn(async () => []);
+    p.syncDrive.updateMany = vi.fn(async () => ({ count: 0 }));
+    const sync = new DriveSyncService(p, driveConectado());
+    vi.spyOn(sync, 'reenfileirarErros').mockResolvedValue(0);
+
+    let restantes = 25; // mais de um lote de 10
+    vi.spyOn(sync, 'processarPendentes').mockImplementation(async () => {
+      const n = Math.min(10, restantes);
+      restantes -= n;
+      return { processados: n, falhas: 0 };
+    });
+
+    const r = await sync.sincronizarAgora();
+
+    expect(r.processados).toBe(25); // 10 + 10 + 5, e então a fila vazia encerra
+    expect(sync.processarPendentes).toHaveBeenCalledTimes(4);
   });
 
   it('num sistema que já tem TCCs, conectar enfileira tudo na hora (sem esperar 24h)', async () => {

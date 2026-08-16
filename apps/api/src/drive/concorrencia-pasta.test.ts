@@ -6,19 +6,31 @@
 // tempo, criavam duas pastas no Google e só depois uma falhava no unique (tccId, chave),
 // deixando a outra órfã. Log: "Unique constraint failed on (tccId, chave)".
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { createHash } from 'crypto';
+
 import { DriveSyncService } from './drive-sync.service';
+
+// vi.hoisted: a fábrica do vi.mock é içada para o topo e não enxerga const comum.
+const { md5, MIME_PASTA } = vi.hoisted(() => ({
+  // O corpo só roda quando a fábrica do mock chama, então `createHash` já existe.
+  md5: (b?: Buffer) => (b ? createHash('md5').update(b).digest('hex') : null),
+  MIME_PASTA: 'application/vnd.google-apps.folder',
+}));
 
 // Drive falso: conta chamadas de criação e guarda as pastas com suas marcas privadas.
 const drive = vi.hoisted(() => ({
   pastas: [] as { id: string; nome: string; pai?: string; marcas: Record<string, string>; lixeira: boolean }[],
   criadas: 0,
-  arquivos: [] as { id: string; nome: string; pai: string }[],
+  arquivos: [] as { id: string; nome: string; pai: string; tamanho?: number; md5?: string | null }[],
   seq: 0,
   // Atraso artificial entre "achar" e "criar": é a janela em que a corrida acontece.
   atraso: 0,
 }));
 
+
+
 vi.mock('./drive-api', () => ({
+  MIME_PASTA,
   ErroDrive: class ErroDrive extends Error {
     constructor(
       m: string,
@@ -27,6 +39,23 @@ vi.mock('./drive-api', () => ({
     ) {
       super(m);
     }
+  },
+  // Tudo que o serviço mapeia continua acessível neste cenário: aqui o assunto é corrida
+  // de criação, não pasta sumida (isso tem arquivo de teste próprio).
+  async conferirRemoto(_t: string, id: string) {
+    const p = drive.pastas.find((x) => x.id === id && !x.lixeira);
+    if (p) return { estado: 'ACESSIVEL', meta: { id, nome: p.nome, mimeType: MIME_PASTA, trashed: false, pais: p.pai ? [p.pai] : [], marcas: p.marcas, tamanho: null, md5: null } };
+    const a = drive.arquivos.find((x) => x.id === id);
+    if (a) return { estado: 'ACESSIVEL', meta: { id, nome: a.nome, mimeType: 'application/octet-stream', trashed: false, pais: [a.pai], marcas: {}, tamanho: a.tamanho ?? null, md5: a.md5 ?? null } };
+    return { estado: 'AUSENTE', motivo: 'não encontrado' };
+  },
+  async renomearArquivo(_t: string, id: string, nome: string) {
+    const p = drive.pastas.find((x) => x.id === id);
+    if (p) p.nome = nome;
+  },
+  async moverParaPasta(_t: string, id: string, novoPai: string) {
+    const p = drive.pastas.find((x) => x.id === id);
+    if (p) p.pai = novoPai;
   },
   async criarPasta(_t: string, nome: string, pai?: string, marcas?: Record<string, string>) {
     if (drive.atraso) await new Promise((r) => setTimeout(r, drive.atraso));
@@ -50,12 +79,18 @@ vi.mock('./drive-api', () => ({
     const p = drive.pastas.find((x) => x.id === id);
     if (p) p.lixeira = true;
   },
-  async enviarArquivo(_t: string, d: { nome: string; paiId: string }) {
+  async enviarArquivo(_t: string, d: { nome: string; paiId: string; conteudo: Buffer }) {
     const id = `arq-${++drive.seq}`;
-    drive.arquivos.push({ id, nome: d.nome, pai: d.paiId });
+    drive.arquivos.push({ id, nome: d.nome, pai: d.paiId, tamanho: d.conteudo?.length ?? 0, md5: md5(d.conteudo) });
     return id;
   },
-  async atualizarConteudo() {},
+  async atualizarConteudo(_t: string, id: string, _m: string, conteudo: Buffer) {
+    const a = drive.arquivos.find((x) => x.id === id);
+    if (a) {
+      a.tamanho = conteudo.length;
+      a.md5 = md5(conteudo);
+    }
+  },
 }));
 
 vi.mock('./snapshot-tcc', () => ({

@@ -229,12 +229,20 @@ export async function moverParaLixeira(accessToken: string, driveId: string): Pr
 // PROPAGA o erro de propósito: quem confere antes de mover algo para a lixeira precisa
 // distinguir "não existe mais" (404, permanente) de "não deu para perguntar agora" (rede/5xx,
 // que merece nova tentativa). Engolir tudo em `null` misturaria os dois casos.
-export async function metadadosArquivo(
-  accessToken: string,
-  driveId: string,
-): Promise<{ id: string; nome: string; mimeType: string; trashed: boolean; pais: string[]; marcas: Record<string, string> }> {
+export interface MetadadosDrive {
+  id: string;
+  nome: string;
+  mimeType: string;
+  trashed: boolean;
+  pais: string[];
+  marcas: Record<string, string>;
+  tamanho: number | null;
+  md5: string | null;
+}
+
+export async function metadadosArquivo(accessToken: string, driveId: string): Promise<MetadadosDrive> {
   const r = await pedir(
-    `${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id,name,mimeType,trashed,parents,appProperties`,
+    `${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id,name,mimeType,trashed,parents,appProperties,size,md5Checksum`,
     { headers: { Authorization: `Bearer ${accessToken}` } },
   );
   const j: any = await r.json();
@@ -245,7 +253,60 @@ export async function metadadosArquivo(
     trashed: j.trashed === true,
     pais: j.parents ?? [],
     marcas: j.appProperties ?? {},
+    tamanho: j.size != null ? Number(j.size) : null,
+    md5: j.md5Checksum ?? null,
   };
+}
+
+// Resultado de "esse ID ainda serve?". Três estados, nunca dois:
+//   ACESSIVEL — dá para usar;
+//   AUSENTE   — o Google CONFIRMOU que não existe / não é visível para a conta de agora
+//               (404/403) ou está na lixeira;
+//   (exceção) — não deu para perguntar (rede, timeout, 429, 5xx). Quem chama NÃO pode
+//               concluir nada daqui: criar uma cópia nova por causa de uma falha passageira
+//               é justamente o erro que essa separação existe para impedir.
+export type EstadoRemoto = { estado: 'ACESSIVEL'; meta: MetadadosDrive } | { estado: 'AUSENTE'; motivo: string };
+
+export async function conferirRemoto(accessToken: string, driveId: string): Promise<EstadoRemoto> {
+  if (!driveId) return { estado: 'AUSENTE', motivo: 'sem id' };
+  try {
+    const meta = await metadadosArquivo(accessToken, driveId);
+    if (meta.trashed) return { estado: 'AUSENTE', motivo: 'está na lixeira' };
+    return { estado: 'ACESSIVEL', meta };
+  } catch (e) {
+    const erro = e as ErroDrive;
+    // 404 = não existe; 403 = existe mas não é desta conta/app. Os dois são resposta
+    // DEFINITIVA do Google. Qualquer outro status volta como exceção.
+    if (erro.status === 404) return { estado: 'AUSENTE', motivo: 'não encontrado' };
+    if (erro.status === 403) return { estado: 'AUSENTE', motivo: 'sem acesso com a conta atual' };
+    throw erro;
+  }
+}
+
+// Renomeia mantendo o MESMO id — o nome é rótulo, a identidade é o id.
+export async function renomearArquivo(accessToken: string, driveId: string, nome: string): Promise<void> {
+  await pedir(`${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: nome }),
+  });
+}
+
+// Move (não copia) para outro pai, também mantendo o id.
+export async function moverParaPasta(
+  accessToken: string,
+  driveId: string,
+  novoPaiId: string,
+  paisAntigos: string[],
+): Promise<void> {
+  const q = new URLSearchParams({ addParents: novoPaiId, fields: 'id' });
+  const remover = paisAntigos.filter((p) => p !== novoPaiId);
+  if (remover.length) q.set('removeParents', remover.join(','));
+  await pedir(`${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?${q.toString()}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
 }
 
 // Lista os filhos NÃO na lixeira de uma pasta (para provar que ela está vazia).

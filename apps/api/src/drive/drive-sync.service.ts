@@ -6,18 +6,30 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DriveService } from './drive.service';
 import { sanitizarNome } from './cripto-drive';
 import { montarResumo, montarSnapshot } from './snapshot-tcc';
+import { createHash } from 'crypto';
 import {
   ErroDrive,
   MIME_PASTA,
   atualizarConteudo,
   buscarPastaPorMarca,
   buscarPorNome,
+  conferirRemoto,
   criarPasta,
   enviarArquivo,
   listarFilhos,
   metadadosArquivo,
   moverParaLixeira,
+  moverParaPasta,
+  renomearArquivo,
 } from './drive-api';
+
+// Plano e Termo ficam numa chave por TIPO (não por documento): o Drive guarda só a cópia
+// VÁLIDA ATUAL de cada um, atualizada no lugar, em vez de acumular v1/v2/v3.
+const chaveInicial = (tipo: string) => `INICIAL:${tipo}`;
+
+// md5 do conteúdo local, para comparar com o md5Checksum que o Google devolve. Igual =
+// não sobe nada; diferente = atualiza o conteúdo do MESMO arquivo remoto.
+const md5De = (conteudo: Buffer) => createHash('md5').update(conteudo).digest('hex');
 
 // Marcas privadas (appProperties) gravadas nas pastas que o sistema cria. São a identidade
 // DURÁVEL da pasta: sobrevivem a reinício da API e permitem reencontrar uma pasta criada no
@@ -35,7 +47,9 @@ const PREFIXO_LIMPEZA = 'LIXEIRA:';
 // Backoff por tentativa (minutos). Depois do último, repete no maior intervalo — a varredura
 // diária ainda reenfileira, então nada fica parado para sempre.
 const BACKOFF_MIN = [1, 5, 15, 60, 240, 1440];
-const LOTE = 10; // itens por rodada, para não segurar o worker
+const LOTE = 10; // itens por lote
+// Teto de lotes numa sincronização (diária ou botão): 10 × 200 = 2000 itens por rodada.
+const MAX_RODADAS = 200;
 // Item PROCESSANDO parado além disso é considerado travado (API reiniciou no meio do envio)
 // e volta a ser reservável. Folgado o bastante para não roubar um upload grande em curso.
 const TEMPO_TRAVADO_MS = 15 * 60 * 1000;
@@ -235,7 +249,19 @@ export class DriveSyncService {
   async sincronizarAgora(): Promise<{ reenfileirados: number; tccs: number; documentos: number; processados: number; falhas: number }> {
     const reenfileirados = await this.reenfileirarErros();
     const { tccs, documentos } = await this.reconciliar();
-    const { processados, falhas } = await this.processarPendentes();
+
+    // DRENA a fila, em vez de processar um lote só. Antes o worker de 60s ia consumindo aos
+    // poucos; agora as rodadas são a diária e o botão "Atualizar", então cada uma precisa
+    // levar o trabalho até o fim. O teto evita rodar para sempre se algo reenfileirar em
+    // laço — o que sobrar volta na próxima rodada.
+    let processados = 0;
+    let falhas = 0;
+    for (let rodada = 0; rodada < MAX_RODADAS; rodada++) {
+      const r = await this.processarPendentes();
+      processados += r.processados;
+      falhas += r.falhas;
+      if (r.processados + r.falhas === 0) break; // fila vazia
+    }
     return { reenfileirados, tccs, documentos, processados, falhas };
   }
 
@@ -304,7 +330,7 @@ export class DriveSyncService {
   private async processarItem(item: { tccId: string; tipo: string; chave: string; documentoId: string | null }): Promise<void> {
     switch (item.tipo) {
       case 'PASTA':
-        await this.garantirPastaTcc(item.tccId);
+        await this.sincronizarPastaTcc(item.tccId);
         return;
       case TIPO_LIMPEZA:
         await this.limparPastaDuplicada(item.tccId, item.chave.slice(PREFIXO_LIMPEZA.length));
@@ -357,15 +383,25 @@ export class DriveSyncService {
   //      e o banco gravar — e, se ainda assim duas forem criadas, a sobrando vai para a
   //      lixeira em vez de virar órfã.
   async garantirPastaTcc(tccId: string): Promise<string> {
-    const jaTem = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave: 'PASTA' } } });
-    if (jaTem) return jaTem.driveId;
     return this.comExclusividade(`pasta:${tccId}`, () => this.resolverPastaTcc(tccId));
   }
 
   private async resolverPastaTcc(tccId: string): Promise<string> {
-    // Dupla checagem: quem ficou esperando na fila costuma achar o mapeamento pronto aqui.
     const jaTem = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave: 'PASTA' } } });
-    if (jaTem) return jaTem.driveId;
+    if (jaTem) {
+      // O ID mapeado é a identidade. Só ele decide — nunca o nome, nunca a conta.
+      const token = await this.drive.accessToken();
+      const estado = await conferirRemoto(token, jaTem.driveId); // exceção = instabilidade: sobe e tenta depois
+      if (estado.estado === 'ACESSIVEL' && estado.meta.mimeType === MIME_PASTA) return jaTem.driveId;
+
+      // O Google confirmou que essa pasta não serve mais para a conta de agora: refaz a
+      // cópia DESTE TCC do zero. Os ponteiros locais são descartados (nada é apagado lá).
+      this.logger.warn(
+        `Pasta ${jaTem.driveId} do TCC ${tccId} inacessível (${estado.estado === 'AUSENTE' ? estado.motivo : 'não é pasta'}): recriando a cópia deste TCC.`,
+      );
+      await this.prisma.driveArquivo.deleteMany({ where: { tccId } });
+      await this.enfileirarReconstrucao(tccId);
+    }
 
     const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId }, include: { aluno: true } });
     if (!tcc) throw new ErroDrive('TCC não encontrado para sincronizar.', undefined, true);
@@ -414,6 +450,53 @@ export class DriveSyncService {
         }
       }
       return dono.driveId;
+    }
+  }
+
+  // Nome padronizado da pasta do TCC. É rótulo, não identidade — serve para renomear.
+  private nomeDaPasta(tcc: { titulo: string; aluno?: { nomeCompleto: string } | null }): string {
+    return sanitizarNome(`${tcc.aluno?.nomeCompleto ?? 'Aluno'} - ${tcc.titulo}`, 'TCC');
+  }
+
+  // Recoloca na fila tudo que compõe a cópia de UM TCC (usado quando a pasta dele sumiu).
+  private async enfileirarReconstrucao(tccId: string): Promise<void> {
+    await this.enfileirar(tccId, 'DOC_INICIAL', 'DOC_INICIAL');
+    await this.enfileirar(tccId, 'DADOS', 'DADOS');
+    const docs = await this.prisma.documentoTcc.findMany({
+      where: { tccId, tipo: { in: TIPOS_VERSIONADOS } },
+      select: { id: true },
+    });
+    for (const d of docs) await this.enfileirar(tccId, 'DOCUMENTO', `DOC:${d.id}`, d.id);
+  }
+
+  // Item PASTA da fila: garante a pasta e mantém nome e semestre em dia. Renomear e mover
+  // NUNCA criam pasta nova — é sempre o mesmo id.
+  private async sincronizarPastaTcc(tccId: string): Promise<void> {
+    const driveId = await this.garantirPastaTcc(tccId);
+    const tcc = await this.prisma.tcc.findUnique({ where: { id: tccId }, include: { aluno: true } });
+    if (!tcc) return;
+
+    const token = await this.drive.accessToken();
+    const estado = await conferirRemoto(token, driveId);
+    if (estado.estado !== 'ACESSIVEL') return; // acabou de ser recriada: já está no lugar certo
+
+    // Aluno ou título mudaram: mesma pasta, nome novo.
+    const nomeEsperado = this.nomeDaPasta(tcc);
+    const nomeAtual = estado.meta.nome;
+    // Respeita o sufixo de desempate "(2)" dado na criação: só renomeia se a base mudou.
+    const semSufixo = nomeAtual.replace(/ \(\d+\)$/, '');
+    if (semSufixo !== nomeEsperado) {
+      const novo = nomeAtual === semSufixo ? nomeEsperado : `${nomeEsperado}${nomeAtual.slice(semSufixo.length)}`;
+      await renomearArquivo(token, driveId, novo);
+      await this.prisma.driveArquivo.updateMany({ where: { tccId, chave: 'PASTA' }, data: { nome: novo } });
+      this.logger.log(`Pasta do TCC ${tccId} renomeada para "${novo}".`);
+    }
+
+    // Semestre mudou por edição da coordenação: move a MESMA pasta, sem copiar.
+    const paiCerto = await this.pastaDoSemestre(tcc.semestre);
+    if (!estado.meta.pais.includes(paiCerto)) {
+      await moverParaPasta(token, driveId, paiCerto, estado.meta.pais);
+      this.logger.log(`Pasta do TCC ${tccId} movida para o semestre ${tcc.semestre}.`);
     }
   }
 
@@ -494,7 +577,57 @@ export class DriveSyncService {
     this.logger.log(`Pasta duplicada ${driveId} do TCC ${tccId} movida para a lixeira.`);
   }
 
-  // Só o Plano e o Termo VÁLIDOS MAIS RECENTES — nada de v1/v2/v3 dos iniciais.
+  // Coração da cópia de UM arquivo. O local é a verdade; o remoto é espelho:
+  //   sem mapeamento          -> envia e mapeia;
+  //   mapeado e AUSENTE       -> reenvia e REAPROVEITA a linha do mapeamento;
+  //   mapeado e igual (md5)   -> não faz nada (nem upload, nem escrita);
+  //   mapeado e diferente     -> atualiza o CONTEÚDO do mesmo arquivo remoto;
+  //   instabilidade           -> exceção, para tentar de novo depois.
+  private async espelharArquivo(
+    tccId: string,
+    chave: string,
+    alvo: { nome: string; mime: string; conteudo: Buffer },
+  ): Promise<void> {
+    const token = await this.drive.accessToken();
+    const mapeado = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave } } });
+
+    if (mapeado) {
+      const estado = await conferirRemoto(token, mapeado.driveId);
+      if (estado.estado === 'ACESSIVEL') {
+        const igual =
+          estado.meta.md5 != null
+            ? estado.meta.md5 === md5De(alvo.conteudo)
+            : estado.meta.tamanho === alvo.conteudo.length;
+        if (igual) return; // já espelhado: não reenvia nem sobrescreve
+        await atualizarConteudo(token, mapeado.driveId, alvo.mime, alvo.conteudo);
+        if (estado.meta.nome !== alvo.nome) await renomearArquivo(token, mapeado.driveId, alvo.nome);
+        await this.prisma.driveArquivo.update({ where: { id: mapeado.id }, data: { nome: alvo.nome } });
+        return;
+      }
+      // Sumiu lá: refaz só este arquivo e reaproveita a linha (o unique é tccId+chave).
+      const pasta = await this.garantirPastaTcc(tccId);
+      const driveId = await enviarArquivo(token, { nome: alvo.nome, mimeType: alvo.mime, conteudo: alvo.conteudo, paiId: pasta });
+      await this.prisma.driveArquivo.update({ where: { id: mapeado.id }, data: { driveId, nome: alvo.nome } });
+      this.logger.log(`Arquivo "${alvo.nome}" do TCC ${tccId} não estava mais no Drive: reenviado.`);
+      return;
+    }
+
+    const pasta = await this.garantirPastaTcc(tccId);
+    const driveId = await enviarArquivo(token, { nome: alvo.nome, mimeType: alvo.mime, conteudo: alvo.conteudo, paiId: pasta });
+    await this.prisma.driveArquivo.create({ data: { tccId, chave, driveId, nome: alvo.nome } });
+  }
+
+  private async lerArquivoLocal(caminho: string): Promise<Buffer> {
+    try {
+      return await fs.readFile(join(process.cwd(), caminho));
+    } catch {
+      // Arquivo sumiu do disco: repetir não resolve.
+      throw new ErroDrive(`Arquivo local não encontrado: ${caminho}`, undefined, true);
+    }
+  }
+
+  // Plano e Termo: SÓ a cópia válida atual, numa chave por TIPO. Quando o aluno reenvia, o
+  // mesmo arquivo do Drive é atualizado no lugar — nada de "Plano v1", "Plano v2"...
   private async enviarDocumentosIniciais(tccId: string): Promise<void> {
     const docs = await this.prisma.documentoTcc.findMany({
       where: { tccId, tipo: { in: TIPOS_INICIAIS }, status: { in: STATUS_VALIDOS } },
@@ -504,77 +637,64 @@ export class DriveSyncService {
     for (const d of docs) if (!maisRecentePorTipo.has(d.tipo)) maisRecentePorTipo.set(d.tipo, d);
 
     for (const doc of maisRecentePorTipo.values()) {
-      await this.enviarDocumento(tccId, doc.id, false);
+      const chave = chaveInicial(doc.tipo);
+      await this.adotarMapeamentoLegado(tccId, doc.id, chave);
+      const ext = extname(doc.nomeArquivo || '').toLowerCase();
+      const nome = sanitizarNome(`${ROTULO_DOC[doc.tipo] ?? doc.tipo}${ext}`, `documento${ext}`);
+      const conteudo = await this.lerArquivoLocal(doc.caminho);
+      await this.comExclusividade(`doc:${tccId}:${chave}`, () =>
+        this.espelharArquivo(tccId, chave, { nome, mime: MIME_POR_EXT[ext] ?? 'application/octet-stream', conteudo }),
+      );
     }
   }
 
-  // `comVersao` = true para monografia/versão final (o nome carrega a versão, preservando
-  // cada envio); false para os iniciais (nome limpo, um por tipo).
-  private enviarDocumento(tccId: string, documentoId: string, comVersao = true): Promise<void> {
-    // Mesmo cuidado da pasta: dois itens da fila mirando o mesmo documento não podem subir
-    // duas cópias e deixar uma sem mapeamento.
-    return this.comExclusividade(`doc:${tccId}:${documentoId}`, () =>
-      this.enviarDocumentoExclusivo(tccId, documentoId, comVersao),
-    );
+  // Instalações antigas mapeavam Plano/Termo por documento (`DOC:<id>`). Migra a linha para
+  // a chave por tipo REAPROVEITANDO o mesmo arquivo do Drive — sem isso, a primeira
+  // sincronização depois desta mudança criaria um segundo arquivo com o mesmo nome.
+  private async adotarMapeamentoLegado(tccId: string, documentoId: string, chaveNova: string): Promise<void> {
+    const jaMigrado = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave: chaveNova } } });
+    if (jaMigrado) return;
+    const legado = await this.prisma.driveArquivo.findUnique({
+      where: { tccId_chave: { tccId, chave: `DOC:${documentoId}` } },
+    });
+    if (!legado) return;
+    await this.prisma.driveArquivo.update({ where: { id: legado.id }, data: { chave: chaveNova } });
   }
 
-  private async enviarDocumentoExclusivo(tccId: string, documentoId: string, comVersao: boolean): Promise<void> {
-    const chave = `DOC:${documentoId}`;
-    const jaEnviado = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave } } });
-    if (jaEnviado) return; // idempotente: não reenvia o mesmo documento
+  // Monografia e versão final: cada versão é um arquivo próprio, preservado.
+  private enviarDocumento(tccId: string, documentoId: string): Promise<void> {
+    // Mesmo cuidado da pasta: dois itens da fila mirando o mesmo documento não podem subir
+    // duas cópias e deixar uma sem mapeamento.
+    return this.comExclusividade(`doc:${tccId}:${documentoId}`, () => this.enviarDocumentoExclusivo(tccId, documentoId));
+  }
 
+  private async enviarDocumentoExclusivo(tccId: string, documentoId: string): Promise<void> {
     const doc = await this.prisma.documentoTcc.findUnique({ where: { id: documentoId } });
     if (!doc || doc.tccId !== tccId) throw new ErroDrive('Documento não encontrado.', undefined, true);
     if (doc.tipo === 'AVALIACAO_BANCA') return; // material interno da banca não vai ao Drive
 
-    const caminho = join(process.cwd(), doc.caminho);
-    let conteudo: Buffer;
-    try {
-      conteudo = await fs.readFile(caminho);
-    } catch {
-      // Arquivo sumiu do disco: repetir não resolve.
-      throw new ErroDrive(`Arquivo local não encontrado: ${doc.caminho}`, undefined, true);
-    }
-
     const ext = extname(doc.nomeArquivo || '').toLowerCase();
-    const rotulo = ROTULO_DOC[doc.tipo] ?? doc.tipo;
-    const nome = sanitizarNome(`${rotulo}${comVersao ? ` v${doc.versao}` : ''}${ext}`, `documento${ext}`);
-
-    const token = await this.drive.accessToken();
-    const pasta = await this.garantirPastaTcc(tccId);
-    const driveId = await enviarArquivo(token, {
+    const nome = sanitizarNome(`${ROTULO_DOC[doc.tipo] ?? doc.tipo} v${doc.versao}${ext}`, `documento${ext}`);
+    await this.espelharArquivo(tccId, `DOC:${documentoId}`, {
       nome,
-      mimeType: MIME_POR_EXT[ext] ?? 'application/octet-stream',
-      conteudo,
-      paiId: pasta,
+      mime: MIME_POR_EXT[ext] ?? 'application/octet-stream',
+      conteudo: await this.lerArquivoLocal(doc.caminho),
     });
-    await this.prisma.driveArquivo.create({ data: { tccId, chave, driveId, nome } });
   }
 
-  // dados.json + resumo.txt: criados na primeira vez, SOBRESCRITOS depois (não viram cópias).
+  // dados.json + resumo.txt: um arquivo cada, atualizado só quando o conteúdo muda de fato.
   gravarDados(tccId: string): Promise<void> {
     return this.comExclusividade(`dados:${tccId}`, () => this.gravarDadosExclusivo(tccId));
   }
 
   private async gravarDadosExclusivo(tccId: string): Promise<void> {
     const { dados, resumo } = await this.montarConteudo(tccId);
-    const token = await this.drive.accessToken();
-    const pasta = await this.garantirPastaTcc(tccId);
-
     const alvos = [
-      { chave: 'DADOS_JSON', nome: 'dados.json', mime: 'application/json', corpo: Buffer.from(JSON.stringify(dados, null, 2), 'utf8') },
-      { chave: 'RESUMO_TXT', nome: 'resumo.txt', mime: 'text/plain', corpo: Buffer.from(resumo, 'utf8') },
+      { chave: 'DADOS_JSON', nome: 'dados.json', mime: 'application/json', conteudo: Buffer.from(JSON.stringify(dados, null, 2), 'utf8') },
+      { chave: 'RESUMO_TXT', nome: 'resumo.txt', mime: 'text/plain', conteudo: Buffer.from(resumo, 'utf8') },
     ];
     for (const alvo of alvos) {
-      const existente = await this.prisma.driveArquivo.findUnique({
-        where: { tccId_chave: { tccId, chave: alvo.chave } },
-      });
-      if (existente) {
-        await atualizarConteudo(token, existente.driveId, alvo.mime, alvo.corpo);
-      } else {
-        const driveId = await enviarArquivo(token, { nome: alvo.nome, mimeType: alvo.mime, conteudo: alvo.corpo, paiId: pasta });
-        await this.prisma.driveArquivo.create({ data: { tccId, chave: alvo.chave, driveId, nome: alvo.nome } });
-      }
+      await this.espelharArquivo(tccId, alvo.chave, { nome: alvo.nome, mime: alvo.mime, conteudo: alvo.conteudo });
     }
   }
 
