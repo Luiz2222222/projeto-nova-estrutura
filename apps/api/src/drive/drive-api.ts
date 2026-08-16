@@ -22,11 +22,30 @@ export class ErroDrive extends Error {
     mensagem: string,
     readonly status?: number,
     readonly permanente = false,
+    // `reason` do corpo estruturado do Google (ex.: rateLimitExceeded,
+    // insufficientFilePermissions). É o que permite separar um 403 de cota de um 403 de
+    // "esta conta não enxerga este arquivo".
+    readonly motivo?: string,
   ) {
     super(mensagem);
     this.name = 'ErroDrive';
   }
 }
+
+// 403 que significam, sem ambiguidade, que ESTA conta/app não tem acesso àquele arquivo.
+// Só estes autorizam concluir "sumiu"; qualquer outro 403 é falha e vira retry.
+const MOTIVOS_SEM_ACESSO = new Set(['insufficientFilePermissions', 'appNotAuthorizedToFile']);
+
+// 403 que são passageiros (cota/limite). Não são permanentes: repetir mais tarde resolve.
+const MOTIVOS_TEMPORARIOS = new Set([
+  'rateLimitExceeded',
+  'userRateLimitExceeded',
+  'quotaExceeded',
+  'dailyLimitExceeded',
+  'sharingRateLimitExceeded',
+  'backendError',
+  'internalError',
+]);
 
 export interface CredenciaisApp {
   clientId: string;
@@ -72,19 +91,25 @@ export function urlDeAutorizacao(cred: CredenciaisApp, state: string): string {
   return `${URL_AUTORIZACAO}?${q.toString()}`;
 }
 
-async function lerErro(r: Response): Promise<string> {
+// Extrai mensagem E motivo do corpo de erro. O motivo vem de `error.errors[].reason`
+// (formato clássico do Drive) ou de `error.status` (formato novo, ex.: PERMISSION_DENIED).
+async function lerErro(r: Response): Promise<{ mensagem: string; motivo?: string }> {
   const txto = await r.text().catch(() => '');
   try {
     const j = JSON.parse(txto);
-    return j?.error?.message || j?.error_description || j?.error || txto.slice(0, 300);
+    const erro = j?.error;
+    const mensagem = erro?.message || j?.error_description || (typeof erro === 'string' ? erro : '') || txto.slice(0, 300);
+    return { mensagem, motivo: erro?.errors?.[0]?.reason ?? erro?.status };
   } catch {
-    return txto.slice(0, 300);
+    return { mensagem: txto.slice(0, 300) };
   }
 }
 
-// 4xx (fora 408/429) é erro PERMANENTE: repetir não resolve (credencial errada, permissão,
-// arquivo inexistente). 5xx/rede/429 é temporário e vale retry.
-function ehPermanente(status: number): boolean {
+// 4xx (fora 408/429) é erro PERMANENTE: repetir não resolve (credencial errada, arquivo
+// inexistente). 5xx/rede/429 é temporário e vale retry. Exceção: 403 de cota/limite é
+// temporário apesar de ser 4xx — repetir mais tarde resolve.
+function ehPermanente(status: number, motivo?: string): boolean {
+  if (status === 403 && motivo && MOTIVOS_TEMPORARIOS.has(motivo)) return false;
   return status >= 400 && status < 500 && status !== 408 && status !== 429;
 }
 
@@ -95,7 +120,10 @@ async function pedir(url: string, init: RequestInit): Promise<Response> {
   } catch (e) {
     throw new ErroDrive(`Falha de rede ao falar com o Google: ${(e as Error).message}`, undefined, false);
   }
-  if (!r.ok) throw new ErroDrive(await lerErro(r), r.status, ehPermanente(r.status));
+  if (!r.ok) {
+    const { mensagem, motivo } = await lerErro(r);
+    throw new ErroDrive(mensagem, r.status, ehPermanente(r.status, motivo), motivo);
+  }
   return r;
 }
 
@@ -260,11 +288,14 @@ export async function metadadosArquivo(accessToken: string, driveId: string): Pr
 
 // Resultado de "esse ID ainda serve?". Três estados, nunca dois:
 //   ACESSIVEL — dá para usar;
-//   AUSENTE   — o Google CONFIRMOU que não existe / não é visível para a conta de agora
-//               (404/403) ou está na lixeira;
-//   (exceção) — não deu para perguntar (rede, timeout, 429, 5xx). Quem chama NÃO pode
-//               concluir nada daqui: criar uma cópia nova por causa de uma falha passageira
-//               é justamente o erro que essa separação existe para impedir.
+//   AUSENTE   — o Google CONFIRMOU que sumiu: 404, lixeira, ou um 403 cujo motivo diz sem
+//               ambiguidade que esta conta/app não alcança ESTE arquivo;
+//   (exceção) — não deu para perguntar (rede, timeout, 429, 5xx) OU um 403 que não dá para
+//               interpretar (cota, limite, política de domínio, 403 genérico). Quem chama
+//               NÃO pode concluir nada daqui.
+//
+// A regra do 403 é conservadora de propósito: tratá-lo todo como ausência faria uma cota
+// estourada apagar mapeamentos e recriar raiz/pasta/arquivo. Na dúvida, é erro.
 export type EstadoRemoto = { estado: 'ACESSIVEL'; meta: MetadadosDrive } | { estado: 'AUSENTE'; motivo: string };
 
 export async function conferirRemoto(accessToken: string, driveId: string): Promise<EstadoRemoto> {
@@ -275,11 +306,11 @@ export async function conferirRemoto(accessToken: string, driveId: string): Prom
     return { estado: 'ACESSIVEL', meta };
   } catch (e) {
     const erro = e as ErroDrive;
-    // 404 = não existe; 403 = existe mas não é desta conta/app. Os dois são resposta
-    // DEFINITIVA do Google. Qualquer outro status volta como exceção.
     if (erro.status === 404) return { estado: 'AUSENTE', motivo: 'não encontrado' };
-    if (erro.status === 403) return { estado: 'AUSENTE', motivo: 'sem acesso com a conta atual' };
-    throw erro;
+    if (erro.status === 403 && erro.motivo && MOTIVOS_SEM_ACESSO.has(erro.motivo)) {
+      return { estado: 'AUSENTE', motivo: `sem acesso a este arquivo (${erro.motivo})` };
+    }
+    throw erro; // inclusive 403 de cota/limite/política: preserva tudo e tenta de novo
   }
 }
 

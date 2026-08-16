@@ -78,7 +78,11 @@ const STATUS_VALIDOS = ['PENDENTE', 'EM_ANALISE', 'APROVADO'];
 export class DriveSyncService {
   private readonly logger = new Logger('DriveSync');
   // Cache das pastas de semestre no processo (evita um files.list por item da fila).
+  // A chave inclui a RAIZ: reconectar numa raiz nova não pode reaproveitar a pasta de
+  // semestre da raiz anterior, que naquele momento vira inalcançável. Amarrar à raiz
+  // dispensa qualquer invalidação — a entrada velha simplesmente deixa de ser consultada.
   private pastasSemestre = new Map<string, string>();
+  private chaveSemestre = (raiz: string, semestre: string) => `${raiz}::${semestre}`;
   // Uma fila por chave lógica ("pasta do TCC X", "pasta do semestre Y"). A reserva do
   // SyncDrive protege a mesma LINHA da fila; isto aqui protege o mesmo RECURSO no Drive,
   // que é o que PASTA, DOC_INICIAL, DOCUMENTO e DADOS disputavam ao chamar
@@ -354,16 +358,18 @@ export class DriveSyncService {
   // Uma pasta por semestre, mesmo com dois TCCs abrindo ao mesmo tempo: a fila por chave
   // serializa no processo e a marca privada reencontra a pasta depois de um reinício.
   private async pastaDoSemestre(semestre: string): Promise<string> {
-    const cache = this.pastasSemestre.get(semestre);
+    // A raiz é lida ANTES do cache: é ela que qualifica a entrada.
+    const raiz = await this.drive.pastaRaizId();
+    const chave = this.chaveSemestre(raiz, semestre);
+    const cache = this.pastasSemestre.get(chave);
     if (cache) return cache;
 
-    return this.comExclusividade(`semestre:${semestre}`, async () => {
+    return this.comExclusividade(`semestre:${chave}`, async () => {
       // Quem esperou na fila já encontra o cache preenchido por quem passou antes.
-      const jaResolvido = this.pastasSemestre.get(semestre);
+      const jaResolvido = this.pastasSemestre.get(chave);
       if (jaResolvido) return jaResolvido;
 
       const token = await this.drive.accessToken();
-      const raiz = await this.drive.pastaRaizId();
       const nome = sanitizarNome(semestre, 'sem-semestre');
       const marcada = await buscarPastaPorMarca(token, MARCA_SEMESTRE, semestre, raiz);
       const id =
@@ -371,7 +377,7 @@ export class DriveSyncService {
         // Compatibilidade: pastas criadas antes das marcas só têm o nome.
         (await buscarPorNome(token, nome, raiz, true)) ??
         (await criarPasta(token, nome, raiz, { [MARCA_SEMESTRE]: semestre }));
-      this.pastasSemestre.set(semestre, id);
+      this.pastasSemestre.set(chave, id);
       return id;
     });
   }
@@ -407,13 +413,15 @@ export class DriveSyncService {
     if (!tcc) throw new ErroDrive('TCC não encontrado para sincronizar.', undefined, true);
 
     const token = await this.drive.accessToken();
+    const pai = await this.pastaDoSemestre(tcc.semestre);
 
     // Pasta já criada no Google numa tentativa anterior que não chegou a gravar no banco.
-    const marcada = await buscarPastaPorMarca(token, MARCA_TCC, tccId);
+    // A busca é limitada à pasta de semestre ATUAL: assim a recuperação nunca traz de volta
+    // uma pasta pendurada na raiz anterior depois de uma troca de raiz.
+    const marcada = await buscarPastaPorMarca(token, MARCA_TCC, tccId, pai);
     if (marcada) return this.mapearPastaTcc(tccId, marcada.id, marcada.nome, token);
 
-    const pai = await this.pastaDoSemestre(tcc.semestre);
-    const base = sanitizarNome(`${tcc.aluno?.nomeCompleto ?? 'Aluno'} - ${tcc.titulo}`, 'TCC');
+    const base = this.nomeDaPasta(tcc);
 
     // Colisão de nome: outro TCC com mesmo aluno+título no semestre. Acrescenta sufixo até
     // achar um nome livre (limite baixo — na prática nunca passa de 2).
