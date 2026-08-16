@@ -8,11 +8,14 @@ import { sanitizarNome } from './cripto-drive';
 import { montarResumo, montarSnapshot } from './snapshot-tcc';
 import {
   ErroDrive,
+  MIME_PASTA,
   atualizarConteudo,
   buscarPastaPorMarca,
   buscarPorNome,
   criarPasta,
   enviarArquivo,
+  listarFilhos,
+  metadadosArquivo,
   moverParaLixeira,
 } from './drive-api';
 
@@ -21,6 +24,13 @@ import {
 // Google mas ainda não mapeada no banco — a janela exata que duplicou pasta em produção.
 const MARCA_TCC = 'sistemaTccId';
 const MARCA_SEMESTRE = 'sistemaTccSemestre';
+
+// Limpeza de pasta duplicada por corrida. Vira item da MESMA fila (SyncDrive) em vez de
+// timer ou Map: assim sobrevive a reinício da API e herda backoff, reserva e a tela de
+// pendências que já existem. A chave carrega o id da pasta, então o unique (tccId, chave)
+// garante uma limpeza por pasta duplicada.
+const TIPO_LIMPEZA = 'LIMPAR_PASTA_DUPLICADA';
+const PREFIXO_LIMPEZA = 'LIXEIRA:';
 
 // Backoff por tentativa (minutos). Depois do último, repete no maior intervalo — a varredura
 // diária ainda reenfileira, então nada fica parado para sempre.
@@ -291,10 +301,13 @@ export class DriveSyncService {
     }));
   }
 
-  private async processarItem(item: { tccId: string; tipo: string; documentoId: string | null }): Promise<void> {
+  private async processarItem(item: { tccId: string; tipo: string; chave: string; documentoId: string | null }): Promise<void> {
     switch (item.tipo) {
       case 'PASTA':
         await this.garantirPastaTcc(item.tccId);
+        return;
+      case TIPO_LIMPEZA:
+        await this.limparPastaDuplicada(item.tccId, item.chave.slice(PREFIXO_LIMPEZA.length));
         return;
       case 'DOC_INICIAL':
         await this.enviarDocumentosIniciais(item.tccId);
@@ -390,13 +403,95 @@ export class DriveSyncService {
       });
       if (!dono) throw e; // não era corrida: o erro é outro e precisa subir
       if (dono.driveId !== driveId) {
-        await moverParaLixeira(token, driveId).catch(() => {
-          this.logger.warn(`Pasta duplicada ${driveId} do TCC ${tccId} não pôde ir para a lixeira.`);
-        });
-        this.logger.warn(`Corrida na pasta do TCC ${tccId}: ${driveId} foi para a lixeira; vale ${dono.driveId}.`);
+        try {
+          await moverParaLixeira(token, driveId);
+          this.logger.warn(`Corrida na pasta do TCC ${tccId}: ${driveId} foi para a lixeira; vale ${dono.driveId}.`);
+        } catch {
+          // O mapeamento correto JÁ existe e não pode ser desfeito por causa da limpeza.
+          // A pasta sobrando vira item de fila: o worker tenta de novo no backoff normal e
+          // a pendência sobrevive a reinício da API.
+          await this.enfileirarLimpeza(tccId, driveId);
+        }
       }
       return dono.driveId;
     }
+  }
+
+  // Registra a limpeza pendente. Nunca deixa a exceção escapar: quem chama já garantiu a
+  // pasta correta e não pode falhar por causa da faxina.
+  private async enfileirarLimpeza(tccId: string, driveId: string): Promise<void> {
+    try {
+      await this.enfileirar(tccId, TIPO_LIMPEZA, `${PREFIXO_LIMPEZA}${driveId}`);
+      this.logger.warn(
+        `Pasta duplicada ${driveId} do TCC ${tccId} não pôde ir para a lixeira agora: limpeza enfileirada.`,
+      );
+    } catch (e) {
+      this.logger.error(
+        `Não foi possível enfileirar a limpeza da pasta duplicada ${driveId} do TCC ${tccId}: ${(e as Error).message}`,
+      );
+    }
+  }
+
+  // Faxina de uma pasta duplicada. Move para a LIXEIRA (recuperável) e só depois de provar,
+  // uma a uma, que a candidata é mesmo descartável. Na dúvida NÃO mexe: preferimos uma pasta
+  // sobrando no Drive a qualquer risco de tocar na pasta que está valendo.
+  private async limparPastaDuplicada(tccId: string, driveId: string): Promise<void> {
+    if (!driveId) throw new ErroDrive('Limpeza sem id de pasta.', undefined, true);
+
+    // 1) A pasta que vale NUNCA pode ser candidata — nem por outra chave qualquer.
+    const emUso = await this.prisma.driveArquivo.findFirst({ where: { driveId } });
+    if (emUso) {
+      this.logger.log(`Limpeza cancelada: ${driveId} está mapeada (${emUso.chave}) no TCC ${emUso.tccId}.`);
+      return;
+    }
+
+    const token = await this.drive.accessToken();
+    let meta;
+    try {
+      meta = await metadadosArquivo(token, driveId);
+    } catch (e) {
+      const erro = e as ErroDrive;
+      // Sumiu do Drive: não há o que limpar. Qualquer outra falha (rede, 5xx) volta pelo
+      // backoff normal em vez de virar "concluído" sem ter conferido nada.
+      if (erro.status === 404) {
+        this.logger.log(`Limpeza concluída: pasta ${driveId} não existe mais.`);
+        return;
+      }
+      throw erro;
+    }
+
+    // 2) Já na lixeira: objetivo atingido, conclui sem erro.
+    if (meta.trashed) {
+      this.logger.log(`Limpeza concluída: pasta ${driveId} já estava na lixeira.`);
+      return;
+    }
+
+    // 3) Precisa ser uma pasta E carregar a marca privada DESTE TCC. Sem a marca não dá para
+    //    afirmar que foi o sistema que criou por corrida — vira análise manual.
+    if (meta.mimeType !== MIME_PASTA) {
+      throw new ErroDrive(`Limpeza recusada: ${driveId} não é uma pasta (${meta.mimeType}).`, undefined, true);
+    }
+    if (meta.marcas[MARCA_TCC] !== tccId) {
+      throw new ErroDrive(
+        `Limpeza recusada: a pasta ${driveId} não tem a marca do TCC ${tccId}. Verifique manualmente.`,
+        undefined,
+        true,
+      );
+    }
+
+    // 4) Vazia. Com conteúdo, nada é movido automaticamente: alguém pode ter posto algo lá.
+    const filhos = await listarFilhos(token, driveId);
+    if (filhos.length > 0) {
+      throw new ErroDrive(
+        `Limpeza recusada: a pasta duplicada ${driveId} do TCC ${tccId} tem ${filhos.length} item(ns) ` +
+          `(${filhos.map((f) => f.nome).slice(0, 5).join(', ')}). Nada foi movido — confira manualmente.`,
+        undefined,
+        true,
+      );
+    }
+
+    await moverParaLixeira(token, driveId);
+    this.logger.log(`Pasta duplicada ${driveId} do TCC ${tccId} movida para a lixeira.`);
   }
 
   // Só o Plano e o Termo VÁLIDOS MAIS RECENTES — nada de v1/v2/v3 dos iniciais.

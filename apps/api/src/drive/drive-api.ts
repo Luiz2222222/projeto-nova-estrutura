@@ -226,27 +226,26 @@ export async function moverParaLixeira(accessToken: string, driveId: string): Pr
 }
 
 // Metadados de uma pasta/arquivo — usado para conferir antes de mexer em algo já existente.
+// PROPAGA o erro de propósito: quem confere antes de mover algo para a lixeira precisa
+// distinguir "não existe mais" (404, permanente) de "não deu para perguntar agora" (rede/5xx,
+// que merece nova tentativa). Engolir tudo em `null` misturaria os dois casos.
 export async function metadadosArquivo(
   accessToken: string,
   driveId: string,
-): Promise<{ id: string; nome: string; mimeType: string; trashed: boolean; pais: string[]; marcas: Record<string, string> } | null> {
-  try {
-    const r = await pedir(
-      `${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id,name,mimeType,trashed,parents,appProperties`,
-      { headers: { Authorization: `Bearer ${accessToken}` } },
-    );
-    const j: any = await r.json();
-    return {
-      id: j.id,
-      nome: j.name ?? '',
-      mimeType: j.mimeType ?? '',
-      trashed: j.trashed === true,
-      pais: j.parents ?? [],
-      marcas: j.appProperties ?? {},
-    };
-  } catch {
-    return null;
-  }
+): Promise<{ id: string; nome: string; mimeType: string; trashed: boolean; pais: string[]; marcas: Record<string, string> }> {
+  const r = await pedir(
+    `${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id,name,mimeType,trashed,parents,appProperties`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  const j: any = await r.json();
+  return {
+    id: j.id,
+    nome: j.name ?? '',
+    mimeType: j.mimeType ?? '',
+    trashed: j.trashed === true,
+    pais: j.parents ?? [],
+    marcas: j.appProperties ?? {},
+  };
 }
 
 // Lista os filhos NÃO na lixeira de uma pasta (para provar que ela está vazia).

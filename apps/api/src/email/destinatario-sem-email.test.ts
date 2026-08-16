@@ -6,7 +6,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EmailService, emailValido } from './email.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
 
-const sendMail = vi.hoisted(() => vi.fn(async () => ({})));
+// Tipado com o parâmetro para o tsc aceitar `sendMail.mock.calls[0][0]` (mock sem
+// argumentos vira tupla vazia).
+const sendMail = vi.hoisted(() => vi.fn(async (opcoes: Record<string, unknown>) => ({ opcoes })));
 vi.mock('nodemailer', () => ({
   createTransport: () => ({ sendMail }),
 }));
