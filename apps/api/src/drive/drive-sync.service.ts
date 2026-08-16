@@ -6,7 +6,21 @@ import { PrismaService } from '../prisma/prisma.service';
 import { DriveService } from './drive.service';
 import { sanitizarNome } from './cripto-drive';
 import { montarResumo, montarSnapshot } from './snapshot-tcc';
-import { ErroDrive, atualizarConteudo, buscarPorNome, criarPasta, enviarArquivo } from './drive-api';
+import {
+  ErroDrive,
+  atualizarConteudo,
+  buscarPastaPorMarca,
+  buscarPorNome,
+  criarPasta,
+  enviarArquivo,
+  moverParaLixeira,
+} from './drive-api';
+
+// Marcas privadas (appProperties) gravadas nas pastas que o sistema cria. São a identidade
+// DURÁVEL da pasta: sobrevivem a reinício da API e permitem reencontrar uma pasta criada no
+// Google mas ainda não mapeada no banco — a janela exata que duplicou pasta em produção.
+const MARCA_TCC = 'sistemaTccId';
+const MARCA_SEMESTRE = 'sistemaTccSemestre';
 
 // Backoff por tentativa (minutos). Depois do último, repete no maior intervalo — a varredura
 // diária ainda reenfileira, então nada fica parado para sempre.
@@ -41,11 +55,34 @@ export class DriveSyncService {
   private readonly logger = new Logger('DriveSync');
   // Cache das pastas de semestre no processo (evita um files.list por item da fila).
   private pastasSemestre = new Map<string, string>();
+  // Uma fila por chave lógica ("pasta do TCC X", "pasta do semestre Y"). A reserva do
+  // SyncDrive protege a mesma LINHA da fila; isto aqui protege o mesmo RECURSO no Drive,
+  // que é o que PASTA, DOC_INICIAL, DOCUMENTO e DADOS disputavam ao chamar
+  // garantirPastaTcc() em paralelo.
+  private filaPorChave = new Map<string, Promise<unknown>>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly drive: DriveService,
   ) {}
+
+  // Serializa, dentro do processo, tudo que roda sob a mesma chave. Encadeia no que já
+  // estiver na fila — inclusive se aquilo falhar (`.then(fn, fn)`), senão um erro travaria
+  // a chave para sempre.
+  private comExclusividade<T>(chave: string, fn: () => Promise<T>): Promise<T> {
+    const anterior = this.filaPorChave.get(chave) ?? Promise.resolve();
+    const resultado = anterior.then(fn, fn);
+    // A fila guarda uma versão neutralizada: a falha de um não pode rejeitar o próximo.
+    const naFila = resultado.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.filaPorChave.set(chave, naFila);
+    void naFila.then(() => {
+      if (this.filaPorChave.get(chave) === naFila) this.filaPorChave.delete(chave);
+    });
+    return resultado;
+  }
 
   // ---------- Enfileiramento (chamado pelo fluxo acadêmico) ----------
 
@@ -275,18 +312,45 @@ export class DriveSyncService {
 
   // ---------- Operações no Drive ----------
 
+  // Uma pasta por semestre, mesmo com dois TCCs abrindo ao mesmo tempo: a fila por chave
+  // serializa no processo e a marca privada reencontra a pasta depois de um reinício.
   private async pastaDoSemestre(semestre: string): Promise<string> {
     const cache = this.pastasSemestre.get(semestre);
     if (cache) return cache;
-    const token = await this.drive.accessToken();
-    const raiz = await this.drive.pastaRaizId();
-    const nome = sanitizarNome(semestre, 'sem-semestre');
-    const id = (await buscarPorNome(token, nome, raiz, true)) ?? (await criarPasta(token, nome, raiz));
-    this.pastasSemestre.set(semestre, id);
-    return id;
+
+    return this.comExclusividade(`semestre:${semestre}`, async () => {
+      // Quem esperou na fila já encontra o cache preenchido por quem passou antes.
+      const jaResolvido = this.pastasSemestre.get(semestre);
+      if (jaResolvido) return jaResolvido;
+
+      const token = await this.drive.accessToken();
+      const raiz = await this.drive.pastaRaizId();
+      const nome = sanitizarNome(semestre, 'sem-semestre');
+      const marcada = await buscarPastaPorMarca(token, MARCA_SEMESTRE, semestre, raiz);
+      const id =
+        marcada?.id ??
+        // Compatibilidade: pastas criadas antes das marcas só têm o nome.
+        (await buscarPorNome(token, nome, raiz, true)) ??
+        (await criarPasta(token, nome, raiz, { [MARCA_SEMESTRE]: semestre }));
+      this.pastasSemestre.set(semestre, id);
+      return id;
+    });
   }
 
+  // Uma pasta por TCC. Idempotente em três camadas, nesta ordem:
+  //   1. mapeamento no banco (caso normal, sem custo de rede);
+  //   2. fila por chave, que impede PASTA/DOC_INICIAL/DADOS de criarem em paralelo;
+  //   3. marca privada no Drive, que reencontra a pasta se a API caiu entre o Google criar
+  //      e o banco gravar — e, se ainda assim duas forem criadas, a sobrando vai para a
+  //      lixeira em vez de virar órfã.
   async garantirPastaTcc(tccId: string): Promise<string> {
+    const jaTem = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave: 'PASTA' } } });
+    if (jaTem) return jaTem.driveId;
+    return this.comExclusividade(`pasta:${tccId}`, () => this.resolverPastaTcc(tccId));
+  }
+
+  private async resolverPastaTcc(tccId: string): Promise<string> {
+    // Dupla checagem: quem ficou esperando na fila costuma achar o mapeamento pronto aqui.
     const jaTem = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave: 'PASTA' } } });
     if (jaTem) return jaTem.driveId;
 
@@ -294,6 +358,11 @@ export class DriveSyncService {
     if (!tcc) throw new ErroDrive('TCC não encontrado para sincronizar.', undefined, true);
 
     const token = await this.drive.accessToken();
+
+    // Pasta já criada no Google numa tentativa anterior que não chegou a gravar no banco.
+    const marcada = await buscarPastaPorMarca(token, MARCA_TCC, tccId);
+    if (marcada) return this.mapearPastaTcc(tccId, marcada.id, marcada.nome, token);
+
     const pai = await this.pastaDoSemestre(tcc.semestre);
     const base = sanitizarNome(`${tcc.aluno?.nomeCompleto ?? 'Aluno'} - ${tcc.titulo}`, 'TCC');
 
@@ -304,9 +373,30 @@ export class DriveSyncService {
       nome = `${base} (${i})`;
     }
 
-    const driveId = await criarPasta(token, nome, pai);
-    await this.prisma.driveArquivo.create({ data: { tccId, chave: 'PASTA', driveId, nome } });
-    return driveId;
+    const driveId = await criarPasta(token, nome, pai, { [MARCA_TCC]: tccId });
+    return this.mapearPastaTcc(tccId, driveId, nome, token);
+  }
+
+  // Grava o mapeamento. Se outro processo chegou primeiro (unique em tccId+chave), fica com
+  // a pasta DELE e manda a nossa para a lixeira — capturar o erro e seguir era justamente o
+  // que deixava pasta órfã no Drive.
+  private async mapearPastaTcc(tccId: string, driveId: string, nome: string, token: string): Promise<string> {
+    try {
+      await this.prisma.driveArquivo.create({ data: { tccId, chave: 'PASTA', driveId, nome } });
+      return driveId;
+    } catch (e) {
+      const dono = await this.prisma.driveArquivo.findUnique({
+        where: { tccId_chave: { tccId, chave: 'PASTA' } },
+      });
+      if (!dono) throw e; // não era corrida: o erro é outro e precisa subir
+      if (dono.driveId !== driveId) {
+        await moverParaLixeira(token, driveId).catch(() => {
+          this.logger.warn(`Pasta duplicada ${driveId} do TCC ${tccId} não pôde ir para a lixeira.`);
+        });
+        this.logger.warn(`Corrida na pasta do TCC ${tccId}: ${driveId} foi para a lixeira; vale ${dono.driveId}.`);
+      }
+      return dono.driveId;
+    }
   }
 
   // Só o Plano e o Termo VÁLIDOS MAIS RECENTES — nada de v1/v2/v3 dos iniciais.
@@ -325,7 +415,15 @@ export class DriveSyncService {
 
   // `comVersao` = true para monografia/versão final (o nome carrega a versão, preservando
   // cada envio); false para os iniciais (nome limpo, um por tipo).
-  private async enviarDocumento(tccId: string, documentoId: string, comVersao = true): Promise<void> {
+  private enviarDocumento(tccId: string, documentoId: string, comVersao = true): Promise<void> {
+    // Mesmo cuidado da pasta: dois itens da fila mirando o mesmo documento não podem subir
+    // duas cópias e deixar uma sem mapeamento.
+    return this.comExclusividade(`doc:${tccId}:${documentoId}`, () =>
+      this.enviarDocumentoExclusivo(tccId, documentoId, comVersao),
+    );
+  }
+
+  private async enviarDocumentoExclusivo(tccId: string, documentoId: string, comVersao: boolean): Promise<void> {
     const chave = `DOC:${documentoId}`;
     const jaEnviado = await this.prisma.driveArquivo.findUnique({ where: { tccId_chave: { tccId, chave } } });
     if (jaEnviado) return; // idempotente: não reenvia o mesmo documento
@@ -359,7 +457,11 @@ export class DriveSyncService {
   }
 
   // dados.json + resumo.txt: criados na primeira vez, SOBRESCRITOS depois (não viram cópias).
-  async gravarDados(tccId: string): Promise<void> {
+  gravarDados(tccId: string): Promise<void> {
+    return this.comExclusividade(`dados:${tccId}`, () => this.gravarDadosExclusivo(tccId));
+  }
+
+  private async gravarDadosExclusivo(tccId: string): Promise<void> {
     const { dados, resumo } = await this.montarConteudo(tccId);
     const token = await this.drive.accessToken();
     const pasta = await this.garantirPastaTcc(tccId);

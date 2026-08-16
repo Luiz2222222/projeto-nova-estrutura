@@ -8,6 +8,15 @@ type Destinatario = { id: string; email: string | null; nomeCompleto: string } |
 
 const REMETENTE_PADRAO = 'Sistema de TCC <nao-responda@dee.local>';
 
+// Nem toda conta tem e-mail: o campo também serve de LOGIN, então existe coordenação
+// cadastrada como "adm". Mandar isso ao nodemailer só rende "No recipients defined". A
+// checagem é deliberadamente simples (algo@algo.tld, sem espaços) — só separa endereço
+// utilizável de identificador de acesso, não valida a caixa postal.
+export function emailValido(valor: string | null | undefined): boolean {
+  const e = (valor ?? '').trim();
+  return /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]{2,}$/.test(e);
+}
+
 // Escapa texto para interpolação segura no HTML do e-mail. Nome de usuário e título de TCC
 // são controlados pelos próprios usuários — sem escape, um título com tags viraria HTML
 // clicável (phishing) na caixa de entrada de coordenador/orientador/avaliador.
@@ -96,6 +105,11 @@ export class EmailService {
   }
 
   private async enviar(para: string, assunto: string, html: string, texto: string): Promise<void> {
+    // Última barreira antes do SMTP: sem um endereço utilizável o nodemailer estoura
+    // ("No recipients defined") e vira ruído de erro para algo que nunca teria como dar
+    // certo. Contas de acesso interno (login sem e-mail, como uma coordenação criada com
+    // usuário "adm") caem aqui e simplesmente não recebem e-mail.
+    if (!emailValido(para)) return;
     const { transporter, remetente } = await this.obterTransporter();
     if (!transporter) {
       this.logger.log(
@@ -298,7 +312,10 @@ export class EmailService {
   // Nunca lança — uma falha de e-mail não pode quebrar o fluxo do TCC.
   async enviarEvento(evento: string, destinatario: Destinatario, assunto: string, texto: string, html?: string): Promise<void> {
     try {
-      if (!destinatario?.email) return;
+      // Sem endereço utilizável não há o que tentar: sai calado, SEM log de erro. A
+      // notificação interna do evento é criada por quem chama e não depende disto.
+      const email = destinatario?.email;
+      if (!destinatario || !email || !emailValido(email)) return;
 
       const config = await this.obterConfig();
       if (!config.fluxoTccAtivo) {
@@ -314,7 +331,7 @@ export class EmailService {
         return;
       }
 
-      await this.enviar(destinatario.email, assunto, html ?? `<p>${escaparHtml(texto).replace(/\n/g, '<br>')}</p>`, texto);
+      await this.enviar(email, assunto, html ?? `<p>${escaparHtml(texto).replace(/\n/g, '<br>')}</p>`, texto);
     } catch (e) {
       this.logger.error(`Falha ao enviar e-mail do evento "${evento}": ${(e as Error).message}`);
     }

@@ -169,13 +169,101 @@ export async function buscarPorNome(
   return j?.files?.[0]?.id ?? null;
 }
 
-export async function criarPasta(accessToken: string, nome: string, paiId?: string): Promise<string> {
+// `appProperties` = metadados PRIVADOS do app (invisíveis para o usuário no Drive e para
+// outros apps). Servem de identidade durável: se a API cair depois do Google criar a pasta e
+// antes de gravar o mapeamento no banco, a pasta é reencontrada por aqui em vez de uma
+// segunda ser criada.
+export async function criarPasta(
+  accessToken: string,
+  nome: string,
+  paiId?: string,
+  appProperties?: Record<string, string>,
+): Promise<string> {
   const r = await pedir(`${URL_ARQUIVOS}?fields=id`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name: nome, mimeType: MIME_PASTA, ...(paiId ? { parents: [paiId] } : {}) }),
+    body: JSON.stringify({
+      name: nome,
+      mimeType: MIME_PASTA,
+      ...(paiId ? { parents: [paiId] } : {}),
+      ...(appProperties ? { appProperties } : {}),
+    }),
   });
   return ((await r.json()) as any).id as string;
+}
+
+// Procura uma PASTA pela marca privada do app. É o que torna a criação idempotente mesmo
+// atravessando um reinício da API. Devolve também o nome para o mapeamento no banco.
+export async function buscarPastaPorMarca(
+  accessToken: string,
+  chave: string,
+  valor: string,
+  paiId?: string,
+): Promise<{ id: string; nome: string } | null> {
+  const filtros = [
+    `appProperties has { key='${chave.replace(/'/g, "\\'")}' and value='${valor.replace(/'/g, "\\'")}' }`,
+    `mimeType = '${MIME_PASTA}'`,
+    'trashed = false',
+    ...(paiId ? [`'${paiId}' in parents`] : []),
+  ].join(' and ');
+  const q = new URLSearchParams({ q: filtros, fields: 'files(id,name)', pageSize: '10' });
+  const r = await pedir(`${URL_ARQUIVOS}?${q.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const j: any = await r.json();
+  const f = j?.files?.[0];
+  return f ? { id: f.id as string, nome: (f.name as string) ?? '' } : null;
+}
+
+// Manda para a LIXEIRA (recuperável), não apaga. Usado quando uma corrida deixou uma pasta
+// sobrando: preferimos algo reversível a uma exclusão definitiva.
+export async function moverParaLixeira(accessToken: string, driveId: string): Promise<void> {
+  await pedir(`${URL_ARQUIVOS}/${encodeURIComponent(driveId)}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ trashed: true }),
+  });
+}
+
+// Metadados de uma pasta/arquivo — usado para conferir antes de mexer em algo já existente.
+export async function metadadosArquivo(
+  accessToken: string,
+  driveId: string,
+): Promise<{ id: string; nome: string; mimeType: string; trashed: boolean; pais: string[]; marcas: Record<string, string> } | null> {
+  try {
+    const r = await pedir(
+      `${URL_ARQUIVOS}/${encodeURIComponent(driveId)}?fields=id,name,mimeType,trashed,parents,appProperties`,
+      { headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+    const j: any = await r.json();
+    return {
+      id: j.id,
+      nome: j.name ?? '',
+      mimeType: j.mimeType ?? '',
+      trashed: j.trashed === true,
+      pais: j.parents ?? [],
+      marcas: j.appProperties ?? {},
+    };
+  } catch {
+    return null;
+  }
+}
+
+// Lista os filhos NÃO na lixeira de uma pasta (para provar que ela está vazia).
+export async function listarFilhos(
+  accessToken: string,
+  pastaId: string,
+): Promise<{ id: string; nome: string }[]> {
+  const q = new URLSearchParams({
+    q: `'${pastaId}' in parents and trashed = false`,
+    fields: 'files(id,name)',
+    pageSize: '100',
+  });
+  const r = await pedir(`${URL_ARQUIVOS}?${q.toString()}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  const j: any = await r.json();
+  return (j?.files ?? []).map((f: any) => ({ id: f.id as string, nome: (f.name as string) ?? '' }));
 }
 
 // Upload multipart montado na mão (metadados + conteúdo em uma requisição só).
