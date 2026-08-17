@@ -61,18 +61,16 @@ export function RecuperarSenha() {
           <button className="botao-vidro" type="submit" disabled={enviando}>
             {enviando ? 'Enviando…' : 'Enviar link'}
           </button>
-        </form>
-      )}
 
-      {/* Um único caminho de volta em cada estado: depois de enviar, o botão "Voltar ao
-          login" acima já cumpre esse papel — por isso o antigo "Lembrou a senha? Entrar",
-          que aparecia nos dois estados, ficava repetido ali. Aqui ele só existe enquanto o
-          formulário está à mostra, para a tela não virar um beco sem saída. */}
-      {!enviado && (
-        <p className="rodape">
-          Lembrou a senha?{' '}
-          <button type="button" className="link-inline" onClick={() => navegar('/login')}>Entrar</button>
-        </p>
+          {/* Volta ao login DENTRO do ramo do formulário. Ficava fora, guardado por um
+              `!enviado` separado — duas condições para o mesmo estado, fáceis de sair de
+              sincronia. Aqui é impossível: cada estado renderiza o seu próprio caminho de
+              volta, e só ele. */}
+          <p className="rodape">
+            Lembrou a senha?{' '}
+            <button type="button" className="link-inline" onClick={() => navegar('/login')}>Entrar</button>
+          </p>
+        </form>
       )}
     </LayoutAuth>
   );

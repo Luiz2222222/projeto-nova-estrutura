@@ -59,6 +59,29 @@ describe('Depois de solicitar a recuperação', () => {
     expect(screen.queryByRole('button', { name: 'Entrar' })).toBeNull();
   });
 
+  // O defeito relatado era exatamente este: os DOIS visíveis ao mesmo tempo.
+  it('os dois controles NUNCA coexistem no estado pós-envio', async () => {
+    const { container } = abrir();
+    await pedirRecuperacao();
+
+    const temBotaoGrande = !!screen.queryByRole('button', { name: 'Voltar ao login' });
+    const temLink = !!screen.queryByRole('button', { name: 'Entrar' });
+
+    expect(temBotaoGrande && temLink).toBe(false);
+    expect(temBotaoGrande).toBe(true);
+    // Nem escondido no DOM: o rodapé some de verdade, não fica só invisível.
+    expect(container.innerHTML).not.toContain('Lembrou a senha');
+    expect(container.querySelectorAll('.link-inline')).toHaveLength(0);
+  });
+
+  it('a mensagem verde aparece junto do botão', async () => {
+    abrir();
+    await pedirRecuperacao();
+
+    expect(screen.getByText(/enviamos um link para redefinir a senha/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Voltar ao login' })).toBeInTheDocument();
+  });
+
   it('o botão leva para /login', async () => {
     abrir();
     await pedirRecuperacao();
@@ -70,11 +93,20 @@ describe('Depois de solicitar a recuperação', () => {
 });
 
 describe('Antes de solicitar (formulário à mostra)', () => {
-  it('também tem UM caminho de volta — a tela não vira beco sem saída', () => {
+  it('tem só o link menor — o botão grande não existe neste estado', () => {
     abrir();
 
     expect(caminhosDeVolta()).toHaveLength(1);
     expect(screen.getByRole('button', { name: 'Entrar' })).toBeInTheDocument();
+    expect(screen.getByText(/lembrou a senha/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Voltar ao login' })).toBeNull();
+  });
+
+  it('o formulário continua à mostra', () => {
+    abrir();
+
+    expect(screen.getByLabelText('E-mail')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Enviar link' })).toBeInTheDocument();
   });
 
   it('a mensagem de segurança e o prazo de 1 hora continuam iguais', async () => {
