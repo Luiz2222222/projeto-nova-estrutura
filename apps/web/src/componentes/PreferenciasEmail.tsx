@@ -19,7 +19,7 @@ const DESC_EVENTO: Record<string, string> = {
   aluno_tcc_concluido: 'Quando o seu TCC for concluído e aprovado.',
   orientador_definido: 'Quando você for definido como orientador de um TCC aprovado.',
   orientador_monografia_enviada: 'Quando um orientando enviar ou reenviar a monografia.',
-  orientador_confirmar_continuidade: 'Lembrete para confirmar a continuidade de um orientando.',
+  orientador_lembrete_continuidade: 'Lembretes do prazo para avaliar a continuidade de um orientando (2 dias antes, 1 dia antes e no dia).',
   orientador_banca_formada: 'Quando a banca da Fase I de um orientando for formada.',
   orientador_agendar_defesa: 'Quando a Fase I for aprovada e você precisar agendar a defesa (Fase II).',
   orientador_versao_final_enviada: 'Quando um orientando enviar a versão final.',
@@ -31,8 +31,7 @@ const DESC_EVENTO: Record<string, string> = {
   coord_avaliacao_reenviada: 'Quando um avaliador reenviar a avaliação após um ajuste solicitado.',
   coord_continuidade: 'Quando o orientador confirmar a continuidade ou descontinuar um TCC.',
   coord_tcc_concluido: 'Quando um TCC for concluído (versão final validada pelo orientador).',
-  avaliador_adicionado_fase1: 'Quando você for adicionado a uma banca da Fase I.',
-  avaliador_fase1_liberada: 'Quando a avaliação da Fase I for liberada para você.',
+  avaliador_adicionado_fase1: 'Quando você for adicionado a uma banca da Fase I (a avaliação já fica liberada).',
   avaliador_fase2_liberada: 'Quando a defesa acontecer e a avaliação da Fase II for liberada para você.',
   defesa_agendada: 'Quando a defesa de um TCC que envolve você for agendada ou reagendada.',
   avaliador_ajuste_solicitado: 'Quando a coordenação solicitar um ajuste na sua avaliação.',
@@ -50,7 +49,6 @@ const DESC_EVENTO: Record<string, string> = {
 // Eventos que ficarem fora do mapa (ex.: um evento novo) caem no grupo "Outros" no final.
 const CHAVES_BANCA = [
   'avaliador_adicionado_fase1',
-  'avaliador_fase1_liberada',
   'defesa_agendada',
   'avaliador_fase2_liberada',
   'avaliador_ajuste_solicitado',
@@ -69,7 +67,7 @@ const GRUPOS_EXIBICAO: Record<string, [string, string[]][]> = {
     ['Conclusão', ['aluno_versao_final_solicitada', 'aluno_versao_final_rejeitada', 'aluno_tcc_concluido']],
   ],
   PROFESSOR: [
-    ['Orientação', ['orientador_definido', 'orientador_monografia_enviada', 'orientador_confirmar_continuidade', 'orientador_banca_formada', 'orientador_agendar_defesa', 'orientador_versao_final_enviada', 'orientador_versao_final_reenviada']],
+    ['Orientação', ['orientador_definido', 'orientador_monografia_enviada', 'orientador_lembrete_continuidade', 'orientador_banca_formada', 'orientador_agendar_defesa', 'orientador_versao_final_enviada', 'orientador_versao_final_reenviada']],
     ['Coorientação', CHAVES_COORIENTACAO],
     ['Participação em banca', CHAVES_BANCA],
   ],

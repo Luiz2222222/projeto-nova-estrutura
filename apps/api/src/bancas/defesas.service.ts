@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
+import { fraseEtapa, prazoDaEtapa } from '../comum/prazo-etapa';
 import { DriveSyncService } from '../drive/drive-sync.service';
 import { buscarTccAtivoOuFalhar } from '../comum/tcc-ativo';
 import { type DadosAgendarDefesa } from '@tcc/compartilhado';
@@ -150,12 +151,15 @@ export class DefesasService {
       include: { bancas: { where: { fase: 'FASE_2' }, include: { membros: { include: { avaliador: { select: { id: true, papel: true } } } } } } },
     });
     if (!tcc) return;
+    const prazoFase2 = await prazoDaEtapa(this.prisma, tcc.semestre, 'AVALIACAO_FASE2');
     for (const m of tcc.bancas[0]?.membros ?? []) {
       // O ORIENTADOR avalia a Fase II na página do orientando (não em "Participações em
       // bancas") — o link dele aponta para lá; os demais vão direto para a avaliação.
       const base = m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
       const link = m.avaliadorId === tcc.orientadorId ? `/professor/orientandos/${tcc.id}#acao-fase2` : `${base}/${m.id}`;
-      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, 'Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" aconteceu — a avaliação da Fase II está liberada, você já pode avaliar.`, link);
+      await this.eventos.emitirParaUsuario('avaliador_fase2_liberada', m.avaliadorId, '[Ação pendente] Avaliação da Fase II liberada', `A defesa do TCC "${tcc.titulo}" está liberada para avaliação.
+
+Acesse o sistema para registrar sua avaliação. ${fraseEtapa(prazoFase2)}`, link);
     }
   }
 }

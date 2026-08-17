@@ -479,7 +479,10 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   // Orientador (professor)
   { chave: 'orientador_definido', rotulo: 'Definido como orientador de um TCC aprovado', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_monografia_enviada', rotulo: 'Aluno enviou/reenviou monografia', grupo: 'Orientação', papeis: ['PROFESSOR'] },
-  { chave: 'orientador_confirmar_continuidade', rotulo: 'Precisa confirmar continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
+  // Uma preferência só para os três lembretes (2 dias antes, 1 dia antes e no dia): quem
+  // desliga não quer ser cobrado, e três interruptores para a mesma cobrança só confundem.
+  // Substituiu 'orientador_confirmar_continuidade', que avisava na aprovação da abertura.
+  { chave: 'orientador_lembrete_continuidade', rotulo: 'Lembretes do prazo de avaliação de continuidade', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_banca_formada', rotulo: 'Banca da Fase I formada', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_agendar_defesa', rotulo: 'Agendar a defesa (Fase II)', grupo: 'Orientação', papeis: ['PROFESSOR'] },
   { chave: 'orientador_versao_final_enviada', rotulo: 'Aluno enviou versão final', grupo: 'Orientação', papeis: ['PROFESSOR'] },
@@ -495,8 +498,9 @@ export const EVENTOS_EMAIL: EventoEmail[] = [
   { chave: 'coord_continuidade', rotulo: 'Continuidade confirmada ou TCC descontinuado', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   { chave: 'coord_tcc_concluido', rotulo: 'TCC concluído (versão final validada)', grupo: 'Coordenação', papeis: ['COORDENADOR'] },
   // Avaliadores / membros da banca (professor ou avaliador)
-  { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
-  { chave: 'avaliador_fase1_liberada', rotulo: 'Avaliação da Fase I liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
+  // Na Fase I não existe liberação separada: entrar na banca já habilita a avaliação. Por
+  // isso um evento só (antes 'avaliador_fase1_liberada' disparava junto, duplicando o aviso).
+  { chave: 'avaliador_adicionado_fase1', rotulo: 'Adicionado à banca da Fase I (avaliação liberada)', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_fase2_liberada', rotulo: 'Avaliação da Fase II liberada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_ajuste_solicitado', rotulo: 'Coordenação solicitou ajuste na sua avaliação', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },
   { chave: 'avaliador_ajuste_cancelado', rotulo: 'Solicitação de ajuste cancelada', grupo: 'Banca', papeis: ['PROFESSOR', 'AVALIADOR'] },

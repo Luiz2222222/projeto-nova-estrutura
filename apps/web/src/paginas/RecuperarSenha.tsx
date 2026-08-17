@@ -64,10 +64,16 @@ export function RecuperarSenha() {
         </form>
       )}
 
-      <p className="rodape">
-        Lembrou a senha?{' '}
-        <button type="button" className="link-inline" onClick={() => navegar('/login')}>Entrar</button>
-      </p>
+      {/* Um único caminho de volta em cada estado: depois de enviar, o botão "Voltar ao
+          login" acima já cumpre esse papel — por isso o antigo "Lembrou a senha? Entrar",
+          que aparecia nos dois estados, ficava repetido ali. Aqui ele só existe enquanto o
+          formulário está à mostra, para a tela não virar um beco sem saída. */}
+      {!enviado && (
+        <p className="rodape">
+          Lembrou a senha?{' '}
+          <button type="button" className="link-inline" onClick={() => navegar('/login')}>Entrar</button>
+        </p>
+      )}
     </LayoutAuth>
   );
 }

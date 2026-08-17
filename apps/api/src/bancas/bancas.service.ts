@@ -4,6 +4,7 @@ import { extname, join } from 'path';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { EventosTccService } from '../eventos-tcc/eventos-tcc.service';
+import { fraseEtapa, frasePrazo, prazoDaEtapa } from '../comum/prazo-etapa';
 import { PrazosService } from '../prazos/prazos.service';
 import { DriveSyncService } from '../drive/drive-sync.service';
 import { corrigirNomeArquivo } from '../comum/nome-arquivo';
@@ -146,10 +147,21 @@ export class BancasService {
       where: { tccId_fase: { tccId, fase: 'FASE_1' } },
       include: { membros: { include: { avaliador: { select: { papel: true } } } } },
     });
+    const prazoFase1 = await prazoDaEtapa(this.prisma, tcc.semestre, 'AVALIACAO_FASE1');
     for (const m of bancaCriada?.membros ?? []) {
       const base = m.avaliador.papel === 'AVALIADOR' ? '/avaliador/bancas' : '/professor/bancas';
-      await this.eventos.emitirParaUsuario('avaliador_adicionado_fase1', m.avaliadorId, 'Você foi adicionado a uma banca (Fase I)', `Você foi adicionado à banca da Fase I do TCC "${tcc.titulo}".`, `${base}/${m.id}`);
-      await this.eventos.emitirParaUsuario('avaliador_fase1_liberada', m.avaliadorId, 'Avaliação da Fase I liberada', `A avaliação da Fase I do TCC "${tcc.titulo}" está liberada — você já pode avaliar.`, `${base}/${m.id}`);
+      // UM aviso só: na Fase I entrar na banca já habilita a avaliação (não há liberação
+      // posterior, como na Fase II). Antes saíam duas mensagens quase iguais no mesmo instante.
+      await this.eventos.emitirParaUsuario(
+        'avaliador_adicionado_fase1',
+        m.avaliadorId,
+        '[Ação pendente] Você foi adicionado a uma banca (Fase I)',
+        `Você foi adicionado à banca da Fase I do TCC "${tcc.titulo}", e a avaliação já está liberada.
+
+` +
+          `Acesse o sistema para registrar sua avaliação. ${fraseEtapa(prazoFase1)}`,
+        `${base}/${m.id}`,
+      );
     }
     await this.sincronizarDrive(tccId);
     return { ok: true };
@@ -367,7 +379,9 @@ export class BancasService {
       const faseNome = this.faseNomePt(res.fase);
       const quem = await this.prisma.usuario.findUnique({ where: { id: avaliadorId }, select: { nomeCompleto: true, tratamento: true } });
       const nome = quem ? `${quem.tratamento ? quem.tratamento + ' ' : ''}${quem.nomeCompleto}` : 'Um avaliador';
-      await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `Avaliação reenviada (${faseNome})`, `${nome} reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.`, `/coordenador/tccs/${res.tccId}#validacao`);
+      await this.eventos.emitirParaCoordenadores('coord_avaliacao_reenviada', `[Ação pendente] Avaliação reenviada (${faseNome})`, `${nome} reenviou a avaliação da ${faseNome} do TCC "${res.titulo}" após o ajuste solicitado.
+
+Acesse o sistema para analisar a avaliação reenviada.`, `/coordenador/tccs/${res.tccId}#validacao`);
     }
     // Devolve o status REAL salvo: ENVIADO (finalizar), AJUSTE_SOLICITADO (rascunho durante
     // ajuste) ou PENDENTE (rascunho normal).
@@ -731,7 +745,9 @@ export class BancasService {
     if (!tcc) return;
     const faseNome = this.faseNomePt(fase);
     const eventoCoord = fase === 'FASE_1' ? 'coord_validar_fase1' : 'coord_validar_fase2';
-    await this.eventos.emitirParaCoordenadores(eventoCoord, `Avaliações da ${faseNome} concluídas`, `Avaliações da ${faseNome} concluídas: aguardando análise da coordenação — TCC "${tcc.titulo}".`, `/coordenador/tccs/${tccId}#validacao`);
+    await this.eventos.emitirParaCoordenadores(eventoCoord, `[Ação pendente] Avaliações da ${faseNome} concluídas`, `Avaliações da ${faseNome} concluídas: aguardando análise da coordenação — TCC "${tcc.titulo}".
+
+Acesse o sistema para analisar as avaliações e validar a fase.`, `/coordenador/tccs/${tccId}#validacao`);
     const msg = `As avaliações da ${faseNome} do TCC "${tcc.titulo}" foram concluídas; as análises seguem para avaliação da coordenação.`;
     const alvos = new Set<string>();
     if (tcc.alunoId) alvos.add(tcc.alunoId);
@@ -859,8 +875,11 @@ export class BancasService {
     // Novo ajuste também é uma decisão sobre o reenvio anterior: encerra a ação pendente.
     await this.prisma.membroBanca.update({ where: { id: membroId }, data: { status: 'AJUSTE_SOLICITADO', ajusteMotivo: texto || null, ajusteReenviadoEm: null } });
     const faseNome = this.faseNomePt(ehF1 ? 'FASE_1' : 'FASE_2');
-    const base = `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}".`;
-    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `Ajuste solicitado — ${faseNome}`, texto ? `${base} Motivo: ${texto}` : base, this.linkDaAvaliacao(membro));
+    // O motivo escrito pela coordenação fica no sistema; o e-mail só avisa que existe.
+    const base =
+      `A coordenação solicitou um ajuste na sua avaliação da ${faseNome} do TCC "${membro.banca.tcc.titulo}".\n\n` +
+      'Acesse o sistema para ver o motivo, revisar e reenviar sua avaliação. Fique atento aos prazos do semestre.';
+    await this.eventos.emitirParaUsuario('avaliador_ajuste_solicitado', membro.avaliadorId, `[Ação pendente] Ajuste solicitado — ${faseNome}`, base, this.linkDaAvaliacao(membro));
     await this.sincronizarDrive(membro.banca.tcc.id);
     return { ok: true };
   }
@@ -977,16 +996,20 @@ export class BancasService {
     if (r.fase === 'FASE_1') {
       if (!r.aprovado) {
         // Sem número (NF1): aluno não vê nota antes da confirmação da nota final da Fase II.
-        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Resultado da Fase I', `A Fase I do seu TCC "${tcc.titulo}" foi avaliada e validada pela coordenação. Resultado: reprovado.`);
+        await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada — reprovado', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Resultado: reprovado.`);
         await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Resultado da Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi reprovado na Fase I.`);
         await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
         return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
       }
       // Sem NF1 e sem revelar resultado numérico: a nota final ainda não foi confirmada.
-      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Aguarde o orientador agendar a defesa da Fase II. A nota final ainda não foi confirmada.`);
+      await this.eventos.emitirParaUsuario('aluno_resultado_fase1', tcc.alunoId, 'Fase I validada — aprovado', `A Fase I do seu TCC "${tcc.titulo}" foi validada pela coordenação. Resultado: aprovado.
+
+Aguarde o orientador agendar a defesa da Fase II. A nota final ainda não foi confirmada.`);
       // Só o ORIENTADOR é avisado agora — para agendar a defesa. Os avaliadores recebem
       // aviso quando a defesa for agendada e ação quando a avaliação for liberada.
-      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, 'Agendar defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I. Agende a defesa na página do orientando — a avaliação da banca será liberada automaticamente na data marcada.`, `/professor/orientandos/${tccId}#acao-fase2`);
+      await this.eventos.emitirParaUsuario('orientador_agendar_defesa', tcc.orientadorId, '[Ação pendente] Agendar defesa (Fase II)', `O TCC "${tcc.titulo}" foi aprovado na Fase I.
+
+Acesse o sistema e agende a defesa na página do orientando — a avaliação da banca será liberada automaticamente na data marcada.`, `/professor/orientandos/${tccId}#acao-fase2`);
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC aprovado na Fase I', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase I e aguarda o agendamento da defesa (Fase II).`);
       await this.notificarFaseValidada(tccId, r.fase, tcc.titulo, tcc.orientadorId);
       return { ok: true, fase: r.fase, nf1: r.nf1, aprovado: r.aprovado };
@@ -996,7 +1019,15 @@ export class BancasService {
     // traz só o resultado qualitativo (a nota fica visível na página do TCC, não no texto).
     await this.eventos.emitirParaUsuario('aluno_resultado_fase2', tcc.alunoId, 'Resultado da Fase II', `A Fase II do seu TCC "${tcc.titulo}" foi validada pela coordenação. ${r.aprovado ? 'Você foi aprovado na defesa!' : 'Resultado: reprovado.'}`);
     if (r.aprovado) {
-      await this.eventos.emitirParaUsuario('aluno_versao_final_solicitada', tcc.alunoId, 'Envie a versão final', `Seu TCC "${tcc.titulo}" foi aprovado na banca. Agora envie a versão final corrigida para o orientador validar.`);
+      const prazoVersaoFinal = await prazoDaEtapa(this.prisma, tcc.semestre, 'VERSAO_FINAL');
+      await this.eventos.emitirParaUsuario(
+        'aluno_versao_final_solicitada',
+        tcc.alunoId,
+        '[Ação pendente] Envie a versão final',
+        `Seu TCC "${tcc.titulo}" foi aprovado na banca.\n\n` +
+          'Acesse o sistema para enviar a versão final corrigida — o orientador precisa validá-la para o TCC ser concluído. ' +
+          frasePrazo(prazoVersaoFinal, (d) => `O prazo para o envio é ${d}.`),
+      );
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'TCC em ajustes finais', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi aprovado na Fase II e está na etapa de ajustes finais / versão final.`);
     } else {
       await this.eventos.emitirParaUsuario('coorientador_mudanca_fase', tcc.coorientadorId, 'Resultado da Fase II', `O TCC "${tcc.titulo}" (no qual você é coorientador) foi reprovado na Fase II.`);
